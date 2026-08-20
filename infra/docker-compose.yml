@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hakim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hakim
+      POSTGRES_PASSWORD: hakim
+      POSTGRES_DB: hakim
+    ports:
+      - "5433:5432"
+    volumes:
+      - hakim_pg_data:/var/lib/postgresql/data
+      - ./postgres/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hakim -d hakim"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: hakim-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+
+  minio:
+    image: minio/minio:latest
+    container_name: hakim-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hakim
+      MINIO_ROOT_PASSWORD: hakim-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - hakim_minio_data:/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: hakim-elasticsearch
+    profiles: ["search"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - hakim_es_data:/usr/share/elasticsearch/data
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: hakim-neo4j
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/hakim-graph
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - hakim_neo4j_data:/data
+
+volumes:
+  hakim_pg_data:
+  hakim_minio_data:
+  hakim_es_data:
+  hakim_neo4j_data:

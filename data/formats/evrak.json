@@ -1,0 +1,85 @@
+{
+  "id": "evrak",
+  "title": "Evrak özeti ve tespit yazımı",
+  "surface": "Evrak",
+  "language": "tr",
+  "output_field": "draft",
+  "engine": {
+    "description": "Sınıflandırıcı + tarih çıkarıcı + ilgili arşiv parçaları. Tür/aşama/süre modelden gelmez.",
+    "fields": {
+      "classification": {
+        "document_type": "tebligat | iddianame | mahkeme_karari | dilekce | ust_yazi | olur | genelge | tutanak | rapor | cevap_yazisi | bilgi_yazisi | belirsiz",
+        "legal_nature": "ceza | idare | anayasa | kamu | belirsiz",
+        "unit": "string",
+        "stage": "sorusturma | kovusturma | istinaf | temyiz | bireysel_basvuru | belirsiz",
+        "remedies": "string[]",
+        "label": "string",
+        "confidence": "0-1",
+        "evidence_span": "evraktan alıntı"
+      },
+      "dates": { "teblig": "YYYY-MM-DD?", "karar": "YYYY-MM-DD?" },
+      "findings": [{ "label": "string", "value": "string", "confidence": "number", "evidence": "string", "source": "string?" }],
+      "related": [{ "n": "integer", "title": "string", "article_no": "string?", "content": "string" }]
+    }
+  },
+  "parsed": {
+    "type": "object",
+    "required": ["baslik", "tur_cumlesi", "tespitler", "ozet"],
+    "properties": {
+      "baslik": {
+        "type": "string",
+        "rule": "classification.label + hukuki nitelik, örn. «Mahkeme kararı (ceza)»"
+      },
+      "tur_cumlesi": {
+        "type": "string",
+        "rule": "Evrakın ne olduğunu evidence_span’e dayanarak bir cümlede söyle. Yeni tür icat etme."
+      },
+      "tespitler": {
+        "type": "array",
+        "items": {
+          "required": ["baslik", "metin"],
+          "properties": {
+            "baslik": "findings.label ile aynı veya kısa karşılığı",
+            "metin": "findings.value’yu hukuki cümleye çevir; sayı/tarih değiştirme"
+          }
+        },
+        "max_items": 8
+      },
+      "eksik": {
+        "type": "array",
+        "items": "string",
+        "rule": "Metinde yoksa yaz: tebliğ tarihi, esas no gibi. Varsayma."
+      },
+      "ozet": {
+        "type": "string",
+        "max_chars": 500,
+        "rule": "Evrakın hukuki kimliği. Kanun yolu önerisi yok (o İşlem/Süreç’te)."
+      }
+    }
+  },
+  "writing": {
+    "tone": "Kalem özeti: nesnel, evrakın diline yakın, tavsiye yok.",
+    "citations": "related varsa [n] kullan. Yoksa yalnızca evrak tespitleri.",
+    "must": [
+      "classification.document_type ve stage’i olduğu gibi kullan",
+      "Tarihleri dates alanından al",
+      "Türkçe yaz"
+    ],
+    "must_not": [
+      "Evrak türünü değiştirmek",
+      "Süre hesabı yapmak",
+      "Dilekçe talebi yazmak",
+      "Olmayan mahkeme adı / esas no uydurmak"
+    ]
+  },
+  "example": {
+    "baslik": "Mahkeme kararı (ceza)",
+    "tur_cumlesi": "Metin, ağır ceza mahkemesinin gerekçeli kararı niteliğindedir.",
+    "tespitler": [
+      { "baslik": "Evrak türü", "metin": "Mahkeme kararı." },
+      { "baslik": "Aşama", "metin": "Kovuşturma (ilk derece)." }
+    ],
+    "eksik": ["Tebliğ tarihi metinde yok"],
+    "ozet": "İlk derece ceza mahkemesi kararı tespit edildi. Kanun yolu ve süreler Süreç/İşlem ekranında kural motoruyla hesaplanır."
+  }
+}

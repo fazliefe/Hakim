@@ -1,0 +1,41 @@
+{
+  "id": "istinaf",
+  "title": "İstinaf dilekçesi",
+  "family": "ceza",
+  "makam": "Bölge Adliye Mahkemesi ilgili ceza dairesi",
+  "legal_basis": ["CMK m.272", "CMK m.273", "CMK m.276"],
+  "deadline_rule_id": "deadline:istinaf:cmk273",
+  "when": "İlk derece ceza mahkemesi hükmüne karşı.",
+  "sections": [
+    { "id": "ust_yazi", "label": "BAM ceza dairesi / ilk derece mahkemesi aracılığıyla" },
+    { "id": "hukum", "label": "İstinaf olunan hüküm" },
+    { "id": "sure", "label": "Süre (CMK m.273)" },
+    { "id": "sebepler", "label": "İstinaf sebepleri" },
+    { "id": "hukuki_nitelendirme", "label": "TCK/CMK dayanak" },
+    { "id": "talep", "label": "Hükmün kaldırılması / bozma" }
+  ],
+  "parsed": {
+    "required": ["makam", "hukum", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "hukum": "string",
+      "sure_cumlesi": "string — 7 gün tebliğden, last_day veya eksik",
+      "sebepler": ["string — olgu, hukuka aykırılık, ceza tayini ayrı ayrı"],
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string"
+    }
+  },
+  "writing": {
+    "tone": "İstinaf dilekçesi. Temyiz dilini (Yargıtay, bozma-onama) kullanma.",
+    "must": ["CMK m.273 süre", "Sebepleri numaralandır"],
+    "must_not": ["Yargıtay’a hitap", "BAM daire no uydurmak"]
+  },
+  "example": {
+    "makam": "Bölge Adliye Mahkemesi ilgili ceza dairesi",
+    "hukum": "İlk derece mahkemesinin mahkûmiyet hükmü",
+    "sure_cumlesi": "İstinaf süresi CMK m.273 uyarınca tebliğden itibaren yedi gündür.",
+    "sebepler": ["Hükmün hukuka aykırılığı"],
+    "hukuki_nitelendirme": [],
+    "talep": "Hükmün kaldırılması talep olunur."
+  }
+}

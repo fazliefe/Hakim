@@ -1,0 +1,58 @@
+{
+  "id": "olur",
+  "title": "Olur",
+  "family": "kamu",
+  "resmi_sablon": "olur",
+  "template_source": "2646-ek ÖRNEK 17",
+  "makam": "Üst makam",
+  "legal_basis": [
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.20"
+  ],
+  "when": "Birim amirinin oluruna arz edilen evrak.",
+  "sections": [
+    { "id": "sayi", "label": "Sayı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "muhatap", "label": "Muhatap" },
+    { "id": "metin", "label": "Metin" },
+    { "id": "olur", "label": "Olur" },
+    { "id": "ekler", "label": "Ek" },
+    { "id": "onay_notu", "label": "Onay" }
+  ],
+  "parsed": {
+    "required": ["makam", "sayi", "konu", "muhatap", "metin", "onay_notu"],
+    "properties": {
+      "makam": "string — classification.unit",
+      "sayi": "string",
+      "konu": "string",
+      "muhatap": "string — «... MAKAMINA»",
+      "metin": "string — olura arz metni; son cümle «arz ederim»",
+      "olur_ad": "string — taslakta «Oluru alan makam»",
+      "olur_unvan": "string",
+      "ekler": ["string"],
+      "onay_notu": "string"
+    }
+  },
+  "writing": {
+    "tone": "Olura arz yazısı. Metin sonrası OLUR bloğu.",
+    "must": [
+      "Muhatap satırını «MAKAMINA» ile bitir",
+      "Metni «arz ederim» ile kapat",
+      "OLUR başlığı ve oluru alan unvanı ayrı blokta yaz"
+    ],
+    "must_not": [
+      "Gerçek makam adı / kişi adı uydurmak",
+      "Belge doğrulama kodu uydurmak"
+    ]
+  },
+  "example": {
+    "makam": "Strateji Geliştirme Başkanlığı",
+    "sayi": "E-48154937-602.02-2587945",
+    "konu": "Orta Vadeli Program Hazırlanması",
+    "muhatap": "BAKANLIK MAKAMINA",
+    "metin": "Orta vadeli program hazırlık çalışmaları tamamlanmış olup olurunuza arz ederim.",
+    "olur_ad": "Oluru alan makam",
+    "olur_unvan": "Bakan",
+    "ekler": ["Komisyon Üyeleri Listesi (43 Kişi)"],
+    "onay_notu": "Taslaktır. EBYS/UYAP’a otomatik gönderim yoktur."
+  }
+}

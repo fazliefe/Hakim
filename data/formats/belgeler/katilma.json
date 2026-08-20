@@ -1,0 +1,42 @@
+{
+  "id": "katilma",
+  "title": "Davaya katılma talebi",
+  "family": "ceza",
+  "makam": "Davayı gören ceza mahkemesi",
+  "legal_basis": ["CMK m.237", "CMK m.238"],
+  "when": "Kamu davası açılmış; suçtan zarar gören davaya katılmak istiyor.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Mahkeme / esas no" },
+    { "id": "katilan", "label": "Katılma talep eden" },
+    { "id": "dava", "label": "Katılınan dava" },
+    { "id": "zarar", "label": "Suçtan zarar görme" },
+    { "id": "hukuki_nitelendirme", "label": "TCK niteliği" },
+    { "id": "talep", "label": "Katılma kararı talebi" }
+  ],
+  "parsed": {
+    "required": ["makam", "katilan", "dava", "zarar", "talep"],
+    "properties": {
+      "makam": "string",
+      "esas_no": "string — yoksa —",
+      "katilan": "string",
+      "dava": "string",
+      "zarar": "string",
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string — CMK m.237 uyarınca katılma"
+    }
+  },
+  "writing": {
+    "tone": "Katılma dilekçesi. Yeni kamu davası açtırma; mevcut davaya katıl.",
+    "must": ["CMK m.237 an"],
+    "must_not": ["Şikayet dilekçesi gibi savcılığa hitap"]
+  },
+  "example": {
+    "makam": "Davayı gören ceza mahkemesi",
+    "esas_no": "—",
+    "katilan": "Suçtan zarar gören",
+    "dava": "Görülmekte olan kamu davası",
+    "zarar": "Suçtan doğrudan zarar görüldüğü beyan olunur.",
+    "hukuki_nitelendirme": [],
+    "talep": "CMK m.237 uyarınca davaya katılma talebinin kabulü arz olunur."
+  }
+}

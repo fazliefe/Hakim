@@ -1,0 +1,81 @@
+{
+  "id": "islem",
+  "title": "Kanun yolu / cevap dilekçesi taslağı",
+  "surface": "İşlem",
+  "language": "tr",
+  "output_field": "draft",
+  "engine": {
+    "description": "Kullanıcının seçtiği işlem + sınıflandırma + süreler + arşiv dayanakları. UYAP gönderimi yok.",
+    "fields": {
+      "action": "sikayet | suc_duyurusu | cevap | itiraz | istinaf | temyiz | katilma | bireysel_basvuru | idari_dava | tahliye | adli_kontrol_itiraz",
+      "classification": {
+        "label": "string",
+        "unit": "string",
+        "legal_nature": "string",
+        "stage": "string"
+      },
+      "deadlines": "surec ile aynı dizi",
+      "related": [{ "n": "integer", "title": "string", "article_no": "string?", "content": "string", "document_id": "string?" }],
+      "findings": "evrak findings",
+      "official_targets": [{ "name": "string", "url": "string" }]
+    }
+  },
+  "parsed": {
+    "type": "object",
+    "required": ["makam", "konu", "aciklama", "tespitler", "talep", "onay_notu"],
+    "properties": {
+      "makam": {
+        "type": "string",
+        "rule": "classification.unit. Boşsa «İlgili makam»."
+      },
+      "konu": {
+        "type": "string",
+        "rule": "action etiketine göre: İstinaf dilekçesi / İtiraz / Cevap dilekçesi + kısa konu."
+      },
+      "aciklama": {
+        "type": "string",
+        "max_chars": 900,
+        "rule": "Olayı evrak findings ve related ile anlat. Her hukuki cümlede [n] veya süre dayanağı."
+      },
+      "tespitler": {
+        "type": "array",
+        "items": "string, kısa madde imi"
+      },
+      "sure_cumlesi": {
+        "type": "string",
+        "rule": "İlgili action’a denk deadlines kaydından son gün. Yoksa süre uydurma; eksik de."
+      },
+      "talep": {
+        "type": "string",
+        "rule": "Tek paragraf talep: istinafta hükmün kaldırılması, itirazda kararın kaldırılması, cevapta davanın reddi — action’a uygun, abartısız."
+      },
+      "onay_notu": {
+        "type": "string",
+        "const_hint": "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
+      }
+    }
+  },
+  "writing": {
+    "tone": "Dilekçe: hitap, konu, açıklama, talep. Hitap resmi.",
+    "citations": "related [n]. Süre cümlesinde legal_basis.",
+    "must": [
+      "action ile talep uyumlu olsun",
+      "official_targets URL’sini metne gömme; onay notunda UYAP uyarısı durur",
+      "Türkçe yaz"
+    ],
+    "must_not": [
+      "«gönderildi», «harç yatırıldı» gibi olmamış işlem",
+      "Sahte imza / T.C. kimlik / baro no uydurmak",
+      "Olmayan içtihat künyesi"
+    ]
+  },
+  "example": {
+    "makam": "İlgili bölge adliye mahkemesi ceza dairesi",
+    "konu": "İstinaf dilekçesi — mahkûmiyet kararı hk.",
+    "aciklama": "İlk derece mahkemesinin mahkûmiyet hükmüne karşı istinaf yoluna başvurulmaktadır. Nitelikli dolandırıcılık değerlendirmesi TCK m.158 çerçevesindedir [1].",
+    "tespitler": ["Evrak türü: mahkeme kararı", "Aşama: kovuşturma"],
+    "sure_cumlesi": "İstinaf süresi tebliğ tarihine göre hesaplanır; tebliğ yoksa son gün yazılamaz.",
+    "talep": "Hükmün kaldırılması ve dosyanın usule uygun incelenmesi talep olunur.",
+    "onay_notu": "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "title": "Hukuk açık kaynak veri listesi",
+  "note": "Resmi metin birincil kaynaktır. Hugging Face derlemleri ikincil kataloğa alınır; toplu içe aktarılmaz.",
+  "official": [
+    {
+      "id": "source:yargitay.gov.tr",
+      "name": "Yargıtay Karar Arama",
+      "url": "https://karararama.yargitay.gov.tr",
+      "ingest": "bedesten",
+      "court": "yargitay",
+      "status": "ingested"
+    },
+    {
+      "id": "source:danistay.gov.tr",
+      "name": "Danıştay Karar Arama",
+      "url": "https://karararama.danistay.gov.tr",
+      "ingest": "bedesten",
+      "court": "danistay",
+      "status": "ingested"
+    },
+    {
+      "id": "source:anayasa.gov.tr",
+      "name": "AYM Kararlar Bilgi Bankası",
+      "url": "https://kararlarbilgibankasi.anayasa.gov.tr",
+      "ingest": "aym",
+      "court": "aym",
+      "status": "ingested"
+    },
+    {
+      "id": "source:emsal.uyap.gov.tr",
+      "name": "UYAP Emsal (Yerel / İstinaf / KYB)",
+      "url": "https://emsal.uyap.gov.tr",
+      "ingest": "bedesten",
+      "courts": ["yerelhukuk", "istinafhukuk", "kyb"],
+      "status": "ingested"
+    },
+    {
+      "id": "source:uyusmazlik.gov.tr",
+      "name": "Uyuşmazlık Mahkemesi",
+      "url": "https://kararlar.uyusmazlik.gov.tr",
+      "ingest": "html",
+      "court": "uyusmazlik",
+      "status": "ingested"
+    },
+    {
+      "id": "source:mevzuat.gov.tr",
+      "name": "Mevzuat Bilgi Sistemi",
+      "url": "https://www.mevzuat.gov.tr",
+      "ingest": "mevzuat",
+      "status": "ingested"
+    },
+    {
+      "id": "source:resmigazete.gov.tr",
+      "name": "Resmî Gazete",
+      "url": "https://www.resmigazete.gov.tr",
+      "ingest": "html",
+      "court": "resmi_gazete",
+      "status": "ingested"
+    },
+    {
+      "id": "source:tbmm.gov.tr",
+      "name": "TBMM Tutanak Dergisi",
+      "url": "https://www.tbmm.gov.tr/tutanaklar",
+      "ingest": "html",
+      "court": "tbmm",
+      "status": "ingested"
+    },
+    {
+      "id": "source:rekabet.gov.tr",
+      "name": "Rekabet Kurumu Kararları",
+      "url": "https://www.rekabet.gov.tr/tr/Kararlar",
+      "ingest": "html",
+      "court": "rekabet",
+      "status": "ingested"
+    },
+    {
+      "id": "source:kvkk.gov.tr",
+      "name": "KVKK Kurul Kararı Özetleri",
+      "url": "https://www.kvkk.gov.tr/Icerik/5419/kurul-kararlari",
+      "ingest": "html",
+      "court": "kvkk",
+      "status": "ingested"
+    },
+    {
+      "id": "source:sayistay.gov.tr",
+      "name": "Sayıştay Kararları",
+      "url": "https://www.sayistay.gov.tr",
+      "ingest": "html",
+      "court": "sayistay",
+      "status": "seeded"
+    }
+  ],
+  "mcp": [
+    {
+      "name": "yargi-mcp / yargi-cli",
+      "url": "https://github.com/saidsurucu/yargi-mcp",
+      "note": "Bedesten ve kurum arama sarmalayıcısı. HÂKİM resmi sitelere doğrudan bağlanır."
+    },
+    {
+      "name": "mevzuat-mcp",
+      "url": "https://pypi.org/project/mevzuat-mcp",
+      "note": "mevzuat.gov.tr sarmalayıcısı. Kanun metni HÂKİM mevzuat bağlayıcısından gelir."
+    }
+  ],
+  "huggingface": [
+    {
+      "id": "source:hf:mevzuat-gov-dataset",
+      "repo": "muhammetakkurt/mevzuat-gov-dataset",
+      "authority": "secondary"
+    },
+    {
+      "id": "source:hf:turkish-law-documents-700k",
+      "repo": "erdem-erdem/Turkish-Law-Documents-700k-clustered",
+      "authority": "secondary"
+    },
+    {
+      "id": "source:hf:turkish-law-bge-m3",
+      "repo": "muhamparlak/turkish-law-bge-m3-embeddings",
+      "authority": "secondary"
+    },
+    {
+      "id": "source:hf:turkish-legislation-corpus",
+      "repo": "hasankursun/turkish-legislation-corpus",
+      "authority": "secondary"
+    },
+    {
+      "id": "source:hf:legal-nli-tr",
+      "repo": "Turkish-NLI/legal_nli_TR_V1",
+      "authority": "secondary"
+    },
+    {
+      "id": "source:hf:turkish-law-qa",
+      "repo": "OrionCAF/turkish_law_qa_dataset",
+      "authority": "secondary"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "tahliye",
+  "title": "Tahliye talebi",
+  "family": "ceza",
+  "makam": "Tutuklamaya karar veren mahkeme / sulh ceza hakimliği",
+  "legal_basis": ["CMK m.100", "CMK m.101", "CMK m.105"],
+  "when": "Tutuklu sanık veya müdafii tahliye ister.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Mahkeme / hakimlik / esas no" },
+    { "id": "talep_eden", "label": "Talep eden" },
+    { "id": "tutuklama", "label": "Tutuklama kararı" },
+    { "id": "sebepler", "label": "Tahliye sebepleri" },
+    { "id": "adli_kontrol", "label": "Adli kontrol teklifi (varsa)" },
+    { "id": "talep", "label": "Tahliye talebi" }
+  ],
+  "parsed": {
+    "required": ["makam", "talep_eden", "sebepler", "talep"],
+    "properties": {
+      "makam": "string",
+      "esas_no": "string",
+      "talep_eden": "string",
+      "tutuklama": "string",
+      "sebepler": ["string — kaçma / delil karartma şüphesinin kalmadığı"],
+      "adli_kontrol": "string",
+      "talep": "string — tahliye, gerekirse adli kontrol"
+    }
+  },
+  "writing": {
+    "tone": "Tahliye dilekçesi. Esas hakkında hüküm kurulmasını isteme.",
+    "must": ["CMK m.100 ölçülülük", "Esas no yoksa —"],
+    "must_not": ["İstinaf dilekçesi gibi hükmü hedeflemek"]
+  },
+  "example": {
+    "makam": "Tutuklamaya karar veren mahkeme",
+    "esas_no": "—",
+    "talep_eden": "Sanık / müdafi",
+    "tutuklama": "Yürürlükteki tutuklama tedbiri",
+    "sebepler": ["Tutuklama nedenlerinin ortadan kalktığı"],
+    "adli_kontrol": "Gerekmesi halinde adli kontrol yeterli görülür.",
+    "talep": "Sanığın tahliyesi talep olunur."
+  }
+}

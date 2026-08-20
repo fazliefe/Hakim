@@ -1,0 +1,44 @@
+{
+  "id": "bireysel_basvuru",
+  "title": "Anayasa Mahkemesi bireysel başvuru",
+  "family": "anayasa",
+  "makam": "Anayasa Mahkemesi",
+  "legal_basis": ["6216 s.K. m.45", "6216 s.K. m.47"],
+  "deadline_rule_id": "deadline:aym:30gun",
+  "when": "Olağan kanun yolları tüketildikten sonra Anayasa ve AİHS kapsamındaki hak ihlali iddiası.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Anayasa Mahkemesi Başkanlığı" },
+    { "id": "basvurucu", "label": "Başvurucu" },
+    { "id": "tuketilen_yollar", "label": "Tüketilen kanun yolları" },
+    { "id": "ihlal", "label": "İhlal iddiası" },
+    { "id": "olay", "label": "Olay özeti" },
+    { "id": "sure", "label": "30 günlük süre" },
+    { "id": "talep", "label": "İhlal tespiti / giderim" }
+  ],
+  "parsed": {
+    "required": ["makam", "basvurucu", "tuketilen_yollar", "ihlal", "olay", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "Anayasa Mahkemesi",
+      "basvurucu": "string",
+      "tuketilen_yollar": ["string"],
+      "ihlal": "string — hangi hak; Anayasa madde no uydurma, kullanıcı/kanıt varsa yaz",
+      "olay": "string",
+      "sure_cumlesi": "string — 30 gün, 6216 s.K. m.47",
+      "talep": "string"
+    }
+  },
+  "writing": {
+    "tone": "Bireysel başvuru formu dili. Ceza dilekçesi «mahkûmiyet kaldırılsın» ile yetinme; hak ihlali yaz.",
+    "must": ["Kanun yolu tüketimi cümlesi", "30 gün"],
+    "must_not": ["Savcılığa şikayet gibi yazmak", "AYM esas no uydurmak"]
+  },
+  "example": {
+    "makam": "Anayasa Mahkemesi",
+    "basvurucu": "Başvurucu",
+    "tuketilen_yollar": ["İstinaf", "Temyiz"],
+    "ihlal": "Adil yargılanma hakkı ihlali iddia olunmaktadır.",
+    "olay": "Olağan kanun yolları tüketildikten sonraki nihai karar.",
+    "sure_cumlesi": "Bireysel başvuru süresi 6216 sayılı Kanun m.47 uyarınca otuz gündür.",
+    "talep": "İhlalin tespiti ve giderim talep olunur."
+  }
+}

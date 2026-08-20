@@ -1,0 +1,171 @@
+{
+  "id": "2646-ek",
+  "title": "Resmî Yazışma Yönetmeliği Ek Şablonu",
+  "source": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik (Karar 2646) Ek",
+  "ornek_pdf": "21.5.2646-Ek.pdf",
+  "kaynaklar": [
+    {
+      "id": "2646-yonetmelik",
+      "name": "Resmî Yazışma Yönetmeliği (Karar 2646)",
+      "kind": "mevzuat",
+      "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=2646&MevzuatTur=21&MevzuatTertip=5",
+      "note": "Başlık, sayı, konu, muhatap, ilgi, metin, imza, ek, dağıtım, olur — m.10–20."
+    },
+    {
+      "id": "2646-ek",
+      "name": "Yönetmelik Ek örnekleri",
+      "kind": "sablon",
+      "url": "https://www.mevzuat.gov.tr/MevzuatMetin/yonetmelik/21.5.2646-Ek.pdf",
+      "note": "ÖRNEK 1–24. Yerel kopya: data/raw/formats/21.5.2646-Ek.pdf"
+    },
+    {
+      "id": "mevzuat",
+      "name": "Mevzuat Bilgi Sistemi",
+      "kind": "katalog",
+      "url": "https://www.mevzuat.gov.tr",
+      "note": "Kanun, yönetmelik ve Cumhurbaşkanlığı kararları."
+    },
+    {
+      "id": "resmi-gazete",
+      "name": "Resmî Gazete",
+      "kind": "katalog",
+      "url": "https://www.resmigazete.gov.tr",
+      "note": "Yayımlanan resmi metinler."
+    },
+    {
+      "id": "ebys",
+      "name": "e-Yazışma / EBYS",
+      "kind": "islem",
+      "url": "https://www.turkiye.gov.tr",
+      "note": "Elektronik belge doğrulama ve resmi yazışma ortamı. HÂKİM gönderim yapmaz."
+    }
+  ],
+  "madde_referanslari": {
+    "baslik": "m.10",
+    "sayi": "m.11",
+    "tarih": "m.12",
+    "konu": "m.13",
+    "muhatap": "m.14",
+    "ilgi": "m.15",
+    "metin": "m.16",
+    "imza": "m.17",
+    "ek": "m.18",
+    "dagitim": "m.19",
+    "olur": "m.20",
+    "iletisim": "m.24",
+    "tekit": "m.34"
+  },
+  "bloklar": {
+    "baslik": {
+      "sira": 1,
+      "ornek": "ÖRNEK 2",
+      "satirlar": ["T.C.", "{kurum}", "{birim}"],
+      "kurallar": "İlk satır T.C.; idare adı büyük; birim adı ilk harfler büyük."
+    },
+    "sayi_konu": {
+      "sira": 2,
+      "ornek": "ÖRNEK 3",
+      "satirlar": [
+        "Sayı\t: {sayi}\t{tarih}",
+        "Konu\t: {konu}"
+      ],
+      "kurallar": "Sayı solda, tarih sağda aynı satır; Konu bir alt satır. İki nokta hizası."
+    },
+    "muhatap": {
+      "sira": 3,
+      "ornek": "ÖRNEK 4-6",
+      "satirlar": ["{muhatap}", "{muhatap_birim}"],
+      "once_bos_satir": 2,
+      "kurallar": "Kurum adı büyük harf + yönelme eki; birim parantez içinde olabilir."
+    },
+    "ilgi": {
+      "sira": 4,
+      "ornek": "ÖRNEK 7",
+      "satirlar": ["İlgi\t: {ilgi}"],
+      "once_bos_satir": 2,
+      "kurallar": "«... tarihli ve ... sayılı ...» biçimi; çoklu ilgi a/b/c harfleri."
+    },
+    "metin": {
+      "sira": 5,
+      "ornek": "ÖRNEK 8-9",
+      "once_bos_satir": 1,
+      "kurallar": "Paragraf 1,25 cm girinti; son cümle arz/rica ile biter."
+    },
+    "imza": {
+      "sira": 6,
+      "ornek": "ÖRNEK 10",
+      "once_bos_satir": 2,
+      "satirlar": ["{imza_ad}", "{imza_unvan}"],
+      "kurallar": "Ad soyad sağda; unvan alt satır. Kişi adı uydurulmaz — taslakta «Yetkili»."
+    },
+    "olur": {
+      "sira": 7,
+      "ornek": "ÖRNEK 17-18",
+      "satirlar": ["OLUR", "{olur_ad}", "{olur_unvan}"],
+      "kurallar": "Metin sonrası OLUR bloğu; oluru alan makam imzası."
+    },
+    "ek": {
+      "sira": 8,
+      "ornek": "ÖRNEK 12-13",
+      "satirlar": ["Ek:", "{ek_liste}"],
+      "kurallar": "Tek ek veya numaralı liste; sayfa/adet parantez içinde."
+    },
+    "dagitim": {
+      "sira": 9,
+      "ornek": "ÖRNEK 14-16",
+      "satirlar": ["Dağıtım:", "Gereği:\t{geregi}", "Bilgi:\t{bilgi}"],
+      "kurallar": "Gereği/Bilgi ayrımı; uzunsa DAĞITIM LİSTESİ ek sayfası."
+    },
+    "onay": {
+      "sira": 99,
+      "satirlar": ["{onay_notu}"],
+      "kurallar": "Taslak uyarısı; EBYS/UYAP otomatik gönderim yok."
+    }
+  },
+  "varyantlar": {
+    "ust_yazi": {
+      "belge_id": "ust_yazi",
+      "ornek": "ÖRNEK 3 + 7 + 8",
+      "blok_sirasi": ["baslik", "sayi_konu", "muhatap", "ilgi", "metin", "imza", "ek", "dagitim", "onay"],
+      "kapanis": "rica ederim",
+      "varsayilan_muhatap": "İLGİLİ BİRİME"
+    },
+    "bilgi_yazisi": {
+      "belge_id": "bilgi_yazisi",
+      "ornek": "ÖRNEK 14-16",
+      "blok_sirasi": ["baslik", "sayi_konu", "muhatap", "ilgi", "metin", "imza", "dagitim", "onay"],
+      "kapanis": "rica ederim",
+      "varsayilan_muhatap": "DAĞITIM YERLERİNE"
+    },
+    "cevap_yazisi": {
+      "belge_id": "cevap_yazisi",
+      "ornek": "ÖRNEK 7 (cevaben)",
+      "blok_sirasi": ["baslik", "sayi_konu", "muhatap", "ilgi", "metin", "imza", "ek", "onay"],
+      "kapanis": "arz ederim",
+      "varsayilan_muhatap": "MUHATABA"
+    },
+    "olur": {
+      "belge_id": "olur",
+      "ornek": "ÖRNEK 17",
+      "blok_sirasi": ["baslik", "sayi_konu", "muhatap", "metin", "imza", "olur", "ek", "onay"],
+      "kapanis": "arz ederim",
+      "varsayilan_muhatap": "MAKAMINA"
+    },
+    "tekit": {
+      "belge_id": "tekit",
+      "ornek": "ÖRNEK 24",
+      "blok_sirasi": ["baslik", "acele", "sayi_konu", "muhatap", "ilgi", "metin", "imza", "onay"],
+      "kapanis": "tekiden rica ederim",
+      "varsayilan_muhatap": "MUHATABA"
+    }
+  },
+  "evrak_turu_eslestirme": {
+    "ust_yazi": "ust_yazi",
+    "olur": "olur",
+    "genelge": "bilgi_yazisi",
+    "tutanak": "bilgi_yazisi",
+    "rapor": "ust_yazi",
+    "cevap_yazisi": "cevap_yazisi",
+    "bilgi_yazisi": "bilgi_yazisi"
+  }
+}

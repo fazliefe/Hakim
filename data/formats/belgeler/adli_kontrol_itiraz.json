@@ -1,0 +1,38 @@
+{
+  "id": "adli_kontrol_itiraz",
+  "title": "Adli kontrol / tutuklama itirazı",
+  "family": "ceza",
+  "makam": "Kararı veren sulh ceza hakimliği / itiraz mercii",
+  "legal_basis": ["CMK m.101", "CMK m.105", "CMK m.268"],
+  "deadline_rule_id": "deadline:itiraz:cmk268",
+  "when": "Tutuklama veya adli kontrol kararına itiraz. Esasa istinaf değildir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "İtiraz mercii" },
+    { "id": "karar", "label": "İtiraz olunan tedbir kararı" },
+    { "id": "sure", "label": "CMK m.268 süre" },
+    { "id": "sebepler", "label": "Tedbirin ölçüsüzlüğü" },
+    { "id": "talep", "label": "Kaldırma / yumuşatma" }
+  ],
+  "parsed": {
+    "required": ["makam", "karar", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "karar": "string",
+      "sure_cumlesi": "string",
+      "sebepler": ["string"],
+      "talep": "string — tedbirin kaldırılması veya adli kontrole çevrilmesi"
+    }
+  },
+  "writing": {
+    "tone": "Koruma tedbiri itirazı. Hükme istinaf değil.",
+    "must": ["CMK m.268", "Tutuklama ile adli kontrolü ayır"],
+    "must_not": ["BAM’a istinaf dilekçesi"]
+  },
+  "example": {
+    "makam": "İtiraz mercii",
+    "karar": "Tutuklama / adli kontrol kararı",
+    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca yedi gündür.",
+    "sebepler": ["Tedbirin ölçüsüz olduğu"],
+    "talep": "Kararın kaldırılması talep olunur."
+  }
+}

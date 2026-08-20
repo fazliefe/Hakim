@@ -1,0 +1,59 @@
+# HÂKİM model routing. Secrets stay in .env (HAKIM_LLM_API_KEY).
+# Switch stack with `active` below, or env: HAKIM_PROFILE=groq|ollama|colab
+# Optional path override: HAKIM_MODELS_CONFIG=/path/to/models.yaml
+
+active: groq
+
+defaults:
+  embedding:
+    model: newmindai/Mursit-Base-TR-Retrieval
+    dims: 768
+  research:
+    allow_ollama: false
+  llm:
+    max_tokens: 900
+    timeout: 25
+    temperature: 0.2
+
+profiles:
+  groq:
+    writer: api
+    llm:
+      url: https://api.groq.com/openai/v1
+      model: openai/gpt-oss-20b
+    ollama:
+      enabled: false
+      url: http://127.0.0.1:11434
+      model: llama3.2:3b
+      keep_alive: 30m
+
+  ollama:
+    writer: ollama
+    llm:
+      url: http://127.0.0.1:11434
+      model: llama3.2:3b
+      timeout: 120
+    ollama:
+      enabled: true
+      url: http://127.0.0.1:11434
+      model: llama3.2:3b
+      keep_alive: 30m
+    research:
+      allow_ollama: true
+
+  colab:
+    writer: ollama
+    llm:
+      url: http://127.0.0.1:11434
+      model: qwen4b-spq
+      timeout: 120
+    ollama:
+      enabled: true
+      url: http://127.0.0.1:11434
+      model: qwen4b-spq
+      keep_alive: 30m
+    embedding:
+      model: newmindai/Mursit-Base-TR-Retrieval
+      dims: 768
+    research:
+      allow_ollama: true

@@ -1,0 +1,41 @@
+{
+  "id": "temyiz",
+  "title": "Temyiz dilekçesi",
+  "family": "ceza",
+  "makam": "Yargıtay ilgili ceza dairesi",
+  "legal_basis": ["CMK m.286", "CMK m.291", "CMK m.294"],
+  "deadline_rule_id": "deadline:temyiz:cmk291",
+  "when": "İstinaf mahkemesi kararına karşı hukuka aykırılık iddiası.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Yargıtay ilgili ceza dairesi" },
+    { "id": "karar", "label": "Temyiz olunan karar" },
+    { "id": "sure", "label": "Süre (CMK m.291)" },
+    { "id": "sebepler", "label": "Temyiz sebepleri (hukuka aykırılık)" },
+    { "id": "hukuki_nitelendirme", "label": "TCK/CMK dayanak" },
+    { "id": "talep", "label": "Bozma talebi" }
+  ],
+  "parsed": {
+    "required": ["makam", "karar", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "karar": "string",
+      "sure_cumlesi": "string — 15 gün",
+      "sebepler": ["string"],
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string — bozma"
+    }
+  },
+  "writing": {
+    "tone": "Temyiz: hukuka aykırılık. Olay tartışmasını istinaf gibi uzatma.",
+    "must": ["CMK m.291", "Yargıtay daire no uydurma"],
+    "must_not": ["BAM’a hitap"]
+  },
+  "example": {
+    "makam": "Yargıtay ilgili ceza dairesi",
+    "karar": "Bölge adliye mahkemesi kararı",
+    "sure_cumlesi": "Temyiz süresi CMK m.291 uyarınca on beş gündür.",
+    "sebepler": ["Kararın hukuka aykırılığı"],
+    "hukuki_nitelendirme": [],
+    "talep": "Kararın bozulması talep olunur."
+  }
+}

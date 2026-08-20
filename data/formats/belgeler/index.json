@@ -1,0 +1,97 @@
+{
+  "title": "HÂKİM belge kalıpları",
+  "note": "İşlem ekranı: kullanıcının derdine göre bir kalıp seçilir. Motor kanıt ve süre verir; Ollama yalnız bu bölüm sırasıyla doldurur. Kamu davasını savcı açar; vatandaş şikayet / katılma / kanun yolu yazar.",
+  "family": "ceza",
+  "documents": [
+    {
+      "id": "sikayet",
+      "title": "Şikayet dilekçesi",
+      "when": "Suçtan zarar gören, savcılığa şikayet etmek istiyor.",
+      "makam": "Cumhuriyet Başsavcılığı"
+    },
+    {
+      "id": "suc_duyurusu",
+      "title": "Suç duyurusu",
+      "when": "İhbar / duyuru; şikayete bağlı olmayan suçlar veya üçüncü kişi bildirimi.",
+      "makam": "Cumhuriyet Başsavcılığı"
+    },
+    {
+      "id": "cevap",
+      "title": "Cevap dilekçesi",
+      "when": "Açılmış davada veya tebliğ edilen iddiaya karşı cevap.",
+      "makam": "Görevli ceza mahkemesi"
+    },
+    {
+      "id": "itiraz",
+      "title": "İtiraz dilekçesi",
+      "when": "Hakimlik veya mahkeme kararına CMK m.268 itirazı.",
+      "makam": "Kararı veren merci / itiraz mercii"
+    },
+    {
+      "id": "istinaf",
+      "title": "İstinaf dilekçesi",
+      "when": "İlk derece hükmüne karşı istinaf (CMK m.273).",
+      "makam": "Bölge Adliye Mahkemesi (ilgili ceza dairesi)"
+    },
+    {
+      "id": "temyiz",
+      "title": "Temyiz dilekçesi",
+      "when": "İstinaf kararına karşı temyiz (CMK m.291).",
+      "makam": "Yargıtay ilgili ceza dairesi"
+    },
+    {
+      "id": "katilma",
+      "title": "Davaya katılma talebi",
+      "when": "Kamu davasına katılma (CMK m.237).",
+      "makam": "Davayı gören ceza mahkemesi"
+    },
+    {
+      "id": "bireysel_basvuru",
+      "title": "Anayasa Mahkemesi bireysel başvuru",
+      "when": "Olağan kanun yolları tüketildikten sonra temel hak ihlali iddiası.",
+      "makam": "Anayasa Mahkemesi"
+    },
+    {
+      "id": "idari_dava",
+      "title": "İdari dava dilekçesi",
+      "when": "İdari işleme karşı iptal veya tam yargı (İYUK).",
+      "makam": "Görevli idare mahkemesi"
+    },
+    {
+      "id": "tahliye",
+      "title": "Tahliye talebi",
+      "when": "Tutuklu sanık tahliye ister.",
+      "makam": "Tutuklamaya karar veren mahkeme"
+    },
+    {
+      "id": "adli_kontrol_itiraz",
+      "title": "Adli kontrol / tutuklama itirazı",
+      "when": "Koruma tedbirine CMK m.268 itirazı.",
+      "makam": "İtiraz mercii"
+    },
+    {
+      "id": "ust_yazi",
+      "title": "Üst yazı / havale",
+      "when": "Gelen kamu evrakının ilgili birime havalesi.",
+      "makam": "Evrak kayıt ve havale"
+    },
+    {
+      "id": "bilgi_yazisi",
+      "title": "Bilgi yazısı",
+      "when": "Genelge, tutanak veya duyurunun bilgi için iletilmesi.",
+      "makam": "Bilgi için ilgili birimler"
+    },
+    {
+      "id": "olur",
+      "title": "Olur",
+      "when": "Üst makama olura arz edilen evrak.",
+      "makam": "Üst makam"
+    },
+    {
+      "id": "cevap_yazisi",
+      "title": "Cevap yazısı",
+      "when": "Gelen resmi yazıya cevaben yanıt.",
+      "makam": "Cevap veren birim"
+    }
+  ]
+}

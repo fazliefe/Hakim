@@ -1,0 +1,41 @@
+{
+  "id": "suc_duyurusu",
+  "title": "Suç duyurusu",
+  "family": "ceza",
+  "makam": "Cumhuriyet Başsavcılığı",
+  "legal_basis": ["CMK m.158"],
+  "when": "Suçun öğrenilmesi üzerine ihbar. Şikayete bağlı suçlarda zarar gören şikayet kalıbını kullanır; bu kalıp duyuru / ihbardır.",
+  "sections": [
+    { "id": "ust_yazi", "label": "T.C. / Cumhuriyet Başsavcılığı" },
+    { "id": "duyuran", "label": "Duyuran" },
+    { "id": "olay", "label": "Öğrenilen olay" },
+    { "id": "hukuki_nitelendirme", "label": "Olası TCK niteliği" },
+    { "id": "deliller", "label": "Bilinen deliller" },
+    { "id": "talep", "label": "Talep — gereğinin yapılması" },
+    { "id": "imza", "label": "Tarih ve imza yeri" }
+  ],
+  "parsed": {
+    "required": ["makam", "duyuran", "olay", "hukuki_nitelendirme", "talep"],
+    "properties": {
+      "makam": "string",
+      "duyuran": "string",
+      "olay": "string",
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "deliller": ["string"],
+      "talep": "string — gereğinin yapılması ve soruşturma"
+    }
+  },
+  "writing": {
+    "tone": "İhbar: kısa, olgusal. Şahsi öfke ve mahkûmiyet talebi yok.",
+    "must": ["Kaynaklı TCK maddesi dışında nitelendirme yok"],
+    "must_not": ["Şikayetçi yerine geçmek", "Kesin suç isnadını mahkeme hükmü gibi yazmak"]
+  },
+  "example": {
+    "makam": "Cumhuriyet Başsavcılığı",
+    "duyuran": "Duyuran",
+    "olay": "Öğrenilen olaya ilişkin özet.",
+    "hukuki_nitelendirme": [],
+    "deliller": [],
+    "talep": "Gereğinin yapılması ve soruşturma başlatılması arz olunur."
+  }
+}

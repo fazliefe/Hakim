@@ -1,0 +1,31 @@
+{
+  "title": "HÂKİM yazım formatları",
+  "note": "Bu dört dosya EKRAN yazım kuralıdır (Araştırma/Evrak/Süreç/İşlem). Dilekçe ve kanun yolu KALIPLARI data/formats/belgeler/ altındadır.",
+  "model": "llama3.2:3b",
+  "modules": [
+    {
+      "id": "arastirma",
+      "file": "arastirma.json",
+      "surface": "Araştırma",
+      "output_field": "answer"
+    },
+    {
+      "id": "evrak",
+      "file": "evrak.json",
+      "surface": "Evrak",
+      "output_field": "draft"
+    },
+    {
+      "id": "surec",
+      "file": "surec.json",
+      "surface": "Süreç",
+      "output_field": "draft"
+    },
+    {
+      "id": "islem",
+      "file": "islem.json",
+      "surface": "İşlem",
+      "output_field": "draft"
+    }
+  ]
+}

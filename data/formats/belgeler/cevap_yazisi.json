@@ -1,0 +1,57 @@
+{
+  "id": "cevap_yazisi",
+  "title": "Cevap yazısı",
+  "family": "kamu",
+  "resmi_sablon": "cevap_yazisi",
+  "template_source": "2646-ek ÖRNEK 7",
+  "makam": "Cevap veren birim",
+  "legal_basis": [
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.15",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.16"
+  ],
+  "when": "Gelen yazıya cevaben resmi yanıt.",
+  "sections": [
+    { "id": "sayi", "label": "Sayı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "muhatap", "label": "Muhatap" },
+    { "id": "ilgi", "label": "İlgi" },
+    { "id": "metin", "label": "Metin" },
+    { "id": "ekler", "label": "Ek" },
+    { "id": "onay_notu", "label": "Onay" }
+  ],
+  "parsed": {
+    "required": ["makam", "sayi", "konu", "muhatap", "ilgi", "metin", "onay_notu"],
+    "properties": {
+      "makam": "string",
+      "sayi": "string",
+      "konu": "string",
+      "muhatap": "string",
+      "ilgi": "string — «... tarihli ve ... sayılı yazınız/yazımız»",
+      "metin": "string — cevaben açıklama; «arz ederim»",
+      "ekler": ["string"],
+      "onay_notu": "string"
+    }
+  },
+  "writing": {
+    "tone": "Resmi cevap yazısı. İlgi zorunlu.",
+    "must": [
+      "İlgi satırında gelen yazının tarih ve sayısını kullan",
+      "Metinde «cevaben» veya «ilgi yazınıza» ifadesi geçsin",
+      "Son cümleyi «arz ederim» ile bitir"
+    ],
+    "must_not": [
+      "Olmayan ilgi yazı tarih/sayı uydurmak",
+      "UYAP gönderim vaadi"
+    ]
+  },
+  "example": {
+    "makam": "Hukuk ve Mevzuat Genel Müdürlüğü",
+    "sayi": "E-33397501-903.07.02-141868",
+    "konu": "İlgi yazınıza cevap",
+    "muhatap": "TÜRKİYE İŞ KURUMU GENEL MÜDÜRLÜĞÜNE",
+    "ilgi": "18.08.2026 tarihli ve E-99887766-804.02-15 sayılı yazınız.",
+    "metin": "İlgi yazınız incelenmiş olup talep edilen bilgiler ekte sunulmuştur. Bilgilerinize arz ederim.",
+    "ekler": ["Bilgi Formu (1 Sayfa)"],
+    "onay_notu": "Taslaktır. EBYS/UYAP’a otomatik gönderim yoktur."
+  }
+}

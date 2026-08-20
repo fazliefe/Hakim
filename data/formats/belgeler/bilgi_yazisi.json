@@ -1,0 +1,67 @@
+{
+  "id": "bilgi_yazisi",
+  "title": "Bilgi yazısı",
+  "family": "kamu",
+  "resmi_sablon": "bilgi_yazisi",
+  "template_source": "2646-ek ÖRNEK 14-16",
+  "makam": "Bilgi için ilgili birimler",
+  "legal_basis": [
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.13",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.14",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.15",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.16",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.19"
+  ],
+  "when": "Genelge, tutanak veya duyurunun ilgili birimlere bilgi için iletilmesi.",
+  "sections": [
+    { "id": "sayi", "label": "Sayı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "muhatap", "label": "Muhatap" },
+    { "id": "ilgi", "label": "İlgi" },
+    { "id": "metin", "label": "Metin" },
+    { "id": "dagitim", "label": "Dağıtım" },
+    { "id": "onay_notu", "label": "Onay" }
+  ],
+  "parsed": {
+    "required": ["makam", "sayi", "konu", "muhatap", "metin", "dagitim", "onay_notu"],
+    "properties": {
+      "makam": "string — classification.unit",
+      "sayi": "string — fields.sayi yoksa «—»",
+      "konu": "string — tek satır kısa konu",
+      "muhatap": "string — «DAĞITIM YERLERİNE» veya tek kurum",
+      "ilgi": "string — varsa tarih/sayı ile",
+      "metin": "string — bilgi mahiyetinde; yaptırım/ceza emri uydurma yok",
+      "dagitim": {
+        "geregi": ["string"],
+        "bilgi": ["string"]
+      },
+      "onay_notu": "string"
+    }
+  },
+  "writing": {
+    "tone": "Kısa bilgi yazısı. Emir değil, duyuru / bilgilendirme.",
+    "must": [
+      "Genelge/tutanak künyesini metindeki mevcut veriden al",
+      "Dağıtımda Gereği/Bilgi ayrımı gerekiyorsa iki başlıkla yaz",
+      "Son cümleyi kamu yazışma üslubuyla bitir"
+    ],
+    "must_not": [
+      "Olmayan genelge no veya ilgi yazı üretmek",
+      "Hukuki yaptırım ve ceza sonucu uydurmak",
+      "UYAP gönderim vaadi"
+    ]
+  },
+  "example": {
+    "makam": "Bilgi için ilgili birimler",
+    "sayi": "E-55554444-010.03-18",
+    "konu": "2026/12 sayılı genelge hakkında bilgilendirme",
+    "muhatap": "DAĞITIM YERLERİNE",
+    "ilgi": "2026/12 sayılı Genelge.",
+    "metin": "İlgi genelge ilişikte gönderilmiş olup birimlerce bilgi edinilmesi ve gerekli hazırlıkların yapılması rica olunur.",
+    "dagitim": {
+      "geregi": ["İlçe Müdürlüklerine"],
+      "bilgi": ["Evrak Kayıt Şefliğine"]
+    },
+    "onay_notu": "Taslaktır. EBYS/UYAP’a otomatik gönderim yoktur."
+  }
+}

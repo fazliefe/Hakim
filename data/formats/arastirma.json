@@ -1,0 +1,112 @@
+{
+  "id": "arastirma",
+  "title": "Araştırma gerekçesi",
+  "surface": "Araştırma",
+  "language": "tr",
+  "output_field": "answer",
+  "engine": {
+    "description": "Hybrid arama + graf. Model bunları değiştirmez.",
+    "fields": {
+      "query": "string",
+      "route": "exact_citation | hybrid",
+      "evidence": [
+        {
+          "n": "integer, atıf numarası [n]",
+          "document_id": "string",
+          "law_no": "string | null",
+          "article_no": "string | null",
+          "title": "string | null",
+          "content": "resmi metin parçası",
+          "authority": "official | secondary | user",
+          "used_in_answer": "boolean"
+        }
+      ]
+    }
+  },
+  "parsed": {
+    "type": "object",
+    "required": ["ozet", "ana_kaynak_n", "gerekce", "kaynak_uyari"],
+    "properties": {
+      "ozet": {
+        "type": "string",
+        "max_chars": 900,
+        "rule": "İki-üç cümle. İlk cümle hukuki sonucu söyler. Madde numarası yalnız evidence içinden. «en yakın resmi dayanak» deme."
+      },
+      "ana_kaynak_n": {
+        "type": "integer",
+        "rule": "evidence içindeki n. İlk kullanılan kaynak."
+      },
+      "gerekce": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["n", "cumle"],
+          "properties": {
+            "n": "atıf numarası, evidence.n ile aynı",
+            "cumle": "O kaynağa dayanan açıklayıcı bir cümle. Metin uydurma yok; parafraz et, maddeyi yapıştırma."
+          }
+        },
+        "min_items": 3,
+        "max_items": 6
+      },
+      "ilgili": {
+        "type": "array",
+        "items": { "n": "integer", "neden": "string, tek cümle" },
+        "max_items": 3
+      },
+      "kaynak_uyari": {
+        "type": "string",
+        "const_hint": "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır."
+      }
+    }
+  },
+  "writing": {
+    "tone": "Açık Türkçe, tam cümle. Usul sorusunda (nasıl yapılır) suç unsuru kalıbı kullanma. İlk cümle soruyu cevaplar.",
+    "citations": "Her hukuki iddianın sonunda [n] olur. n, evidence listesindeki n’dir.",
+    "must": [
+      "Yalnızca verilen evidence içeriğine dayan.",
+      "Kanun maddesi, esas/karar no, tarih uydurma.",
+      "Türkçe yaz. Her cümle özne + yüklem olsun; yarım kalıp yapıştırma.",
+      "evidence.law_no hangi kanunu gösteriyorsa onu yaz (CMK ise TCK yazma).",
+      "Ana kaynak cümlesinde madde veya karar künyesi geçsin.",
+      "İlk cümle soruyu cevaplar. Evidence’daki her maddeyi sırayla sayma.",
+      "En az dört tam cümle yaz.",
+      "Her cümle parafraz; atıf [n] cümlenin sonunda. Maddeyi ayrı blok olarak yapıştırma."
+    ],
+    "must_not": [
+      "evidence’da olmayan madde numarası",
+      "CMK sorulurken TCK’nın aynı numarasını yazmak",
+      "«Bu suçun temel şekli» kalıbını usul maddesine veya ilgisiz şikayet maddesine yapıştırmak",
+      "«bana göre», «muhtemelen», «genelde»",
+      "UYAP’a gönderim vaadi",
+      "Kaynaksız sonuç cümlesi",
+      "«extractive», «Cevap.» başlığı, sorgunun tırnak içinde tekrarı",
+      "Tam kanun maddesini yapıştırma",
+      "Tek cümlelik kısa cevap"
+    ]
+  },
+  "example": {
+    "ozet": "Evet: banka hesabının araç olarak kullanılması, TCK m.158 kapsamında nitelikli dolandırıcılıktır [1]. Madde, banka veya kredi kurumunun araç olarak kullanıldığı hâlleri temel dolandırıcılıktan ayırır [1]. Somut olayda bu seçimlik hareketin gerçekleşip gerçekleşmediği dosyadan bakılır [1].",
+    "ana_kaynak_n": 1,
+    "gerekce": [
+      {
+        "n": 1,
+        "cumle": "TCK m.158, dolandırıcılığın bilişim sistemleri ile banka veya kredi kurumları kullanılarak işlenmesini nitelikli hâl sayar [1]."
+      },
+      {
+        "n": 1,
+        "cumle": "Bu seçenek gerçekleştiğinde fiil, maddenin nitelikli şekli içinde kalır; klasik dolandırıcılıktan ayrı bir ağırlaştırıcı yoldur [1]."
+      },
+      {
+        "n": 3,
+        "cumle": "Suçun temel şekli TCK m.157’de düzenlenir; nitelikli seçenekler 158’de toplanır [3]."
+      },
+      {
+        "n": 1,
+        "cumle": "Hesabın gerçekten araç olarak kullanıldığının ve dolandırıcılığın diğer unsurlarının da oluştuğunun dosyadan incelenmesi gerekir [1]."
+      }
+    ],
+    "ilgili": [],
+    "kaynak_uyari": "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır."
+  }
+}

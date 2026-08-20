@@ -1,0 +1,48 @@
+{
+  "id": "cevap",
+  "title": "Cevap dilekçesi",
+  "family": "ceza",
+  "makam": "Görevli ceza mahkemesi",
+  "legal_basis": ["CMK m.177", "CMK m.201"],
+  "when": "Tebliğ edilen iddianame, katılma veya karşı iddiaya karşı savunma / cevap.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Mahkeme / esas no" },
+    { "id": "taraflar", "label": "Cevap veren" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "usul", "label": "Usule ilişkin beyanlar" },
+    { "id": "esasa_cevap", "label": "Esasa cevap" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki değerlendirme (TCK/CMK)" },
+    { "id": "deliller", "label": "Delil bildirimi" },
+    { "id": "talep", "label": "Sonuç ve talep" }
+  ],
+  "parsed": {
+    "required": ["makam", "esas_no", "cevap_veren", "konu", "esasa_cevap", "talep"],
+    "properties": {
+      "makam": "string — classification.unit",
+      "esas_no": "string — yoksa «esas no: —»",
+      "cevap_veren": "string",
+      "konu": "string",
+      "usul": "string",
+      "esasa_cevap": "string",
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "deliller": ["string"],
+      "talep": "string — beraat, davanın reddi, tahliye vb. evraka uygun, abartısız"
+    }
+  },
+  "writing": {
+    "tone": "Savunma dilekçesi. Karşı tarafın iddiasını tekrar edip çürüt.",
+    "must": ["Esas no yoksa uydurma", "Talep evrak ve action ile uyumlu"],
+    "must_not": ["Olmayan duruşma tarihi", "Sahte içtihat künyesi"]
+  },
+  "example": {
+    "makam": "Görevli ceza mahkemesi",
+    "esas_no": "—",
+    "cevap_veren": "Sanık / müdafi",
+    "konu": "İddianameye cevap",
+    "usul": "",
+    "esasa_cevap": "İsnat olunan fiilin unsurlarının oluşmadığı beyan olunur.",
+    "hukuki_nitelendirme": [],
+    "deliller": [],
+    "talep": "Beraat kararı verilmesi talep olunur."
+  }
+}

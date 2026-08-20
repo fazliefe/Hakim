@@ -1,0 +1,43 @@
+{
+  "id": "idari_dava",
+  "title": "İdari dava dilekçesi",
+  "family": "idare",
+  "makam": "Görevli idare mahkemesi",
+  "legal_basis": ["2577 s.K. m.3", "2577 s.K. m.7"],
+  "when": "İdari işleme karşı iptal veya tam yargı. Ceza şikayeti değildir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "İdare mahkemesi" },
+    { "id": "davaci", "label": "Davacı" },
+    { "id": "davali", "label": "Davalı idare" },
+    { "id": "islem", "label": "Dava konusu işlem" },
+    { "id": "sure", "label": "Dava açma süresi (İYUK m.7)" },
+    { "id": "hukuki_sebepler", "label": "Hukuka aykırılık sebepleri" },
+    { "id": "talep", "label": "İptal / tazminat talebi" }
+  ],
+  "parsed": {
+    "required": ["makam", "davaci", "davali", "islem", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "davaci": "string",
+      "davali": "string",
+      "islem": "string",
+      "sure_cumlesi": "string — 60 gün kuralı; somut last_day yoksa uydurma",
+      "sebepler": ["string"],
+      "talep": "string"
+    }
+  },
+  "writing": {
+    "tone": "İYUK dilekçesi. TCK şikayet dili kullanma.",
+    "must": ["Davacı-davalı idare", "Süre uydurma"],
+    "must_not": ["Cumhuriyet savcılığına hitap", "Mahkûmiyet talebi"]
+  },
+  "example": {
+    "makam": "Görevli idare mahkemesi",
+    "davaci": "Davacı",
+    "davali": "Davalı idare",
+    "islem": "Dava konusu idari işlem",
+    "sure_cumlesi": "İdari yargıda dava açma süresi İYUK m.7 uyarınca kural olarak altmış gündür.",
+    "sebepler": ["İşlemin hukuka aykırılığı"],
+    "talep": "İşlemin iptali talep olunur."
+  }
+}

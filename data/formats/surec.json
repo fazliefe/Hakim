@@ -1,0 +1,90 @@
+{
+  "id": "surec",
+  "title": "Aşama ve süre anlatımı",
+  "surface": "Süreç",
+  "language": "tr",
+  "output_field": "draft",
+  "engine": {
+    "description": "Aşama haritası ve deadline_rules motoru. Son gün model hesaplamaz.",
+    "fields": {
+      "classification": {
+        "stage": "string",
+        "remedies": "string[]",
+        "legal_nature": "string",
+        "label": "string"
+      },
+      "stages": [{ "id": "string", "title": "string", "state": "done | current | upcoming" }],
+      "deadlines": [
+        {
+          "rule_id": "string",
+          "name": "string",
+          "trigger": "YYYY-MM-DD | null",
+          "duration": "integer",
+          "unit": "day | week | month | year",
+          "calendar": "civil | administrative | criminal",
+          "last_day": "YYYY-MM-DD | null",
+          "legal_basis": "string[]",
+          "missing": "string | null"
+        }
+      ]
+    }
+  },
+  "parsed": {
+    "type": "object",
+    "required": ["asama_cumlesi", "kanun_yollari", "sureler", "uyari"],
+    "properties": {
+      "asama_cumlesi": {
+        "type": "string",
+        "rule": "classification.stage ve stages[].state’e göre nerede olunduğunu söyle. Yeni aşama icat etme."
+      },
+      "kanun_yollari": {
+        "type": "array",
+        "items": {
+          "id": "remedies içindeki id",
+          "cumle": "Bu yolun ne olduğunu bir cümlede açıkla; süre rakamını deadlines’tan al"
+        }
+      },
+      "sureler": {
+        "type": "array",
+        "items": {
+          "required": ["rule_id", "anlatim"],
+          "properties": {
+            "rule_id": "deadlines.rule_id birebir",
+            "anlatim": "«X, tetikleyici T ise son gün D’dir (dayanak).» last_day yoksa missing’i yaz, tarih uydurma."
+          }
+        }
+      },
+      "uyari": {
+        "type": "string",
+        "const_hint": "Süreler kural motoruyla hesaplanmıştır; model tahmin etmez."
+      }
+    }
+  },
+  "writing": {
+    "tone": "Usul kalemi: süre tahmini yok, hesap var.",
+    "citations": "legal_basis metnini cümleye göm (ör. CMK m.273). Yeni madde no ekleme.",
+    "must": [
+      "last_day ve duration değerlerini olduğu gibi kullan",
+      "Eksik tetikleyicide «hesaplanamadı» de",
+      "Türkçe yaz"
+    ],
+    "must_not": [
+      "Yeni son gün üretmek",
+      "Takvim türünü değiştirmek",
+      "İşlem taslağı / talep yazmak"
+    ]
+  },
+  "example": {
+    "asama_cumlesi": "Evrak kovuşturma (ilk derece) aşamasındadır. İstinaf yolu açıktır; dosya henüz istinaf mahkemesinde değildir.",
+    "kanun_yollari": [
+      { "id": "istinaf", "cumle": "İstinaf, tebliğden itibaren CMK m.273’e göre hesaplanır." }
+    ],
+    "sureler": [
+      {
+        "rule_id": "deadline:istinaf:cmk273",
+        "anlatim": "İstinaf, tebliğ 20.08.2026 ise son gün 27.08.2026’dir (CMK m.273)."
+      }
+    ],
+    "uyari": "Süreler kural motoruyla hesaplanmıştır; model tahmin etmez."
+  }
+}

@@ -1,0 +1,270 @@
+HÂKİM — tüm aşamalar için kopyala-yapıştır örnekler
+====================================================
+Her blok «----- BAŞLA / BİTİR -----» arasındadır.
+Nereye yapıştıracağınız başlıkta yazıyor.
+
+
+################################################################
+1) ARAŞTIRMA   ekran: /arastirma
+   Dosya yükleme YOK. Metni soru kutusuna yapıştırın.
+################################################################
+
+----- BAŞLA | araştırma | konu dışı (reddetmeli) -----
+fenerbahçe maçı ne olur
+----- BİTİR -----
+
+----- BAŞLA | araştırma | tuzak CMK 158 ≠ TCK 158 -----
+CMK madde 158 ihbar ve şikayet nasıl yapılır?
+----- BİTİR -----
+
+----- BAŞLA | araştırma | nitelikli dolandırıcılık (TCK 158 beklenir) -----
+Banka hesabımdan internet üzerinden para çekildi. Nitelikli dolandırıcılık TCK’da hangi maddede?
+----- BİTİR -----
+
+
+################################################################
+2) EVRAK   ekran: /evrak
+   Yapıştır VEYA «Dosya yükle» (.txt / .pdf)
+   Aşağıdaki blokları .txt kaydedip de yükleyebilirsiniz.
+################################################################
+
+----- BAŞLA | evrak | gerekçeli karar + İ harfi tuzağı + istinaf -----
+T.C.
+İZMİR 2. AĞIR CEZA MAHKEMESİ
+GEREKÇELİ KARAR
+
+Esas No: 2025/412
+Karar No: 2026/188
+
+Sanık hakkında Ankara Cumhuriyet Başsavcılığının iddianamesi ile kamu davası açılmıştır.
+Mahkeme, 5237 sayılı TCK'nın 158/1-f maddesinde düzenlenen nitelikli dolandırıcılık
+suçundan SANIĞIN MAHKÛMİYETİNE karar vermiştir.
+
+Hükmün 5271 sayılı CMK'nın 272 ve 273. maddeleri uyarınca istinaf kanun yolunun açık olduğuna.
+
+Karar tarihi: 10.08.2026
+Tebliğ tarihi: 20.08.2026
+----- BİTİR -----
+Beklenen: tür mahkeme kararı (iddianame değil), istinaf CMK 273, son gün 27.08.2026
+
+----- BAŞLA | evrak | gerçek iddianame -----
+T.C.
+ANKARA CUMHURİYET BAŞSAVCILIĞI
+İDDİANAME
+
+Esas No: 2026/1104
+
+Şüpheli hakkında 5237 sayılı Kanun'un 142. maddesi uyarınca kamu davası açılmasına,
+delillerin mahkemede tartışılmasına ve görevli asliye ceza mahkemesinde yargılama
+yapılmasına karar verilmiştir.
+
+Mağdur beyanı, kamera kaydı ve banka ekstresi iddianameye eklenmiştir.
+Kamu davasının kabulü talep olunur.
+----- BİTİR -----
+Beklenen: tür iddianame, TCK 142; gerekçeli karar sanılmamalı
+
+----- BAŞLA | evrak | bozuk OCR -----
+T.C.  ANK4RA  4. A6IR CEZA MAHKEMESI
+GEREKCELI KARAR
+
+Sanigin TCK 158/1-f nlt. dolandiricilik sucundan MAHKUMIYETINE.
+Istinaf aciktir. Karar 01.08.2026  Tebliğ: 14.08.2026
+Esas 2025/412
+----- BİTİR -----
+Beklenen: yine karar + tebliğ 14.08.2026 yakalanmalı
+
+
+################################################################
+3) KAMU   ekran: /kamu
+   Yapıştır VEYA «Evrak yükle» (.txt / .pdf)
+################################################################
+
+----- BAŞLA | kamu | eksik üst yazı (Sayı/muhatap yok) -----
+T.C.
+ANKARA VALİLİĞİ
+Yazı İşleri Müdürlüğü
+
+Konu: Bilgi talebi hk.
+
+İlgi yazınız incelenmek üzere ekte gönderilmiştir. Sayı alanı boştur.
+Muhatap birim belirtilmemiştir.
+
+Gereğini rica ederim.
+----- BİTİR -----
+Beklenen: 2646 taslağı + eksik alan uyarısı
+
+----- BAŞLA | kamu | dolu olur -----
+T.C.
+ANKARA VALİLİĞİ
+İl Yazı İşleri Müdürlüğü
+
+Sayı    : E-06-2026-4481
+Tarih   : 18.08.2026
+Konu    : Personel görevlendirme
+İlgi    : 12.08.2026 tarihli ve E-06-2026-4310 sayılı yazı
+
+OLUR
+
+Makamın oluruna arz ederim.
+
+İlgi yazı uyarınca 2646 sayılı Resmî Yazışmalarda Uygulanacak Usul ve Esaslar
+Hakkında Yönetmelik çerçevesinde görevlendirme işleminin onayına sunulmuştur.
+
+Gereğini arz ederim.
+----- BİTİR -----
+Beklenen: kalıp olur, sayı/ilgi dolu
+
+----- BAŞLA | kamu | klasik üst yazı -----
+T.C.
+ANKARA VALİLİĞİ
+Yazı İşleri Müdürlüğü
+
+Sayı: E-06.01.2026-1240
+Konu: Evrak havalesi
+
+ÜST YAZI
+
+İlgi yazınız ekte gönderilmiş olup evrak havale olunur.
+Dağıtım listesi ve ek listesi ilişiktedir.
+
+Gereğini rica ederim.
+----- BİTİR -----
+
+
+################################################################
+4) SÜREÇ   ekran: /surec
+   Dosya yükleme YOK. Karar/tebligat kutusuna yapıştırın.
+   YANLIŞ: kamu üst yazısı / «Sayı alanı boştur» buraya gitmez → aşama belirsiz.
+   DOĞRU: mahkeme kararı, iddianame veya AYM metni + mümkünse Tebliğ tarihi.
+################################################################
+
+----- BAŞLA | süreç | SORUŞTURMA (iddianame) -----
+T.C.
+ANKARA CUMHURİYET BAŞSAVCILIĞI
+İDDİANAME
+
+Esas No: 2026/1104
+
+Şüpheli hakkında 5237 sayılı Kanun'un 142. maddesi uyarınca kamu davası açılmıştır.
+Soruşturma tamamlanmış, iddianame düzenlenmiştir.
+
+Tebliğ tarihi: 20.08.2026
+----- BİTİR -----
+Beklenen: aşama soruşturma (liste ilk satır seçili)
+
+----- BAŞLA | süreç | KOVUŞTURMA / ilk derece (bunu kullanın) -----
+T.C.
+İZMİR 2. AĞIR CEZA MAHKEMESİ
+GEREKÇELİ KARAR
+
+Esas No: 2025/412
+Karar No: 2026/188
+
+Sanık hakkında mahkûmiyetine karar verilmiştir.
+İstinaf kanun yolu açıktır.
+
+Karar tarihi: 10.08.2026
+Tebliğ tarihi: 20.08.2026
+----- BİTİR -----
+Beklenen: Kovuşturma (ilk derece) seçili; istinaf son gün 27.08.2026; temyiz 04.09.2026
+
+----- BAŞLA | süreç | İSTİNAF (BAM kararı) -----
+T.C.
+İZMİR BÖLGE ADLİYE MAHKEMESİ 2. CEZA DAİRESİ
+GEREKÇELİ KARAR
+
+İstinaf mahkemesi, ilk derece mahkûmiyet hükmünün onanmasına karar vermiştir.
+Temyiz yolu açıktır.
+
+Karar tarihi: 01.08.2026
+Tebliğ tarihi: 14.08.2026
+----- BİTİR -----
+Beklenen: aşama istinaf; temyiz 15 gün
+
+----- BAŞLA | süreç | TEMYİZ (Yargıtay) -----
+T.C.
+YARGITAY 8. CEZA DAİRESİ
+GEREKÇELİ KARAR
+
+Temyiz incelemesi sonunda hükmün onanmasına karar verilmiştir.
+
+Karar tarihi: 01.07.2026
+Tebliğ tarihi: 20.07.2026
+----- BİTİR -----
+Beklenen: aşama temyiz
+
+----- BAŞLA | süreç | BİREYSEL BAŞVURU (AYM) -----
+ANAYASA MAHKEMESİNE
+BİREYSEL BAŞVURU DİLEKÇESİDİR
+
+Yargıtay kararının tebliği üzerine temel hak ihlali iddiasıyla
+Anayasa Mahkemesine bireysel başvuru yapılacaktır.
+
+Tebliğ tarihi: 21.07.2026
+----- BİTİR -----
+Beklenen: aşama bireysel başvuru; 30 gün (6216 m.47)
+
+
+----- BAŞLA | süreç | tebliğ var, istinaf 7 gün / temyiz 15 gün -----
+T.C.
+İZMİR 2. AĞIR CEZA MAHKEMESİ
+GEREKÇELİ KARAR
+
+Esas No: 2025/412
+Karar No: 2026/188
+
+Sanık hakkında mahkûmiyetine karar verilmiştir.
+İstinaf kanun yolu açıktır.
+
+Karar tarihi: 10.08.2026
+Tebliğ tarihi: 20.08.2026
+----- BİTİR -----
+Beklenen: aşama kovuşturma; itiraz/istinaf son gün 27.08.2026; temyiz 04.09.2026
+
+----- BAŞLA | süreç | Cuma tebliği (hafta sonu kayması) -----
+T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ
+GEREKÇELİ KARAR
+Sanığın mahkûmiyetine. İstinaf açıktır.
+Karar tarihi: 01.08.2026
+Tebliğ tarihi: 14.08.2026
+----- BİTİR -----
+Beklenen: 7 ve 15 günlük süreler; son gün cumartesi/pazar ise pazartesiye kaymalı
+
+----- BAŞLA | süreç | tebliğ yok (son gün üretilmemeli) -----
+T.C. İZMİR 2. AĞIR CEZA MAHKEMESİ
+GEREKÇELİ KARAR
+Mahkûmiyet. İstinaf açık.
+Karar tarihi: 10.08.2026
+----- BİTİR -----
+Beklenen: süre hesaplanamadı / tebliğ eksik uyarısı
+
+
+################################################################
+5) İŞLEM   ekran: /islem
+   Dosya yükleme YOK. «Derdini anlat» kutusuna yapıştırın.
+################################################################
+
+----- BAŞLA | işlem | eksik şikayet -----
+Paramı aldılar, savcılığa şikayet etmek istiyorum.
+----- BİTİR -----
+Beklenen: yer tutucular, «şurada eksikliğin var»; TCK maddesi yok; mahkûmiyet talebi yok
+
+----- BAŞLA | işlem | dolu şikayet -----
+Ben Ali Deneme. 12.03.2025 tarihinde Ankara'da banka hesabımdan
+Mehmet Örnek tarafından beş bin lira çekildi. Dekontlarım ve
+WhatsApp yazışmalarım var. Savcılığa şikayet etmek istiyorum.
+----- BİTİR -----
+Beklenen: eksik uyarısı kalkar; ad/tarih/yer/delil dilekçede durur
+
+----- BAŞLA | işlem | istinaf -----
+İzmir 2. Ağır Ceza Mahkemesinin 10.08.2026 tarihli, 2025/412 esas,
+2026/188 karar sayılı mahkûmiyet hükmünü istinaf ediyorum.
+Tebliğ tarihi: 20.08.2026. Gerekçe: deliller tartışılmadan hüküm kuruldu.
+----- BİTİR -----
+Beklenen: istinaf dilekçesi, BAM, CMK 273
+
+----- BAŞLA | işlem | tahliye -----
+Tutukluyum, 4 aydır cezaevindeyim. Tahliye veya adli kontrol talep ediyorum.
+Tutuklama tarihi: 21.04.2026. Ankara 2. Sulh Ceza Hâkimliği.
+----- BİTİR -----
+Beklenen: tahliye talebi kalıbı

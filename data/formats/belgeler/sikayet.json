@@ -1,0 +1,67 @@
+{
+  "id": "sikayet",
+  "title": "Şikayet dilekçesi",
+  "family": "ceza",
+  "makam": "Cumhuriyet Başsavcılığı",
+  "legal_basis": ["TCK m.73", "CMK m.158"],
+  "deadline_rule_id": "deadline:sikayet:tck73",
+  "when": "Suçtan zarar gören, fail hakkında soruşturma açılmasını ister. Ceza davasını vatandaş açmaz; savcı kamu davası açar. Bu kalıp TCK nitelendirmeli şikayet dilekçesidir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "T.C. / Cumhuriyet Başsavcılığı" },
+    { "id": "sikayetci", "label": "Şikayetçi kimliği" },
+    { "id": "sikayet_edilen", "label": "Şikayet edilen" },
+    { "id": "olay", "label": "Olay ve tarih" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki nitelendirme (TCK)" },
+    { "id": "deliller", "label": "Deliller" },
+    { "id": "talep", "label": "Talep sonucu" },
+    { "id": "imza", "label": "Tarih ve imza yeri" }
+  ],
+  "parsed": {
+    "required": ["makam", "sikayetci", "sikayet_edilen", "olay", "hukuki_nitelendirme", "deliller", "talep"],
+    "properties": {
+      "makam": "string — varsayılan Cumhuriyet Başsavcılığı; ilçe kullanıcıdan gelirse ekle",
+      "sikayetci": "string — ad soyad yoksa «şikayetçi» yaz, kimlik uydurma",
+      "sikayet_edilen": "string — bilinmiyorsa «kimliği belirsiz şüpheli»",
+      "olay": "string — kullanıcı anlatısı; tarih varsa engine.dates",
+      "hukuki_nitelendirme": [
+        {
+          "n": "evidence atıf no",
+          "madde": "yalnızca arşivdeki TCK maddesi, örn. 158",
+          "cumle": "Bu fiilin hangi maddeye uyduğu, kaynaklı"
+        }
+      ],
+      "deliller": ["string"],
+      "talep": "string — soruşturma açılması, delillerin toplanması, kamu davası açılması talebi",
+      "sure_notu": "string — TCK m.73 şikayet süresi; last_day varsa yaz, yoksa uydurma"
+    }
+  },
+  "writing": {
+    "tone": "Savcılığa hitap eden şikayet dilekçesi. Dava dilekçesi gibi «davacı-davalı» kullanma.",
+    "must": [
+      "Hukuki nitelendirmede yalnız engine.related / evidence içindeki TCK maddelerini kullan",
+      "related boşsa madde numarası yazma; «eşleşen madde yok» de",
+      "Talep yalnızca soruşturma, delil toplama ve kamu davası açılsın diye bitsin",
+      "Bölüm sırasını sections ile aynı tut"
+    ],
+    "must_not": [
+      "İddianame gibi yazmak",
+      "Mahkeme esas numarası uydurmak",
+      "Olmayan tanık adı / T.C. kimlik",
+      "CMK m.158'i TCK m.158 (nitelikli dolandırıcılık) sanmak",
+      "Kaynak yokken TCK maddesi yazmak",
+      "Mahkûmiyet, ceza veya hüküm istemek; şikayet dilekçesi mahkûmiyet talep etmez"
+    ]
+  },
+  "example": {
+    "makam": "Cumhuriyet Başsavcılığı",
+    "sikayetci": "Şikayetçi",
+    "sikayet_edilen": "Kimliği belirsiz şüpheli",
+    "olay": "Banka hesabı kullanılarak dolandırıcılık niteliğinde işlem yapıldığı beyan edilmektedir.",
+    "hukuki_nitelendirme": [
+      { "cumle": "Mevzuat aramasında eşleşen madde yok; taslağa TCK maddesi yazılmadı." }
+    ],
+    "deliller": ["Banka dekontları", "Yazışmalar"],
+    "talep": "Şikayet edilen hakkında soruşturma açılması, delillerin toplanması ve kamu davası açılması talep olunur.",
+    "sure_notu": "Şikayet süresi TCK m.73’e tabidir."
+  }
+}

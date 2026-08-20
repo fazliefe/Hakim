@@ -1,0 +1,41 @@
+{
+  "id": "itiraz",
+  "title": "İtiraz dilekçesi",
+  "family": "ceza",
+  "makam": "Kararı veren merci / itirazı inceleyecek merci",
+  "legal_basis": ["CMK m.267", "CMK m.268"],
+  "deadline_rule_id": "deadline:itiraz:cmk268",
+  "when": "Hakimlik kararı veya kanunun itirazı öngördüğü mahkeme kararına karşı.",
+  "sections": [
+    { "id": "ust_yazi", "label": "İtiraz mercii" },
+    { "id": "karar", "label": "İtiraz olunan karar" },
+    { "id": "sure", "label": "Süre (CMK m.268)" },
+    { "id": "sebepler", "label": "İtiraz sebepleri" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki dayanak" },
+    { "id": "talep", "label": "Talep — kararın kaldırılması" }
+  ],
+  "parsed": {
+    "required": ["makam", "itiraz_olunan", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "itiraz_olunan": "string — tarih/sayı varsa engine’den",
+      "sure_cumlesi": "string — 7 gün, last_day veya eksik",
+      "sebepler": ["string"],
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string — itirazın kabulü ve kararın kaldırılması"
+    }
+  },
+  "writing": {
+    "tone": "Kanun yolu dilekçesi. İstinaf ile karıştırma: itiraz CMK m.268.",
+    "must": ["Süre cümlesinde CMK m.268", "last_day yoksa tarih uydurma"],
+    "must_not": ["İstinaf / temyiz dili"]
+  },
+  "example": {
+    "makam": "Kararı veren merci",
+    "itiraz_olunan": "Tebliğ edilen karar",
+    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca yedi gündür.",
+    "sebepler": ["Kararın usul ve yasaya aykırılığı"],
+    "hukuki_nitelendirme": [],
+    "talep": "İtirazın kabulü ile kararın kaldırılması talep olunur."
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "id": "ust_yazi",
+  "title": "Üst yazı / havale",
+  "family": "kamu",
+  "resmi_sablon": "ust_yazi",
+  "template_source": "2646-ek ÖRNEK 3/7/8",
+  "makam": "Evrak kayıt ve havale",
+  "legal_basis": [
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.11",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.13",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.14",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.15",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.16",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.18",
+    "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.19"
+  ],
+  "when": "Kuruma gelen evrakın ilgili birime havalesi veya birimlere üst yazı ile iletimi.",
+  "sections": [
+    { "id": "sayi", "label": "Sayı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "muhatap", "label": "Muhatap" },
+    { "id": "ilgi", "label": "İlgi" },
+    { "id": "metin", "label": "Metin" },
+    { "id": "ekler", "label": "Ek" },
+    { "id": "dagitim", "label": "Dağıtım" },
+    { "id": "havale", "label": "Havale" },
+    { "id": "onay_notu", "label": "Onay" }
+  ],
+  "parsed": {
+    "required": ["makam", "sayi", "konu", "muhatap", "metin", "havale", "onay_notu"],
+    "properties": {
+      "makam": "string — classification.unit",
+      "sayi": "string — fields.sayi yoksa «—»",
+      "konu": "string — kısa ve öz, bir satır ideal",
+      "muhatap": "string — büyük harfli kurum veya DAĞITIM YERLERİNE",
+      "ilgi": "string — varsa «... tarihli ve ... sayılı ...» biçimi",
+      "metin": "string — paragraf dili, uydurma madde/tarih yok",
+      "ekler": ["string — «Yazı (2 Sayfa)» benzeri"],
+      "dagitim": {
+        "geregi": ["string"],
+        "bilgi": ["string"]
+      },
+      "havale": "string — classification.unit ile aynı veya alt birim",
+      "onay_notu": "string"
+    }
+  },
+  "writing": {
+    "tone": "Resmî yazışma üst yazısı. Kısa, nesnel, düzenli bölüm yapısı.",
+    "must": [
+      "Sayı/Konu/Muhatap/Metin sırasını koru",
+      "Son cümleyi hiyerarşiye göre «arz ederim», «rica ederim» veya «arz ve rica ederim» ile bitir",
+      "Havale birimini classification.unit’ten al",
+      "Ek ve dağıtım varsa ayrı başlıklarla yaz"
+    ],
+    "must_not": [
+      "UYAP’a gönderildi iddiası",
+      "Olmayan esas/karar no veya belge doğrulama kodu uydurmak",
+      "T.C. kimlik, imza sahibi adı gibi kişisel veri uydurmak"
+    ]
+  },
+  "example": {
+    "makam": "Evrak kayıt ve havale",
+    "sayi": "E-12345678-804.02-42",
+    "konu": "Gelen evrakın ilgili birime havalesi",
+    "muhatap": "İLGİLİ BİRİM MÜDÜRLÜĞÜNE",
+    "ilgi": "18.08.2026 tarihli ve E-99887766-804.02-15 sayılı yazı.",
+    "metin": "İlgi yazı incelenmiş olup gereği için ilgili birime havalesi uygun görülmüştür. Gereğini rica ederim.",
+    "ekler": ["İlgi yazı (2 Sayfa)"],
+    "dagitim": {
+      "geregi": ["İlgili Birim Müdürlüğüne"],
+      "bilgi": ["Evrak Kayıt Şefliğine"]
+    },
+    "havale": "Evrak kayıt ve havale",
+    "onay_notu": "Taslaktır. EBYS/UYAP’a otomatik gönderim yoktur."
+  }
+}

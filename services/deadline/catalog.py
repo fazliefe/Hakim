@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from deadline.engine import CalendarType, DurationUnit
+
+# legal_basis uses canonical ids when the article is in the archive,
+# otherwise a human-readable official citation until that law is ingested.
+DEFAULT_RULES: list[dict[str, object]] = [
+    {
+        "id": "deadline:sikayet:tck73",
+        "name": "Şikayet süresi",
+        "procedure": "ceza_sorusturma",
+        "remedy": "sikayet",
+        "trigger": "teblig",
+        "duration": 6,
+        "unit": DurationUnit.MONTH,
+        "calendar": CalendarType.CRIMINAL,
+        "legal_basis": ("law:5237:article:73",),
+        "legal_basis_label": "TCK m.73",
+    },
+    {
+        "id": "deadline:itiraz:cmk268",
+        "name": "İtiraz",
+        "procedure": "ceza_kovusturma",
+        "remedy": "itiraz",
+        "trigger": "teblig",
+        "duration": 7,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CRIMINAL,
+        "legal_basis": ("law:5271:article:268",),
+        "legal_basis_label": "CMK m.268",
+    },
+    {
+        "id": "deadline:istinaf:cmk273",
+        "name": "İstinaf",
+        "procedure": "ceza_kovusturma",
+        "remedy": "istinaf",
+        "trigger": "teblig",
+        "duration": 7,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CRIMINAL,
+        "legal_basis": ("law:5271:article:273",),
+        "legal_basis_label": "CMK m.273",
+    },
+    {
+        "id": "deadline:temyiz:cmk291",
+        "name": "Temyiz",
+        "procedure": "ceza_istinaf",
+        "remedy": "temyiz",
+        "trigger": "teblig",
+        "duration": 15,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CRIMINAL,
+        "legal_basis": ("law:5271:article:291",),
+        "legal_basis_label": "CMK m.291",
+    },
+    {
+        "id": "deadline:aym:30gun",
+        "name": "Bireysel başvuru",
+        "procedure": "anayasa_bireysel",
+        "remedy": "bireysel_basvuru",
+        "trigger": "teblig",
+        "duration": 30,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CIVIL,
+        "legal_basis": ("law:6216:article:47",),
+        "legal_basis_label": "6216 s.K. m.47",
+    },
+]
