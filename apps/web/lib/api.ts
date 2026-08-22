@@ -79,8 +79,209 @@ const API_BASE =
   process.env.NEXT_PUBLIC_HAKIM_API_URL ??
   (typeof window !== "undefined" ? "http://127.0.0.1:8000" : "/api-hakim");
 
+const TOKEN_KEY = "hakim-token";
+const USER_KEY = "hakim-user";
+
+export type AuthUser = {
+  id: string;
+  username?: string;
+  email: string;
+  display_name: string;
+  role: string;
+  created_at?: string;
+  last_login_at?: string | null;
+  email_verified?: boolean;
+  is_admin?: boolean;
+  recent?: AuthActivity[];
+};
+
+export type AuthActivity = {
+  id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  kind: string;
+  summary: string;
+  detail: Record<string, unknown> | string;
+  created_at: string;
+};
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function getStoredUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthSession(token: string, user: AuthUser): void {
+  window.localStorage.setItem(TOKEN_KEY, token);
+  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.sessionStorage.setItem("hakim-auth", user.role);
+}
+
+export function clearAuthSession(): void {
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(USER_KEY);
+  window.sessionStorage.removeItem("hakim-auth");
+  window.sessionStorage.removeItem("hakim-scale-bias");
+}
+
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, { ...init, cache: init?.cache ?? "no-store" });
+  const headers = new Headers(init?.headers);
+  const token = getAuthToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  return fetch(`${API_BASE}${path}`, { ...init, headers, cache: init?.cache ?? "no-store" });
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+  const raw = await response.text();
+  try {
+    const parsed = JSON.parse(raw) as { detail?: unknown };
+    if (typeof parsed.detail === "string") return parsed.detail;
+  } catch {
+    /* keep raw */
+  }
+  return raw || fallback;
+}
+
+export async function loginAccount(identifier: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  const response = await apiFetch("/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ identifier, password }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Giriş başarısız"));
+  const body = (await response.json()) as { token: string; user: AuthUser };
+  setAuthSession(body.token, body.user);
+  return body;
+}
+
+export type RegisterPending = {
+  status: string;
+  mailed: boolean;
+  smtp: boolean;
+  message: string;
+  preview_code?: string;
+  user: AuthUser;
+};
+
+export async function registerAccount(
+  username: string,
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<RegisterPending> {
+  const response = await apiFetch("/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password, display_name: displayName }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Kayıt başarısız"));
+  return response.json() as Promise<RegisterPending>;
+}
+
+export async function verifyAccount(identifier: string, code: string): Promise<{ token: string; user: AuthUser }> {
+  const response = await apiFetch("/v1/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ identifier, code }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Doğrulama başarısız"));
+  const body = (await response.json()) as { token: string; user: AuthUser };
+  setAuthSession(body.token, body.user);
+  return body;
+}
+
+export async function resendVerification(identifier: string): Promise<{ mailed: boolean; preview_code?: string }> {
+  const response = await apiFetch("/v1/auth/resend", {
+    method: "POST",
+    body: JSON.stringify({ identifier }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Kod gönderilemedi"));
+  return response.json() as Promise<{ mailed: boolean; preview_code?: string }>;
+}
+
+export type CodeMailResult = {
+  mailed: boolean;
+  smtp?: boolean;
+  message?: string;
+  preview_code?: string;
+};
+
+export async function requestPasswordReset(identifier: string): Promise<CodeMailResult> {
+  const response = await apiFetch("/v1/auth/forgot", {
+    method: "POST",
+    body: JSON.stringify({ identifier }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Kod gönderilemedi"));
+  return response.json() as Promise<CodeMailResult>;
+}
+
+export async function resetPassword(identifier: string, code: string, password: string): Promise<void> {
+  const response = await apiFetch("/v1/auth/reset", {
+    method: "POST",
+    body: JSON.stringify({ identifier, code, password }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Şifre güncellenemedi"));
+}
+
+export async function logoutAccount(): Promise<void> {
+  try {
+    await apiFetch("/v1/auth/logout", { method: "POST" });
+  } finally {
+    clearAuthSession();
+  }
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await apiFetch("/v1/auth/me");
+  if (!response.ok) throw new Error(await readError(response, "Oturum yok"));
+  const body = (await response.json()) as { user: AuthUser };
+  window.localStorage.setItem(USER_KEY, JSON.stringify(body.user));
+  return body.user;
+}
+
+export async function listAuthUsers(): Promise<AuthUser[]> {
+  const response = await apiFetch("/v1/auth/users");
+  if (!response.ok) throw new Error(await readError(response, "Kullanıcı listesi alınamadı"));
+  const body = (await response.json()) as { users?: AuthUser[] };
+  return body.users ?? [];
+}
+
+export async function createAuthUser(payload: {
+  username: string;
+  email: string;
+  password: string;
+  display_name: string;
+  role: "admin" | "user";
+}): Promise<AuthUser> {
+  const response = await apiFetch("/v1/auth/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Kullanıcı eklenemedi"));
+  const body = (await response.json()) as { user: AuthUser };
+  return body.user;
+}
+
+export async function listAuthActivity(userId?: string): Promise<AuthActivity[]> {
+  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  const response = await apiFetch(`/v1/auth/activity${query}`);
+  if (!response.ok) throw new Error(await readError(response, "Kayıtlar alınamadı"));
+  const body = (await response.json()) as { activity?: AuthActivity[] };
+  return body.activity ?? [];
 }
 
 export async function getSystemStatus(): Promise<SystemStatus> {

@@ -276,7 +276,7 @@ button {
   display: grid;
   gap: 0.3rem;
   font-size: 0.82rem;
-  color: var(--silver-400);
+  color: var(--silver-200);
   font-weight: 600;
 }
 
@@ -292,6 +292,11 @@ button {
   outline: none;
   border-color: var(--gold-500);
   box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+}
+
+.login-form input::placeholder {
+  color: var(--silver-400);
+  opacity: 0.85;
 }
 
 .login-actions {
@@ -323,8 +328,159 @@ button {
   font-weight: 600;
 }
 
-.btn-ghost:hover {
-  background: rgba(212, 175, 55, 0.08);
+.login-info {
+  margin: 0;
+  color: var(--gold-400);
+  font-size: 0.86rem;
+}
+
+.login-error {
+  margin: 0;
+  color: #e07a7a;
+  font-size: 0.86rem;
+}
+
+.login-forgot {
+  justify-self: start;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--gold-400);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.login-code-hint {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  color: var(--silver-200);
+  font-size: 0.86rem;
+}
+
+.login-code-hint strong {
+  letter-spacing: 0.12em;
+  color: var(--gold-400);
+}
+
+.login-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin: 0 0 0.9rem;
+}
+
+.login-mode button {
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: transparent;
+  color: var(--silver-400);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font-weight: 600;
+}
+
+.login-mode button.active {
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold-400);
+  border-color: var(--gold-500);
+}
+
+.topbar-user {
+  font-size: 0.8rem;
+  color: var(--silver-400);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-create {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-create label,
+.admin-create select,
+.admin-create input {
+  display: grid;
+  gap: 0.28rem;
+  font-size: 0.82rem;
+  color: var(--silver-400);
+}
+
+.admin-create input,
+.admin-create select {
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  background: rgba(6, 16, 31, 0.75);
+  color: var(--silver-200);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.admin-users {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+.admin-users button {
+  text-align: left;
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  background: rgba(12, 24, 42, 0.7);
+  color: var(--silver-200);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-users button span {
+  font-size: 0.75rem;
+  color: var(--silver-400);
+}
+
+.admin-users button.active {
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.25);
+}
+
+.admin-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-activity li {
+  border: 1px solid rgba(212, 175, 55, 0.14);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  background: rgba(8, 16, 30, 0.45);
+}
+
+.admin-activity li div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  align-items: baseline;
+}
+
+.admin-activity li p {
+  margin: 0.35rem 0 0;
+}
+
+.admin-activity li time {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--silver-400);
 }
 
 .system-pills {

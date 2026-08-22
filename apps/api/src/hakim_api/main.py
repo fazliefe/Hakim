@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,12 @@ _load_dotenv()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    try:
+        from auth.store import get_store
+
+        get_store()
+    except Exception:
+        pass
     if "pytest" not in sys.modules:
         import threading
 
@@ -58,6 +64,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from hakim_api.auth import optional_user, router as auth_router
+
+app.include_router(auth_router)
 
 
 class ResearchRequest(BaseModel):
@@ -194,6 +204,17 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
     return payload
+
+
+def _record_activity(user: Any, kind: str, summary: str, detail: dict[str, Any] | None = None) -> None:
+    if user is None:
+        return
+    try:
+        from auth.store import get_store
+
+        get_store().log(str(user.id), kind, summary, detail or {})
+    except Exception:
+        pass
 
 
 def _check_elasticsearch() -> str:
@@ -447,12 +468,18 @@ def belgeler() -> dict[str, Any]:
 
 
 @app.post("/v1/arastirma", response_model=ResearchResponse)
-def arastirma(body: ResearchRequest) -> ResearchResponse:
+def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchResponse:
     try:
         result = _engine().research(body.query.strip(), law_no=body.law_no)
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=503, detail=f"Araştırma motoru hazır değil: {exc}") from exc
 
+    _record_activity(
+        user,
+        "arastirma",
+        f"Sorgu: {result.query[:160]}",
+        {"query": result.query, "route": result.route, "writer": result.writer, "answer": (result.answer or "")[:500]},
+    )
     return ResearchResponse(
         query=result.query,
         answer=result.answer,
@@ -467,12 +494,15 @@ def arastirma(body: ResearchRequest) -> ResearchResponse:
 
 
 @app.post("/v1/evrak")
-def evrak(body: DocumentRequest) -> dict[str, Any]:
-    return _analyze(body.text, surface="evrak")
+def evrak(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    payload = _analyze(body.text, surface="evrak")
+    label = (payload.get("classification") or {}).get("label") or "evrak"
+    _record_activity(user, "evrak", f"Evrak: {label}", {"label": label, "verdict": payload.get("verdict")})
+    return payload
 
 
 @app.post("/v1/evrak/dosya")
-async def evrak_dosya(file: UploadFile = File(...)) -> dict[str, Any]:
+async def evrak_dosya(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
     from document_ai.ingest import UploadError, extract_upload
 
     data = await file.read()
@@ -485,16 +515,30 @@ async def evrak_dosya(file: UploadFile = File(...)) -> dict[str, Any]:
     payload["source_kind"] = extracted.kind
     payload["extract_note"] = extracted.note
     payload["text"] = extracted.text
+    label = (payload.get("classification") or {}).get("label") or "evrak"
+    _record_activity(
+        user,
+        "evrak",
+        f"Dosya: {extracted.filename} ({label})",
+        {"filename": extracted.filename, "label": label},
+    )
     return payload
 
 
 @app.post("/v1/surec")
-def surec(body: DocumentRequest) -> dict[str, Any]:
-    return _analyze(body.text, surface="surec")
+def surec(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    payload = _analyze(body.text, surface="surec")
+    _record_activity(
+        user,
+        "surec",
+        "Süreç analizi",
+        {"stage": (payload.get("classification") or {}).get("stage"), "verdict": payload.get("verdict")},
+    )
+    return payload
 
 
 @app.post("/v1/islem")
-def islem(body: DocumentRequest) -> dict[str, Any]:
+def islem(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     from document_ai.route_islem import ACTION_TITLES, route_islem
     from llm.writer import ACTION_TO_BELGE
 
@@ -518,11 +562,17 @@ def islem(body: DocumentRequest) -> dict[str, Any]:
     payload["uyap_note"] = (
         "UYAP entegrasyonu yok. Taslağı indirip vatandas.uyap.gov.tr üzerinden yetkili kullanıcı gönderir."
     )
+    _record_activity(
+        user,
+        "islem",
+        f"İşlem: {payload.get('belge') or action}",
+        {"action": payload.get("action"), "belge": payload.get("belge")},
+    )
     return payload
 
 
 @app.post("/v1/senaryo")
-def senaryo(body: DocumentRequest) -> dict[str, Any]:
+def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     """Görev 1+2 tek paket: oku → sınıf → mevzuat → süre → resmi yazı → havale."""
     from document_ai.agents import build_reasoning, elapsed_ms, mark_writer, now
     from document_ai.answers import format_havale
@@ -571,5 +621,11 @@ def senaryo(body: DocumentRequest) -> dict[str, Any]:
     payload["chain_status"] = payload["reasoning"]["status"]
     payload["uyap_note"] = (
         "UYAP entegrasyonu yok. Taslağı indirip vatandas.uyap.gov.tr üzerinden yetkili kullanıcı gönderir."
+    )
+    _record_activity(
+        user,
+        "senaryo",
+        f"Senaryo: {payload.get('belge') or action}",
+        {"action": payload.get("action"), "belge": payload.get("belge")},
     )
     return payload

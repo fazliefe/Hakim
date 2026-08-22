@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SystemStatus, getSystemStatus } from "@/lib/api";
+import { SystemStatus, getStoredUser, getSystemStatus, logoutAccount, type AuthUser } from "@/lib/api";
 
 const CHECK_LABELS: Array<[keyof SystemStatus["checks"], string]> = [
   ["api", "API"],
@@ -22,7 +22,7 @@ const MODULES = [
   { href: "/islem", id: "islem", label: "İşlem" },
 ] as const;
 
-export type HakimModule = (typeof MODULES)[number]["id"];
+export type HakimModule = (typeof MODULES)[number]["id"] | "yonetim";
 
 export type SidebarItem = {
   id: string;
@@ -63,8 +63,10 @@ export function AppShell({
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
+    setUser(getStoredUser());
     let cancelled = false;
     const load = () => {
       getSystemStatus()
@@ -90,9 +92,8 @@ export function AppShell({
     };
   }, []);
 
-  function logout() {
-    window.sessionStorage.removeItem("hakim-auth");
-    window.sessionStorage.removeItem("hakim-scale-bias");
+  async function logout() {
+    await logoutAccount();
     router.push("/giris");
   }
 
@@ -119,6 +120,11 @@ export function AppShell({
               {item.label}
             </Link>
           ))}
+          {user?.role === "admin" ? (
+            <Link href="/yonetim" className={module === "yonetim" ? "active" : ""}>
+              Yönetim
+            </Link>
+          ) : null}
         </nav>
         <div className="topbar-actions">
           <div className="system-pills compact" aria-label="Sistem durumu">
@@ -132,7 +138,10 @@ export function AppShell({
               );
             })}
           </div>
-          <button type="button" className="btn-ghost topbar-exit" onClick={logout}>
+          <span className="topbar-user" title={user?.username || user?.email || ""}>
+            {user?.display_name || (user?.username ? `@${user.username}` : "Oturum")}
+          </span>
+          <button type="button" className="btn-ghost topbar-exit" onClick={() => void logout()}>
             Çıkış
           </button>
         </div>
