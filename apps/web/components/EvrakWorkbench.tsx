@@ -9,6 +9,7 @@ import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { EVRAK_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
 import { BelgeKalip, analyzeWorkspace, getBelgeler } from "@/lib/api";
 import { DownloadActions } from "@/components/DownloadActions";
+import { petitionToBlocks } from "@/lib/exportDocument";
 import { calendarLabel, durationUnitLabel, formatTurkishDate } from "@/lib/labels";
 import { KAMU_FALLBACK } from "@/lib/kamuSamples";
 import { FIELD_LABEL, NATURE_LABEL, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
@@ -323,7 +324,15 @@ export function EvrakWorkbench() {
           result?.draft ? (
             <div style={{ padding: "0 0.9rem 1rem" }}>
               <div className="sheet-actions" style={{ marginBottom: "0.7rem" }}>
-                <DownloadActions content={result.draft} basename={downloadName} />
+                <DownloadActions
+                  content={result.draft}
+                  blocks={
+                    result.petition && result.petition.layout !== "resmi" && (result.petition.hitap || result.petition.sections?.length)
+                      ? petitionToBlocks(result.petition)
+                      : undefined
+                  }
+                  basename={downloadName}
+                />
                 {selectedKalip ? <span className="muted">{selectedKalip.title}</span> : null}
               </div>
               {result.petition ? (

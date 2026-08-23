@@ -1,3 +1,11 @@
+import { PetitionView } from "@/lib/api";
+
+export type ExportBlock = {
+  text: string;
+  align?: "left" | "center" | "right";
+  bold?: boolean;
+};
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i += 1) {
@@ -97,14 +105,63 @@ function xmlEscape(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function docxBlob(text: string): Blob {
+function trUpper(text: string): string {
+  return text.replace(/i/g, "İ").replace(/ı/g, "I").toLocaleUpperCase("tr-TR");
+}
+
+export function petitionToBlocks(petition: PetitionView): ExportBlock[] {
+  const blocks: ExportBlock[] = [{ text: "T.C.", align: "center", bold: true }];
+  if (petition.via) blocks.push({ text: trUpper(petition.via), align: "center" });
+  if (petition.hitap) blocks.push({ text: petition.hitap, align: "center", bold: true });
+  if (petition.subtitle) blocks.push({ text: petition.subtitle, align: "center", bold: true });
+  blocks.push({ text: "" });
+  if (petition.meta?.length) {
+    for (const row of petition.meta) {
+      const pad = " ".repeat(Math.max(1, 18 - row.label.length));
+      blocks.push({ text: `${row.label}${pad}: ${row.value}` });
+    }
+    blocks.push({ text: "" });
+  } else if (petition.konu) {
+    blocks.push({ text: `KONU: ${petition.konu}`, bold: true });
+    blocks.push({ text: "" });
+  }
+  for (const section of petition.sections || []) {
+    if (!section.text?.trim() && !section.label) continue;
+    if (section.label) blocks.push({ text: trUpper(section.label), bold: true });
+    for (const line of (section.text || "").replace(/\r\n/g, "\n").split("\n")) {
+      blocks.push({ text: line });
+    }
+    blocks.push({ text: "" });
+  }
+  if (petition.closing) {
+    blocks.push({ text: petition.closing, bold: true });
+    blocks.push({ text: "" });
+  }
+  if (petition.signature?.role) blocks.push({ text: petition.signature.role, align: "right", bold: true });
+  if (petition.signature?.name) blocks.push({ text: petition.signature.name, align: "right" });
+  return blocks;
+}
+
+export function textToBlocks(text: string): ExportBlock[] {
+  return text.replace(/\r\n/g, "\n").split("\n").map((line) => ({ text: line }));
+}
+
+function asBlocks(content: string | ExportBlock[]): ExportBlock[] {
+  return typeof content === "string" ? textToBlocks(content) : content;
+}
+
+function docxParagraph(block: ExportBlock): string {
+  const align = block.align || "left";
+  const after = block.text ? 160 : 80;
+  const body = xmlEscape(block.text || " ");
+  const bold = block.bold ? "<w:b/>" : "";
+  return `<w:p><w:pPr><w:jc w:val="${align}"/><w:spacing w:after="${after}" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/>${bold}</w:rPr><w:t xml:space="preserve">${body}</w:t></w:r></w:p>`;
+}
+
+function docxBlob(blocks: ExportBlock[]): Blob {
   const encoder = new TextEncoder();
-  const paragraphs = text.replace(/\r\n/g, "\n").split("\n").map((line) => {
-    const body = xmlEscape(line || " ");
-    return `<w:p><w:r><w:t xml:space="preserve">${body}</w:t></w:r></w:p>`;
-  });
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.join("")}<w:sectPr/></w:body></w:document>`;
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${blocks.map(docxParagraph).join("")}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418"/></w:sectPr></w:body></w:document>`;
   const types = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -149,27 +206,69 @@ function toWin1254(text: string): string {
   }).join("");
 }
 
-function pdfBlob(text: string): Blob {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const wrapped: string[] = [];
-  for (const line of lines) {
-    if (!line) {
-      wrapped.push("");
-      continue;
-    }
-    for (let i = 0; i < line.length; i += 92) {
-      wrapped.push(line.slice(i, i + 92));
+function wrapText(text: string, max = 78): string[] {
+  if (!text) return [""];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > max && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
     }
   }
-  const contentLines = wrapped.slice(0, 52).map((line) => `(${toWin1254(line)}) Tj T*`);
-  const stream = `BT /F1 11 Tf 48 790 Td 14 TL\n${contentLines.join("\n")}\nET`;
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
+}
+
+function pdfStream(blocks: ExportBlock[]): string[] {
+  const pages: string[] = [];
+  let commands: string[] = [];
+  let y = 790;
+  const flush = () => {
+    pages.push(`BT /F1 12 Tf\n${commands.join("\n")}\nET`);
+    commands = [];
+    y = 790;
+  };
+  for (const block of blocks) {
+    const lines = wrapText(block.text);
+    for (const line of lines) {
+      if (y < 64) flush();
+      const width = [...line].reduce((sum, ch) => sum + (ch === " " ? 3.4 : 6.2), 0);
+      let x = 56;
+      if (block.align === "center") x = Math.max(56, 297.5 - width / 2);
+      if (block.align === "right") x = Math.max(56, 539 - width);
+      commands.push(`1 0 0 1 ${x.toFixed(1)} ${y} Tm (${toWin1254(line || " ")}) Tj`);
+      y -= block.bold && line ? 18 : 16;
+    }
+    if (!block.text) y -= 6;
+  }
+  if (commands.length) flush();
+  return pages.length ? pages : ["BT /F1 12 Tf\nET"];
+}
+
+function pdfBlob(blocks: ExportBlock[]): Blob {
+  const streams = pdfStream(blocks);
+  const fontId = 3 + streams.length * 2;
+  const kids = streams.map((_, i) => `${3 + i * 2} 0 R`).join(" ");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [208 /Gbreve 221 /Idotaccent 222 /Scedilla 240 /gbreve 253 /dotlessi 254 /scedilla] >> >>",
+    `<< /Type /Pages /Kids [${kids}] /Count ${streams.length} >>`,
   ];
+  for (let i = 0; i < streams.length; i += 1) {
+    const pageId = 3 + i * 2;
+    const contentId = pageId + 1;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${contentId} 0 R /Resources << /Font << /F1 ${fontId} 0 R >> >> >>`,
+    );
+    objects.push(`<< /Length ${streams[i].length} >>\nstream\n${streams[i]}\nendstream`);
+  }
+  objects.push(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [208 /Gbreve 221 /Idotaccent 222 /Scedilla 240 /gbreve 253 /dotlessi 254 /scedilla] >> >>",
+  );
   let body = "%PDF-1.4\n";
   const offsets = [0];
   for (let i = 0; i < objects.length; i += 1) {
@@ -194,11 +293,12 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadDocument(basename: string, content: string, format: "docx" | "pdf") {
+export function downloadDocument(basename: string, content: string | ExportBlock[], format: "docx" | "pdf") {
   const stem = basename.replace(/\.[^.]+$/, "") || "hakim-evrak";
+  const blocks = asBlocks(content);
   if (format === "docx") {
-    triggerDownload(docxBlob(content), `${stem}.docx`);
+    triggerDownload(docxBlob(blocks), `${stem}.docx`);
     return;
   }
-  triggerDownload(pdfBlob(content), `${stem}.pdf`);
+  triggerDownload(pdfBlob(blocks), `${stem}.pdf`);
 }

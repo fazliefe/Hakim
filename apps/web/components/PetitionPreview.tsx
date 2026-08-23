@@ -1,13 +1,16 @@
+import { ReactNode } from "react";
 import { PetitionView } from "@/lib/api";
 
 export function PetitionPreview({
   petition,
   draft,
   badge,
+  actions,
 }: {
   petition?: PetitionView | null;
   draft?: string;
   badge?: string;
+  actions?: ReactNode;
 }) {
   const layout = petition?.layout || (draft ? "dilekce" : "");
   const family = petition?.family || "ceza";
@@ -18,6 +21,7 @@ export function PetitionPreview({
         <span>{headerLabel(layout, petition?.title)}</span>
         <span className="badge">{badge || petition?.title}</span>
       </header>
+      {actions ? <div className="petition-toolbar">{actions}</div> : null}
       {layout === "resmi" || !petition ? (
         <pre className="draft-pre">{draft}</pre>
       ) : (

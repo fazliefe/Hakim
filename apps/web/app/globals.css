@@ -2410,9 +2410,16 @@ a.source-row {
 
 .islem-compose {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   gap: 0.55rem;
   padding: 0.75rem 0.9rem;
+}
+
+.islem-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .islem-compose .kalip-select {
@@ -2433,8 +2440,7 @@ a.source-row {
   padding: 0.65rem 0.75rem;
 }
 
-.islem-compose button {
-  align-self: end;
+.islem-compose-actions > button[type="submit"] {
   border: 0;
   border-radius: 8px;
   padding: 0.7rem 0.9rem;
@@ -2500,6 +2506,27 @@ a.source-row {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6f5210;
+}
+
+.petition-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.45rem 0.9rem;
+  border-bottom: 1px solid rgba(111, 82, 16, 0.15);
+  background: #efe8d6;
+}
+
+.petition-toolbar-hint {
+  color: #6f5210;
+  font-size: 0.74rem;
+}
+
+.petition-sheet .download-actions button {
+  background: #f8f3e6;
+  color: #6f5210;
+  border-color: rgba(111, 82, 16, 0.35);
 }
 
 .petition-sheet .draft-pre {

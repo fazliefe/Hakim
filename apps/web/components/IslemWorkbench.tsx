@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
 import { BelgeKalip, getBelgeler } from "@/lib/api";
 import { DownloadActions } from "@/components/DownloadActions";
+import { petitionToBlocks } from "@/lib/exportDocument";
 import { useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const FALLBACK: BelgeKalip[] = [
@@ -21,14 +22,10 @@ const FALLBACK: BelgeKalip[] = [
   { id: "adli_kontrol_itiraz", title: "Adli kontrol itirazı", when: "Koruma tedbiri", makam: "İtiraz mercii", legal_basis: [], sections: [] },
 ];
 
-const SIDE = [
-  { id: "yazim", label: "Yazım" },
-  { id: "disa-aktar", label: "Dışa aktar" },
-];
+const SIDE = [{ id: "yazim", label: "Yazım" }];
 
 export function IslemWorkbench() {
   const { text, setText, action, setAction, loading, error, result, submit } = useDocumentAnalysis("/v1/islem");
-  const [approved, setApproved] = useState(false);
   const [side, setSide] = useState("yazim");
   const [kalip, setKalip] = useState<BelgeKalip[]>(FALLBACK);
 
@@ -45,6 +42,22 @@ export function IslemWorkbench() {
   const selected = useMemo(
     () => kalip.find((item) => item.id === action),
     [kalip, action],
+  );
+  const petitionReady = Boolean(
+    result?.petition &&
+      result.petition.layout !== "resmi" &&
+      (result.petition.hitap || result.petition.sections?.length || result.petition.konu),
+  );
+  const petitionBlocks = petitionReady && result?.petition ? petitionToBlocks(result.petition) : undefined;
+  const downloadBody = result?.draft || "";
+  const downloadName = `hakim-dilekce-${action || selected?.id || "taslak"}`;
+  const downloads = (
+    <DownloadActions
+      content={downloadBody}
+      blocks={petitionBlocks}
+      basename={downloadName}
+      disabled={!petitionBlocks?.length && !downloadBody}
+    />
   );
 
   return (
@@ -78,7 +91,6 @@ export function IslemWorkbench() {
               <li className={result.related.length ? "ok" : ""}>Kaynak doğrulandı ({result.related.length})</li>
               <li className={result.classification.document_type !== "belirsiz" ? "ok" : ""}>Evrak türü</li>
               <li className={result.draft ? "ok" : ""}>Taslak hazır</li>
-              <li className={approved ? "ok" : ""}>Açık onay</li>
             </ul>
             <p className="muted">{result.uyap_note}</p>
             <div className="official-links">
@@ -88,19 +100,6 @@ export function IslemWorkbench() {
                 </a>
               ))}
             </div>
-            <label className="approve">
-              <input
-                type="checkbox"
-                checked={approved}
-                onChange={(e) => setApproved(e.target.checked)}
-              />
-              Taslağı okudum, dışa aktarmayı onaylıyorum
-            </label>
-            <DownloadActions
-              content={result.draft || ""}
-              basename={`hakim-dilekce-${action || "taslak"}`}
-              disabled={!approved}
-            />
           </div>
         ) : (
           <p className="muted">Olayı yazın; uygun dilekçe kalıbı anlatıdan seçilir. UYAP gönderimi yok.</p>
@@ -110,53 +109,45 @@ export function IslemWorkbench() {
         loading
           ? "Taslak yazılıyor…"
           : result
-            ? `${selected?.title ?? "Dilekçe"} · onay ${approved ? "var" : "yok"}`
+            ? `${selected?.title ?? "Dilekçe"}`
             : "Dilekçe bekleniyor"
       }
     >
       <section className="main-pane islem-pane">
         <div className="pane-hero">
-          <h1>{side === "disa-aktar" ? "Dışa aktar" : selected?.title ?? "Dilekçe"}</h1>
+          <h1>{selected?.title ?? "Dilekçe"}</h1>
           <p>
-            {side === "disa-aktar"
-              ? "Onay olmadan indirme yok. UYAP’a otomatik gönderim yoktur."
-              : selected
-                ? `${selected.when} · ${selected.makam}${selected.legal_basis?.length ? ` · ${selected.legal_basis.join(" · ")}` : ""}`
-                : "Olayı yazın. Kalıp seçilmezse mevcut yönlendirme kullanılır."}
+            {selected
+              ? `${selected.when} · ${selected.makam}${selected.legal_basis?.length ? ` · ${selected.legal_basis.join(" · ")}` : ""}`
+              : "Olayı yazın. Kalıp seçilmezse mevcut yönlendirme kullanılır."}
           </p>
         </div>
-        {side !== "disa-aktar" ? (
-          <form
-            className="islem-compose"
-            onSubmit={(event) => {
-              setApproved(false);
-              return submit(event, action || "");
-            }}
+        <form
+          className="islem-compose"
+          onSubmit={(event) => submit(event, action || "")}
+        >
+          <select
+            className="kalip-select"
+            aria-label="Dilekçe kalıbı"
+            value={action}
+            onChange={(event) => setAction(event.target.value)}
           >
-            <select
-              className="kalip-select"
-              aria-label="Dilekçe kalıbı"
-              value={action}
-              onChange={(event) => {
-                setApproved(false);
-                setAction(event.target.value);
-              }}
-            >
-              <option value="">Kalıp seçilmedi — anlatıdan</option>
-              {kalip.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              aria-label="Olay veya dayanak evrak"
-              rows={6}
-              spellCheck={false}
-              placeholder="Örn. Bankada hesabımdan para çekildi, savcılığa şikayet etmek istiyorum."
-            />
+            <option value="">Kalıp seçilmedi — anlatıdan</option>
+            {kalip.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="Olay veya dayanak evrak"
+            rows={6}
+            spellCheck={false}
+            placeholder="Örn. Bankada hesabımdan para çekildi, savcılığa şikayet etmek istiyorum."
+          />
+          <div className="islem-compose-actions">
             <button type="submit" disabled={loading || text.trim().length < 8}>
               {loading
                 ? "Yazılıyor…"
@@ -164,11 +155,12 @@ export function IslemWorkbench() {
                   ? `${selected?.title ?? "Taslak"} üret`
                   : "Anla ve uygun dilekçeyi yaz"}
             </button>
-          </form>
-        ) : null}
+            {downloads}
+          </div>
+        </form>
         {error ? <p className="error">{error}</p> : null}
         {result?.route_reason ? <p className="evrak-verdict">{result.route_reason}</p> : null}
-        {result?.gaps?.length && side !== "disa-aktar" ? (
+        {result?.gaps?.length ? (
           <aside className="gap-banner">
             <h2>Eksik hususlar</h2>
             <p>Dilekçe yer tutucularla yazıldı. Kimlik ve tarih uydurulmaz.</p>
@@ -182,27 +174,12 @@ export function IslemWorkbench() {
             </ul>
           </aside>
         ) : null}
-        {side === "disa-aktar" ? (
-          <div className="evrak-draft">
-            {result?.draft ? (
-              <>
-                <h2>Dışa aktarım</h2>
-                <p className="muted">
-                  {approved
-                    ? "Onay verildi. Sağ panelden taslağı indirin."
-                    : "Önce sağ paneldeki onay kutusunu işaretleyin."}
-                </p>
-                <pre className="draft-pre">{result.draft}</pre>
-              </>
-            ) : (
-              <p className="muted">Önce olayı yazıp uygun kalıbı üretin.</p>
-            )}
-          </div>
-        ) : result ? (
+        {result ? (
           <PetitionPreview
             petition={result.petition}
             draft={result.draft}
             badge={selected?.title ?? action}
+            actions={downloads}
           />
         ) : (
           <p className="muted islem-empty">
