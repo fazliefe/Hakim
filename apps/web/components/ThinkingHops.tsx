@@ -5,11 +5,11 @@ import { useEffect, useState } from "react";
 export type ThinkStep = { title: string; text: string };
 
 export const RESEARCH_THINK_STEPS: ThinkStep[] = [
-  { title: "Sorgu", text: "Soru okunuyor…" },
-  { title: "BM25", text: "Kelime eşleşmesi taranıyor…" },
-  { title: "Vektör", text: "Anlam yakınlığı tartılıyor…" },
+  { title: "Soru", text: "Soru okunuyor…" },
+  { title: "Metin taraması", text: "Metin taranıyor…" },
+  { title: "Yakın hüküm", text: "Yakın hükümler bakılıyor…" },
   { title: "Birleşim", text: "Kaynaklar birleştiriliyor…" },
-  { title: "Cevap", text: "Gerekçe yazılıyor…" },
+  { title: "Cevap", text: "Cevap yazılıyor…" },
 ];
 
 export const EVRAK_THINK_STEPS: ThinkStep[] = [
@@ -48,17 +48,18 @@ export function ThinkingHops({
       <ol className="reasoning-hops">
         {steps.map((step, index) => {
           const state = index < active ? "done" : index === active ? "think" : "wait";
-          const line =
-            state === "wait" ? "Sırada." : state === "think" ? step.text : `${step.text.replace(/…$/, ".")} Tamam.`;
+          const line = state === "wait" ? "Sırada." : state === "think" ? step.text : step.text.replace(/…$/, ".");
           return (
             <li key={step.title} className={state}>
               <span className="hop-n">{index + 1}</span>
-              <div>
-                <p className="hop-q">{step.title}</p>
+              <div className="hop-body">
+                <div className="hop-line">
+                  <p className="hop-q">{step.title}</p>
+                  <span className="hop-state">
+                    {state === "think" ? "işleniyor" : state === "done" ? "tamam" : "sırada"}
+                  </span>
+                </div>
                 <p className="hop-a">{line}</p>
-                <span className="hop-state">
-                  {state === "think" ? "düşünüyor" : state === "done" ? "emin" : "sırada"}
-                </span>
               </div>
             </li>
           );

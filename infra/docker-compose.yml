@@ -42,7 +42,6 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     container_name: hakim-elasticsearch
-    profiles: ["search"]
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -55,7 +54,6 @@ services:
   neo4j:
     image: neo4j:5.26-community
     container_name: hakim-neo4j
-    profiles: ["graph"]
     environment:
       NEO4J_AUTH: neo4j/hakim-graph
       NEO4J_PLUGINS: '["apoc"]'

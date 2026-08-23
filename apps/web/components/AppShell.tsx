@@ -2,9 +2,25 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
+import { CSSProperties, PointerEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SystemStatus, getStoredUser, getSystemStatus, logoutAccount, type AuthUser } from "@/lib/api";
+import { SystemStatus, getStoredUser, getSystemStatus, isLiveCheck, logoutAccount, type AuthUser } from "@/lib/api";
+
+const OFFLINE_STATUS: SystemStatus = {
+  status: "kapalı",
+  service: "hakim-api",
+  ready: false,
+  checks: { api: "kapalı", elasticsearch: "kapalı", neo4j: "kapalı", postgres: "kapalı", yazim: "kapalı" },
+};
+
+const STATUS_POLL_MS = 8000;
+const STATUS_TIMEOUT_MS = 4000;
+const INSPECTOR_MIN = 240;
+const INSPECTOR_MAX = 560;
+const INSPECTOR_DEFAULT = 340;
+const NAV_MIN = 176;
+const NAV_MAX = 420;
+const NAV_DEFAULT = 232;
 
 const CHECK_LABELS: Array<[keyof SystemStatus["checks"], string]> = [
   ["api", "API"],
@@ -17,12 +33,11 @@ const CHECK_LABELS: Array<[keyof SystemStatus["checks"], string]> = [
 const MODULES = [
   { href: "/arastirma", id: "arastirma", label: "Araştırma" },
   { href: "/evrak", id: "evrak", label: "Evrak" },
-  { href: "/kamu", id: "kamu", label: "Kamu", subtle: true },
-  { href: "/surec", id: "surec", label: "Süreç" },
-  { href: "/islem", id: "islem", label: "İşlem" },
+  { href: "/islem", id: "islem", label: "Dilekçe" },
 ] as const;
 
-export type HakimModule = (typeof MODULES)[number]["id"] | "yonetim";
+export type HakimModule = (typeof MODULES)[number]["id"] | "yonetim" | "ayarlar" | "kamu" | "surec";
+export type InspectorMode = "open" | "collapsed" | "hidden";
 
 export type SidebarItem = {
   id: string;
@@ -45,7 +60,10 @@ export function AppShell({
   quoteMeta,
   inspectorTitle,
   inspector,
+  inspectorMode = "open",
+  onInspectorModeChange,
   footer,
+  hideStatusBar,
   children,
 }: {
   module: HakimModule;
@@ -54,55 +72,106 @@ export function AppShell({
   sidebarSections?: SidebarSection[];
   sidebarActive: string;
   onSidebarSelect: (id: string) => void;
-  quote: string;
-  quoteMeta: string;
-  inspectorTitle: string;
-  inspector: ReactNode;
-  footer: string;
+  quote?: string;
+  quoteMeta?: string;
+  inspectorTitle?: string;
+  inspector?: ReactNode;
+  inspectorMode?: InspectorMode;
+  onInspectorModeChange?: (mode: InspectorMode) => void;
+  footer?: string;
+  hideStatusBar?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT);
+  const [navWidth, setNavWidth] = useState(NAV_DEFAULT);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ kind: "nav" | "inspector"; startX: number; startW: number } | null>(null);
 
   useEffect(() => {
     setUser(getStoredUser());
+    const onAuth = () => setUser(getStoredUser());
+    window.addEventListener("hakim-auth-updated", onAuth);
     let cancelled = false;
+    let inFlight: AbortController | null = null;
+    let seq = 0;
     const load = () => {
-      getSystemStatus()
+      inFlight?.abort();
+      const my = ++seq;
+      const controller = new AbortController();
+      inFlight = controller;
+      const timeout = window.setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS);
+      getSystemStatus(controller.signal)
         .then((data) => {
-          if (!cancelled) setStatus(data);
+          if (!cancelled && my === seq) setStatus(data);
         })
         .catch(() => {
-          if (!cancelled) {
-            setStatus({
-              status: "kapalı",
-              service: "hakim-api",
-              ready: false,
-              checks: { api: "kapalı", elasticsearch: "kapalı", neo4j: "kapalı", postgres: "kapalı", yazim: "kapalı" },
-            });
-          }
-        });
+          if (!cancelled && my === seq) setStatus(OFFLINE_STATUS);
+        })
+        .finally(() => window.clearTimeout(timeout));
     };
     load();
-    const timer = window.setInterval(load, 15000);
+    const timer = window.setInterval(load, STATUS_POLL_MS);
+    const onPointer = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onPointer);
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelled = true;
+      inFlight?.abort();
       window.clearInterval(timer);
+      window.removeEventListener("hakim-auth-updated", onAuth);
+      window.removeEventListener("mousedown", onPointer);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
 
   async function logout() {
+    setMenuOpen(false);
     await logoutAccount();
     router.push("/giris");
+  }
+
+  function onResizeStart(kind: "nav" | "inspector", event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    dragRef.current = {
+      kind,
+      startX: event.clientX,
+      startW: kind === "nav" ? navWidth : inspectorWidth,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onResizeMove(event: PointerEvent<HTMLButtonElement>) {
+    if (!dragRef.current) return;
+    const delta = event.clientX - dragRef.current.startX;
+    if (dragRef.current.kind === "nav") {
+      setNavWidth(Math.min(NAV_MAX, Math.max(NAV_MIN, dragRef.current.startW + delta)));
+      return;
+    }
+    setInspectorWidth(Math.min(INSPECTOR_MAX, Math.max(INSPECTOR_MIN, dragRef.current.startW - delta)));
+  }
+
+  function onResizeEnd() {
+    dragRef.current = null;
   }
 
   const navSections =
     sidebarSections ??
     (sidebarItems ? [{ items: sidebarItems }] : []);
+  const showInspector = inspectorMode === "open";
 
   return (
-    <div className="app-shell" data-module={module}>
+    <div className={`app-shell${hideStatusBar ? " no-status" : ""}`} data-module={module}>
       <header className="topbar">
         <Link href="/arastirma" className="brand-lockup" aria-label="HÂKİM ana sayfa">
           <Image src="/hakim-emblem.png" alt="" width={36} height={36} />
@@ -113,23 +182,16 @@ export function AppShell({
             <Link
               key={item.id}
               href={item.href}
-              className={[module === item.id ? "active" : "", "subtle" in item && item.subtle ? "subtle" : ""]
-                .filter(Boolean)
-                .join(" ")}
+              className={module === item.id ? "active" : ""}
             >
               {item.label}
             </Link>
           ))}
-          {user?.role === "admin" ? (
-            <Link href="/yonetim" className={module === "yonetim" ? "active" : ""}>
-              Yönetim
-            </Link>
-          ) : null}
         </nav>
         <div className="topbar-actions">
           <div className="system-pills compact" aria-label="Sistem durumu">
             {CHECK_LABELS.map(([key, label]) => {
-              const ok = status?.checks[key] === "ok";
+              const ok = isLiveCheck(status?.checks[key]);
               return (
                 <span key={key} className={`sys-pill ${ok ? "ok" : "down"}`}>
                   <i />
@@ -138,17 +200,49 @@ export function AppShell({
               );
             })}
           </div>
-          <span className="topbar-user" title={user?.username || user?.email || ""}>
-            {user?.display_name || (user?.username ? `@${user.username}` : "Oturum")}
-          </span>
-          <button type="button" className="btn-ghost topbar-exit" onClick={() => void logout()}>
-            Çıkış
-          </button>
+          <div className="account-menu" ref={menuRef}>
+            <button
+              type="button"
+              className={`account-menu-toggle${menuOpen || module === "ayarlar" || module === "yonetim" ? " open" : ""}`}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              Ayarlar
+            </button>
+            {menuOpen ? (
+              <div className="account-menu-panel" role="menu">
+                <p className="account-menu-user">
+                  <strong>{user?.display_name || "Hesap"}</strong>
+                  <span>@{user?.username || "—"}</span>
+                </p>
+                <Link href="/ayarlar" role="menuitem" onClick={() => setMenuOpen(false)}>
+                  Hesap ayarları
+                </Link>
+                {user?.role === "admin" ? (
+                  <Link href="/yonetim" role="menuitem" onClick={() => setMenuOpen(false)}>
+                    Yönetim
+                  </Link>
+                ) : null}
+                <button type="button" role="menuitem" className="account-menu-exit" onClick={() => void logout()}>
+                  Çıkış
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
-      <div className="workspace">
+      <div
+        className={`workspace${showInspector ? "" : " no-inspector"}`}
+        style={
+          {
+            "--nav-width": `${navWidth}px`,
+            ...(showInspector ? { "--inspector-width": `${inspectorWidth}px` } : {}),
+          } as CSSProperties
+        }
+      >
         <aside className="side-nav">
-          <h2>{sidebarTitle}</h2>
+          {sidebarTitle ? <h2>{sidebarTitle}</h2> : null}
           <ul>
             {navSections.map((section, sectionIndex) => (
               <li key={section.title ?? sectionIndex} className={section.title ? "side-nav-group" : undefined}>
@@ -169,21 +263,57 @@ export function AppShell({
               </li>
             ))}
           </ul>
-          <div className="side-quote">
-            <p>{quote}</p>
-            <span>{quoteMeta}</span>
-          </div>
+          {quote ? (
+            <div className="side-quote">
+              <p>{quote}</p>
+              {quoteMeta ? <span>{quoteMeta}</span> : null}
+            </div>
+          ) : null}
         </aside>
+        <button
+          type="button"
+          className="pane-resizer"
+          aria-label="Sol paneli boyutlandır"
+          onPointerDown={(event) => onResizeStart("nav", event)}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeEnd}
+          onPointerCancel={onResizeEnd}
+        />
         {children}
-        <aside className="inspector">
-          <h2>{inspectorTitle}</h2>
-          {inspector}
-        </aside>
+        {showInspector ? (
+          <>
+            <button
+              type="button"
+              className="pane-resizer"
+              aria-label="Sağ paneli boyutlandır"
+              onPointerDown={(event) => onResizeStart("inspector", event)}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+            />
+            <aside className="inspector">
+              <div className="inspector-head">
+                <h2>{inspectorTitle}</h2>
+                {onInspectorModeChange ? (
+                  <button
+                    type="button"
+                    className="inspector-close"
+                    onClick={() => onInspectorModeChange("collapsed")}
+                  >
+                    Kapat
+                  </button>
+                ) : null}
+              </div>
+              {inspector}
+            </aside>
+          </>
+        ) : null}
       </div>
-      <footer className="status-bar">
-        <span>{footer}</span>
-        <span>HÂKİM · Kodun dili, geleceğin Hakimi.</span>
-      </footer>
+      {hideStatusBar ? null : (
+        <footer className="status-bar">
+          <span>{footer ?? ""}</span>
+        </footer>
+      )}
     </div>
   );
 }

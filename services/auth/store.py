@@ -3,14 +3,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import sqlite3
+import string
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from auth.mail import send_code_email, smtp_configured
+from auth.mail import send_code_email, send_password_email, smtp_configured
 from auth.passwords import hash_password, verify_password
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +23,28 @@ DEFAULT_ADMIN_PASSWORD = "admin1234"
 SESSION_DAYS = 14
 CODE_MINUTES = 15
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,24}$")
+ACTIVITY_REDACT_KEYS = {"query", "answer", "text", "user_text", "content", "draft"}
+ACCOUNT_ACTIVITY_KINDS = frozenset(
+    {
+        "register",
+        "login",
+        "verify",
+        "password_reset_request",
+        "password_reset",
+        "password_change",
+        "email_change_request",
+        "email_change",
+        "profile_update",
+        "session_revoke",
+        "admin_create_user",
+        "admin_set_role",
+        "admin_lock",
+        "admin_unlock",
+        "admin_delete_user",
+        "admin_revoke_sessions",
+        "admin_send_password",
+    }
+)
 
 
 class AuthError(Exception):
@@ -39,6 +63,8 @@ class UserRecord:
     created_at: str
     last_login_at: str | None = None
     email_verified: bool = False
+    locked: bool = False
+    pending_email: str | None = None
 
     def to_public(self) -> dict[str, Any]:
         return {
@@ -50,6 +76,8 @@ class UserRecord:
             "created_at": self.created_at,
             "last_login_at": self.last_login_at,
             "email_verified": self.email_verified,
+            "locked": self.locked,
+            "pending_email": self.pending_email,
             "is_admin": self.role == "admin",
         }
 
@@ -78,6 +106,10 @@ def _norm_username(username: str) -> str:
     return (username or "").strip().lower()
 
 
+def _valid_email(email: str) -> bool:
+    return "@" in email and "." in email.split("@")[-1]
+
+
 def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -85,6 +117,11 @@ def _parse_iso(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _temp_password(length: int = 10) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 class AuthStore:
@@ -140,6 +177,10 @@ class AuthStore:
                 conn.execute("ALTER TABLE accounts ADD COLUMN verify_hash TEXT")
             if "verify_expires" not in cols:
                 conn.execute("ALTER TABLE accounts ADD COLUMN verify_expires TEXT")
+            if "locked" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
+            if "pending_email" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN pending_email TEXT")
             for row in conn.execute("SELECT id, email, username FROM accounts"):
                 if row["username"]:
                     continue
@@ -203,6 +244,12 @@ class AuthStore:
         verified = True
         if "email_verified" in keys:
             verified = bool(row["email_verified"])
+        locked = False
+        if "locked" in keys:
+            locked = bool(row["locked"])
+        pending = None
+        if "pending_email" in keys and row["pending_email"]:
+            pending = str(row["pending_email"])
         return UserRecord(
             id=str(row["id"]),
             username=username,
@@ -212,6 +259,8 @@ class AuthStore:
             created_at=str(row["created_at"]),
             last_login_at=str(row["last_login_at"]) if row["last_login_at"] else None,
             email_verified=verified,
+            locked=locked,
+            pending_email=pending,
         )
 
     def get_by_email(self, email: str) -> UserRecord | None:
@@ -265,7 +314,7 @@ class AuthStore:
         role = (role or "user").strip().lower()
         if role not in {"admin", "user"}:
             raise AuthError("Rol admin veya user olmalıdır.")
-        if "@" not in email or "." not in email.split("@")[-1]:
+        if not _valid_email(email):
             raise AuthError("Geçerli bir e-posta girin.")
         if email.endswith(".local"):
             raise AuthError("Gerçek bir e-posta kullanın.")
@@ -298,10 +347,19 @@ class AuthStore:
             email_verified=verified,
         )
 
-    def issue_verification(self, user_id: str, *, kind: str = "verify") -> tuple[str, bool]:
+    def issue_verification(
+        self,
+        user_id: str,
+        *,
+        kind: str = "verify",
+        password: str = "",
+    ) -> tuple[str, bool]:
         code = f"{uuid.uuid4().int % 1_000_000:06d}"
         with self._connect() as conn:
-            row = conn.execute("SELECT email FROM accounts WHERE id = ?", (user_id,)).fetchone()
+            row = conn.execute(
+                "SELECT email, username FROM accounts WHERE id = ?",
+                (user_id,),
+            ).fetchone()
             if row is None:
                 raise AuthError("Hesap bulunamadı.", 404)
             conn.execute(
@@ -309,9 +367,10 @@ class AuthStore:
                 (hash_password(code), _code_expires(), user_id),
             )
             email = str(row["email"])
+            username = str(row["username"] or "")
         sent = False
         try:
-            sent = send_code_email(email, code, kind=kind)
+            sent = send_code_email(email, code, kind=kind, username=username, password=password)
         except Exception:
             sent = False
         return code, sent
@@ -388,6 +447,9 @@ class AuthStore:
                 raise AuthError("Kullanıcı adı veya parola hatalı.", 401)
             if not int(row["email_verified"] or 0):
                 raise AuthError("Önce e-posta doğrulaması gerekli.", 403)
+            locked = int(row["locked"] or 0) if "locked" in row.keys() else 0
+            if locked:
+                raise AuthError("Hesap kilitli. Yöneticinizle iletişime geçin.", 403)
             user = self._user_from_row(row)
         assert user is not None
         return self.open_session(user)
@@ -413,6 +475,7 @@ class AuthStore:
             created_at=user.created_at,
             last_login_at=now,
             email_verified=True,
+            locked=False,
         )
         self.log(signed.id, "login", f"{signed.username} oturum açtı")
         return signed, token
@@ -432,7 +495,10 @@ class AuthStore:
                 """,
                 (raw, _now_s()),
             ).fetchone()
-        return self._user_from_row(row)
+        user = self._user_from_row(row)
+        if user is not None and user.locked:
+            return None
+        return user
 
     def logout(self, token: str | None) -> None:
         raw = (token or "").strip()
@@ -448,8 +514,266 @@ class AuthStore:
             rows = conn.execute("SELECT * FROM accounts ORDER BY created_at ASC").fetchall()
         return [item for row in rows if (item := self._user_from_row(row))]
 
+    def _active_admin_count(self, *, exclude_id: str | None = None) -> int:
+        sql = "SELECT COUNT(*) AS n FROM accounts WHERE role = 'admin' AND locked = 0"
+        params: list[Any] = []
+        if exclude_id:
+            sql += " AND id != ?"
+            params.append(exclude_id)
+        with self._connect() as conn:
+            row = conn.execute(sql, params).fetchone()
+        return int(row["n"] if row else 0)
+
+    def _guard_last_admin(self, user: UserRecord) -> None:
+        if user.role != "admin":
+            return
+        if self._active_admin_count(exclude_id=user.id) < 1:
+            raise AuthError("Son yönetici hesabı kaldırılamaz veya kilitlenemez.")
+
+    def session_count(self, user_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS n FROM account_sessions
+                WHERE user_id = ? AND expires_at > ?
+                """,
+                (user_id, _now_s()),
+            ).fetchone()
+        return int(row["n"] if row else 0)
+
+    def public_user(self, user: UserRecord) -> dict[str, Any]:
+        payload = user.to_public()
+        payload["session_count"] = self.session_count(user.id)
+        return payload
+
+    def update_profile(self, user: UserRecord, *, display_name: str) -> UserRecord:
+        name = (display_name or "").strip()
+        if len(name) < 2 or len(name) > 80:
+            raise AuthError("Görünen ad 2–80 karakter olmalıdır.")
+        with self._connect() as conn:
+            conn.execute("UPDATE accounts SET display_name = ? WHERE id = ?", (name, user.id))
+        self.log(user.id, "profile_update", f"{user.username} görünen adını güncelledi")
+        found = self.get_by_id(user.id)
+        assert found is not None
+        return found
+
+    def change_password(
+        self,
+        user: UserRecord,
+        current_password: str,
+        new_password: str,
+        *,
+        keep_token: str | None = None,
+    ) -> UserRecord:
+        if len(new_password) < 6:
+            raise AuthError("Parola en az 6 karakter olmalıdır.")
+        with self._connect() as conn:
+            row = conn.execute("SELECT password_hash FROM accounts WHERE id = ?", (user.id,)).fetchone()
+            if row is None:
+                raise AuthError("Hesap bulunamadı.", 404)
+            if not verify_password(current_password, str(row["password_hash"])):
+                raise AuthError("Mevcut parola hatalı.", 401)
+            conn.execute(
+                "UPDATE accounts SET password_hash = ? WHERE id = ?",
+                (hash_password(new_password), user.id),
+            )
+        self.revoke_sessions(user.id, except_token=keep_token)
+        self.log(user.id, "password_change", f"{user.username} parolasını güncelledi")
+        found = self.get_by_id(user.id)
+        assert found is not None
+        return found
+
+    def request_email_change(self, user: UserRecord, password: str, new_email: str) -> tuple[str, bool]:
+        email = _norm_email(new_email)
+        if not _valid_email(email):
+            raise AuthError("Geçerli bir e-posta girin.")
+        if email.endswith(".local"):
+            raise AuthError("Gerçek bir e-posta kullanın.")
+        if email == _norm_email(user.email):
+            raise AuthError("Yeni e-posta mevcut adresle aynı.")
+        taken = self.get_by_email(email)
+        if taken is not None and taken.id != user.id:
+            raise AuthError("Bu e-posta zaten kayıtlı.", 409)
+        with self._connect() as conn:
+            row = conn.execute("SELECT password_hash FROM accounts WHERE id = ?", (user.id,)).fetchone()
+            if row is None:
+                raise AuthError("Hesap bulunamadı.", 404)
+            if not verify_password(password, str(row["password_hash"])):
+                raise AuthError("Parola hatalı.", 401)
+        code = f"{uuid.uuid4().int % 1_000_000:06d}"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE accounts
+                SET pending_email = ?, verify_hash = ?, verify_expires = ?
+                WHERE id = ?
+                """,
+                (email, hash_password(code), _code_expires(), user.id),
+            )
+        sent = False
+        try:
+            sent = send_code_email(email, code, kind="email_change")
+        except Exception:
+            sent = False
+        self.log(user.id, "email_change_request", f"{user.username} e-posta değişikliği istedi")
+        return code, sent
+
+    def confirm_email_change(self, user: UserRecord, code: str) -> UserRecord:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT pending_email, verify_hash, verify_expires FROM accounts WHERE id = ?",
+                (user.id,),
+            ).fetchone()
+            if row is None:
+                raise AuthError("Hesap bulunamadı.", 404)
+            pending = str(row["pending_email"] or "").strip()
+            if not pending:
+                raise AuthError("Bekleyen e-posta değişikliği yok.")
+            expires = _parse_iso(str(row["verify_expires"] or ""))
+            if expires is None or expires < _now() or not row["verify_hash"]:
+                raise AuthError("Kodun süresi doldu. Yeni kod isteyin.")
+            if not verify_password((code or "").strip(), str(row["verify_hash"])):
+                raise AuthError("Kod hatalı.", 401)
+            taken = conn.execute(
+                "SELECT id FROM accounts WHERE email = ? AND id != ?",
+                (pending, user.id),
+            ).fetchone()
+            if taken is not None:
+                raise AuthError("Bu e-posta zaten kayıtlı.", 409)
+            conn.execute(
+                """
+                UPDATE accounts
+                SET email = ?, pending_email = NULL, email_verified = 1,
+                    verify_hash = NULL, verify_expires = NULL
+                WHERE id = ?
+                """,
+                (pending, user.id),
+            )
+        self.log(user.id, "email_change", f"{user.username} e-postasını güncelledi")
+        found = self.get_by_id(user.id)
+        assert found is not None
+        return found
+
+    def set_role(self, user_id: str, role: str, actor: UserRecord) -> UserRecord:
+        role = (role or "").strip().lower()
+        if role not in {"admin", "user"}:
+            raise AuthError("Rol admin veya user olmalıdır.")
+        user = self.get_by_id(user_id)
+        if user is None:
+            raise AuthError("Hesap bulunamadı.", 404)
+        if user.role == role:
+            return user
+        if user.role == "admin" and role == "user":
+            self._guard_last_admin(user)
+        with self._connect() as conn:
+            conn.execute("UPDATE accounts SET role = ? WHERE id = ?", (role, user_id))
+        self.log(
+            actor.id,
+            "admin_set_role",
+            f"{actor.username} rol değiştirdi: {user.username} -> {role}",
+        )
+        found = self.get_by_id(user_id)
+        assert found is not None
+        return found
+
+    def set_locked(self, user_id: str, locked: bool, actor: UserRecord) -> UserRecord:
+        user = self.get_by_id(user_id)
+        if user is None:
+            raise AuthError("Hesap bulunamadı.", 404)
+        if actor.id == user_id:
+            raise AuthError("Kendi hesabınızı kilitleyemezsiniz.")
+        if locked:
+            self._guard_last_admin(user)
+        with self._connect() as conn:
+            conn.execute("UPDATE accounts SET locked = ? WHERE id = ?", (1 if locked else 0, user_id))
+        if locked:
+            self.revoke_sessions(user_id)
+        self.log(
+            actor.id,
+            "admin_lock" if locked else "admin_unlock",
+            f"{actor.username} hesabı {'kilitledi' if locked else 'açtı'}: {user.username}",
+        )
+        found = self.get_by_id(user_id)
+        assert found is not None
+        return found
+
+    def delete_user(self, user_id: str, actor: UserRecord) -> None:
+        user = self.get_by_id(user_id)
+        if user is None:
+            raise AuthError("Hesap bulunamadı.", 404)
+        if actor.id == user_id:
+            raise AuthError("Kendi hesabınızı silemezsiniz.")
+        self._guard_last_admin(user)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM accounts WHERE id = ?", (user_id,))
+        self.log(
+            actor.id,
+            "admin_delete_user",
+            f"{actor.username} hesabı sildi: {user.username}",
+        )
+
+    def admin_send_password(
+        self,
+        user_id: str,
+        actor: UserRecord,
+        *,
+        except_token: str | None = None,
+    ) -> tuple[str, bool, str | None]:
+        target = self.get_by_id(user_id)
+        if target is None:
+            raise AuthError("Hesap bulunamadı.", 404)
+        password = _temp_password()
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE accounts SET password_hash = ? WHERE id = ?",
+                (hash_password(password), target.id),
+            )
+        self.revoke_sessions(target.id, except_token=except_token)
+        preview_code: str | None = None
+        sent = False
+        try:
+            if target.email_verified:
+                sent = send_password_email(target.email, target.username, password)
+            else:
+                preview_code, sent = self.issue_verification(
+                    target.id,
+                    kind="invite",
+                    password=password,
+                )
+        except Exception:
+            sent = False
+        self.log(
+            actor.id,
+            "admin_send_password",
+            f"{actor.username} parola e-postası gönderdi: {target.username}",
+        )
+        return password, sent, preview_code
+
+    def revoke_sessions(self, user_id: str, *, except_token: str | None = None, actor: UserRecord | None = None) -> int:
+        raw = (except_token or "").strip()
+        if raw.lower().startswith("bearer "):
+            raw = raw[7:].strip()
+        with self._connect() as conn:
+            if raw:
+                cur = conn.execute(
+                    "DELETE FROM account_sessions WHERE user_id = ? AND token != ?",
+                    (user_id, raw),
+                )
+            else:
+                cur = conn.execute("DELETE FROM account_sessions WHERE user_id = ?", (user_id,))
+            deleted = int(cur.rowcount or 0)
+        if actor is not None:
+            target = self.get_by_id(user_id)
+            name = target.username if target else user_id
+            self.log(actor.id, "admin_revoke_sessions", f"{actor.username} oturumları kapattı: {name}")
+        return deleted
+
     def log(self, user_id: str, kind: str, summary: str, detail: str | dict[str, Any] | None = None) -> None:
-        payload = detail if isinstance(detail, str) else json.dumps(detail or {}, ensure_ascii=False)
+        if isinstance(detail, dict):
+            safe = {key: value for key, value in detail.items() if key not in ACTIVITY_REDACT_KEYS}
+            payload = json.dumps(safe, ensure_ascii=False)
+        else:
+            payload = detail if isinstance(detail, str) else json.dumps({}, ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(
                 """
@@ -460,14 +784,17 @@ class AuthStore:
             )
 
     def list_activity(self, *, user_id: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
-        sql = """
+        kinds = tuple(sorted(ACCOUNT_ACTIVITY_KINDS))
+        placeholders = ", ".join("?" for _ in kinds)
+        sql = f"""
             SELECT act.*, a.email, a.username, a.display_name, a.role
             FROM account_activity act
             JOIN accounts a ON a.id = act.user_id
+            WHERE act.kind IN ({placeholders})
         """
-        params: list[Any] = []
+        params: list[Any] = list(kinds)
         if user_id:
-            sql += " WHERE act.user_id = ?"
+            sql += " AND act.user_id = ?"
             params.append(user_id)
         sql += " ORDER BY act.created_at DESC LIMIT ?"
         params.append(max(1, min(limit, 500)))

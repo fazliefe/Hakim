@@ -44,7 +44,7 @@ export function TraceGraphView({ nodes, edges, evidence, selected, onSelect }: P
         label: shortLabel(node.label, node.kind === "chunk" ? 20 : 14),
         title:
           node.kind === "chunk"
-            ? `${node.label} · BM25 ${String(node.meta.bm25_rank ?? "—")} · Anlamsal ${String(node.meta.semantic_rank ?? "—")} · RRF ${String(node.meta.rrf_rank ?? "—")}`
+            ? node.label
             : node.label,
         group: node.kind,
         shape: node.kind === "chunk" ? "box" : "ellipse",
@@ -84,9 +84,9 @@ export function TraceGraphView({ nodes, edges, evidence, selected, onSelect }: P
           }}
         />
       </div>
-      <p className="graph-hint">Sorgu → BM25 / vektör / graf → RRF → kaynak → cevap</p>
+      <p className="graph-hint">Soru → tarama → birleşim → kaynak → cevap</p>
       <p className="graph-caption">
-        {hover || "Düğüme tıklayın: getirici, sıra ve kaynağın cevapta kullanılıp kullanılmadığı."}
+        {hover || "Düğüme tıklayın; cevapta kullanılan kaynaklar görünür."}
       </p>
     </div>
   );

@@ -271,7 +271,7 @@ export function LoginScreen() {
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={mode === "unuttum" ? "kullanıcı adı veya e-posta" : "kullanıcı adı"}
+                  placeholder={mode === "unuttum" ? "ornek_kullanici veya e-posta" : "ornek_kullanici"}
                   autoComplete="username"
                   required
                 />

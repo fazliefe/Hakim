@@ -1,5 +1,5 @@
-import { SurecWorkbench } from "@/components/SurecWorkbench";
+import { redirect } from "next/navigation";
 
 export default function SurecPage() {
-  return <SurecWorkbench />;
+  redirect("/evrak?bolum=usul");
 }

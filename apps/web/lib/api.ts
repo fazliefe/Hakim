@@ -65,9 +65,8 @@ export type SystemStatus = {
 };
 
 export function writerLabel(writer?: string | null): string {
-  if (writer === "api") return "API";
-  if (writer === "ollama") return "Ollama";
   if (writer === "refuse") return "Cevap yok";
+  if (writer === "api" || writer === "ollama") return "Kaynaklı gerekçe";
   return "Kaynaklı gerekçe";
 }
 
@@ -91,6 +90,9 @@ export type AuthUser = {
   created_at?: string;
   last_login_at?: string | null;
   email_verified?: boolean;
+  locked?: boolean;
+  pending_email?: string | null;
+  session_count?: number;
   is_admin?: boolean;
   recent?: AuthActivity[];
 };
@@ -98,6 +100,7 @@ export type AuthUser = {
 export type AuthActivity = {
   id: string;
   user_id: string;
+  username?: string;
   email: string;
   display_name: string;
   role: string;
@@ -125,8 +128,13 @@ export function getStoredUser(): AuthUser | null {
 
 export function setAuthSession(token: string, user: AuthUser): void {
   window.localStorage.setItem(TOKEN_KEY, token);
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  persistUser(user);
   window.sessionStorage.setItem("hakim-auth", user.role);
+}
+
+function persistUser(user: AuthUser): void {
+  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.dispatchEvent(new Event("hakim-auth-updated"));
 }
 
 export function clearAuthSession(): void {
@@ -249,7 +257,7 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const response = await apiFetch("/v1/auth/me");
   if (!response.ok) throw new Error(await readError(response, "Oturum yok"));
   const body = (await response.json()) as { user: AuthUser };
-  window.localStorage.setItem(USER_KEY, JSON.stringify(body.user));
+  persistUser(body.user);
   return body.user;
 }
 
@@ -260,20 +268,114 @@ export async function listAuthUsers(): Promise<AuthUser[]> {
   return body.users ?? [];
 }
 
+export async function updateAccountProfile(displayName: string): Promise<AuthUser> {
+  const response = await apiFetch("/v1/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ display_name: displayName }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Profil güncellenemedi"));
+  const body = (await response.json()) as { user: AuthUser };
+  persistUser(body.user);
+  return body.user;
+}
+
+export async function revokeOwnSessions(): Promise<{ revoked: number; user: AuthUser }> {
+  const response = await apiFetch("/v1/auth/sessions/revoke", { method: "POST" });
+  if (!response.ok) throw new Error(await readError(response, "Oturumlar kapatılamadı"));
+  const body = (await response.json()) as { revoked?: number; user: AuthUser };
+  persistUser(body.user);
+  return { revoked: body.revoked ?? 0, user: body.user };
+}
+
+export async function changeAccountPassword(currentPassword: string, newPassword: string): Promise<AuthUser> {
+  const response = await apiFetch("/v1/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Parola güncellenemedi"));
+  const body = (await response.json()) as { user: AuthUser };
+  persistUser(body.user);
+  return body.user;
+}
+
+export async function requestEmailChange(password: string, email: string): Promise<CodeMailResult> {
+  const response = await apiFetch("/v1/auth/email", {
+    method: "POST",
+    body: JSON.stringify({ password, email }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "E-posta güncellenemedi"));
+  return response.json() as Promise<CodeMailResult>;
+}
+
+export async function confirmEmailChange(code: string): Promise<AuthUser> {
+  const response = await apiFetch("/v1/auth/email/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new Error(await readError(response, "E-posta doğrulanamadı"));
+  const body = (await response.json()) as { user: AuthUser };
+  persistUser(body.user);
+  return body.user;
+}
+
 export async function createAuthUser(payload: {
   username: string;
   email: string;
   password: string;
   display_name: string;
   role: "admin" | "user";
-}): Promise<AuthUser> {
+}): Promise<{ user: AuthUser; mailed: boolean; preview_code?: string; message?: string }> {
   const response = await apiFetch("/v1/auth/users", {
     method: "POST",
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await readError(response, "Kullanıcı eklenemedi"));
+  return response.json() as Promise<{ user: AuthUser; mailed: boolean; preview_code?: string; message?: string }>;
+}
+
+export async function patchAuthUser(
+  userId: string,
+  payload: { role?: "admin" | "user"; locked?: boolean },
+): Promise<AuthUser> {
+  const response = await apiFetch(`/v1/auth/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Kullanıcı güncellenemedi"));
   const body = (await response.json()) as { user: AuthUser };
   return body.user;
+}
+
+export async function deleteAuthUser(userId: string): Promise<void> {
+  const response = await apiFetch(`/v1/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await readError(response, "Kullanıcı silinemedi"));
+}
+
+export async function sendAuthPassword(userId: string): Promise<{
+  mailed: boolean;
+  smtp?: boolean;
+  message?: string;
+  preview_password?: string;
+  preview_code?: string;
+}> {
+  const response = await apiFetch(`/v1/auth/users/${encodeURIComponent(userId)}/send-password`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error(await readError(response, "Parola gönderilemedi"));
+  return response.json() as Promise<{
+    mailed: boolean;
+    smtp?: boolean;
+    message?: string;
+    preview_password?: string;
+    preview_code?: string;
+  }>;
+}
+
+export async function revokeAuthSessions(userId: string): Promise<number> {
+  const response = await apiFetch(`/v1/auth/users/${encodeURIComponent(userId)}/revoke-sessions`, { method: "POST" });
+  if (!response.ok) throw new Error(await readError(response, "Oturumlar kapatılamadı"));
+  const body = (await response.json()) as { revoked?: number };
+  return body.revoked ?? 0;
 }
 
 export async function listAuthActivity(userId?: string): Promise<AuthActivity[]> {
@@ -284,8 +386,12 @@ export async function listAuthActivity(userId?: string): Promise<AuthActivity[]>
   return body.activity ?? [];
 }
 
-export async function getSystemStatus(): Promise<SystemStatus> {
-  const response = await apiFetch("/v1/durum", { cache: "no-store" });
+export function isLiveCheck(value?: string): boolean {
+  return value === "ok";
+}
+
+export async function getSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
+  const response = await apiFetch("/v1/durum", { cache: "no-store", signal });
   if (!response.ok) {
     throw new Error("Sistem durumu alınamadı");
   }

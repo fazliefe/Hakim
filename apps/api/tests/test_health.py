@@ -7,7 +7,10 @@ def test_health() -> None:
     client = TestClient(app)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    body = response.json()
+    assert body["checks"]["api"] == "ok"
+    assert body["status"] in {"ok", "kapalı"}
+    assert {"api", "elasticsearch", "neo4j", "postgres", "yazim"} <= set(body["checks"])
 
 
 def test_schema_version() -> None:

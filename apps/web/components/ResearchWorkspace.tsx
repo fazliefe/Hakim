@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Evidence, ResearchResponse, SourceCatalog, getLegalSources, runResearch, writerLabel } from "@/lib/api";
-import { AppShell } from "@/components/AppShell";
+import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
+import { AppShell, InspectorMode } from "@/components/AppShell";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { RESEARCH_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
 import { lawPrefix } from "@/components/graph/layout";
@@ -18,14 +18,12 @@ const TraceGraphView = dynamic(
 );
 
 type Tab = "metin" | "kaynaklar" | "graf" | "iz";
-type SideView = "arastirmalar" | "dosyalar" | "gecmis" | "kaydedilen" | "acik-kaynaklar";
+type SideView = "arastirmalar" | "gecmis" | "kaydedilen";
 
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
-  { id: "dosyalar", label: "Dosyalar" },
   { id: "gecmis", label: "Geçmiş" },
   { id: "kaydedilen", label: "Kaydedilen maddeler" },
-  { id: "acik-kaynaklar", label: "Açık kaynaklar" },
 ];
 
 const HISTORY_KEY = "hakim-research-history";
@@ -88,12 +86,6 @@ function sourceHeading(item: Evidence) {
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
 
-function routeLabel(route: string) {
-  if (route === "exact_citation") return "kesin madde atıfı";
-  if (route === "hybrid") return "hibrit arama";
-  return route;
-}
-
 export function ResearchWorkspace() {
   const [query, setQuery] = useState("nitelikli dolandırıcılıkta banka hesabının kullanılması");
   const [loading, setLoading] = useState(false);
@@ -104,14 +96,13 @@ export function ResearchWorkspace() {
   const [side, setSide] = useState<SideView>("arastirmalar");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [saved, setSaved] = useState<SavedArticle[]>([]);
-  const [catalog, setCatalog] = useState<SourceCatalog | null>(null);
+  const [inspectorMode, setInspectorMode] = useState<InspectorMode>("collapsed");
+  const [bottomHeight, setBottomHeight] = useState(190);
+  const bottomDrag = useRef({ startY: 0, startH: 190 });
 
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
     setSaved(readJson(SAVED_KEY, []));
-    getLegalSources()
-      .then(setCatalog)
-      .catch(() => setCatalog({ official: [], mcp: [], huggingface: [], counts: {} }));
   }, []);
 
   const selectedEvidence: Evidence | null = useMemo(() => {
@@ -120,6 +111,7 @@ export function ResearchWorkspace() {
   }, [result, selected]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
 
   function persistHistory(next: HistoryEntry[]) {
     setHistory(next);
@@ -129,6 +121,16 @@ export function ResearchWorkspace() {
   function persistSaved(next: SavedArticle[]) {
     setSaved(next);
     window.localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  }
+
+  function openSource(n: number) {
+    setSelected(n);
+    setInspectorMode("open");
+  }
+
+  function onTab(next: Tab) {
+    setTab(next);
+    if (next === "kaynaklar") setInspectorMode("open");
   }
 
   async function runQuery(text: string) {
@@ -168,76 +170,80 @@ export function ResearchWorkspace() {
     ]);
   }
 
-  const inspector = !selectedEvidence ? (
-    <p className="muted">Bir kaynak seçin veya atıfa tıklayın.</p>
-  ) : (
-    <div>
-      <div className="source-meta">
-        <span>{sourceHeading(selectedEvidence)}</span>
-        <span className="badge">{selectedEvidence.authority || "resmi"}</span>
-      </div>
-      <div className="source-title">
-        {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
-      </div>
-      <p className="muted" style={{ fontSize: 12 }}>
-        BM25 #{selectedEvidence.bm25_rank ?? "—"} · Anlamsal #{selectedEvidence.semantic_rank ?? "—"} · RRF #
-        {selectedEvidence.rrf_rank}
-      </p>
-      <p className="source-content">{selectedEvidence.content}</p>
-      <p className="muted" style={{ fontSize: 12 }}>
-        Getirici: {selectedEvidence.retrievers.join(" + ") || "—"}
-      </p>
-      <button type="button" className="side-action" onClick={toggleSave}>
-        {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
-      </button>
+  function onBottomStart(event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    bottomDrag.current = { startY: event.clientY, startH: bottomHeight };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onBottomMove(event: PointerEvent<HTMLButtonElement>) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const next = bottomDrag.current.startH - (event.clientY - bottomDrag.current.startY);
+    setBottomHeight(Math.min(420, Math.max(120, next)));
+  }
+
+  const inspector = (
+    <div className="source-stack">
+      {result?.evidence.length ? (
+        result.evidence.map((item) => (
+          <button
+            key={item.chunk_id}
+            type="button"
+            className={`source-row ${selected === item.n ? "selected" : ""}`}
+            onClick={() => openSource(item.n)}
+          >
+            [{item.n}] {sourceHeading(item)}
+          </button>
+        ))
+      ) : (
+        <p className="muted">Bir kaynağa veya atıfa tıklayın.</p>
+      )}
+      {selectedEvidence ? (
+        <article className="source-detail">
+          <div className="source-meta">
+            <span>{sourceHeading(selectedEvidence)}</span>
+            <span className="badge">{selectedEvidence.authority || "resmi"}</span>
+          </div>
+          <div className="source-title">
+            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
+          </div>
+          <p className="source-content">{selectedEvidence.content}</p>
+          <button type="button" className="side-action" onClick={toggleSave}>
+            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
+          </button>
+        </article>
+      ) : null}
     </div>
   );
 
   return (
     <AppShell
       module="arastirma"
-      sidebarTitle="Dava dosyası"
+      sidebarTitle="Hukuki araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
       onSidebarSelect={(id) => setSide(id as SideView)}
-      quote="“Hukuk, kaynaklarla konuşur.”"
-      quoteMeta="Resmi mevzuat, içtihat ve kurul kararları"
-      inspectorTitle="Kaynak / Delil"
+      inspectorTitle="Kaynak"
       inspector={inspector}
-      footer={
-        loading
-          ? "Kaynaklar tartılıyor…"
-            : result
-              ? `${result.evidence.length} kaynak · ${routeLabel(result.route)}`
-            : "Salon hazır"
-      }
+      inspectorMode={inspectorMode}
+      onInspectorModeChange={setInspectorMode}
+      hideStatusBar
     >
-      <section className="main-pane">
+      <section className="main-pane research-pane">
+          <div className="research-scroll">
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
-              <h1>
-                {side === "dosyalar"
-                  ? "Dosyalar"
-                  : side === "gecmis"
-                    ? "Geçmiş"
-                    : side === "acik-kaynaklar"
-                      ? "Açık kaynaklar"
-                      : "Kaydedilen maddeler"}
-              </h1>
+              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
               <p>
-                {side === "dosyalar"
-                  ? "Bu araştırmanın kaynak dosyaları."
-                  : side === "gecmis"
-                    ? "Önceki sorgular. Tıklayınca yeniden araştırılır."
-                    : side === "acik-kaynaklar"
-                      ? "Resmi siteler birincil kaynaktır. Hugging Face derlemleri ikincil katalogdadır."
-                      : "Kalıcı olarak tuttuğunuz madde ve kararlar."}
+                {side === "gecmis"
+                  ? "Önceki araştırmalar. Tıklayınca yeniden çalışır."
+                  : "Tuttuğunuz madde ve kararlar."}
               </p>
             </div>
           ) : tab !== "graf" && tab !== "iz" ? (
           <div className="pane-hero">
-            <h1>Hukuki Araştırma</h1>
-            <p>Cevap Elasticsearch, atıf grafı ve madde metniyle birlikte gelir.</p>
+            <h1>Hukuki araştırma</h1>
+            <p>Cevap, madde metni ve atıflarla birlikte gelir.</p>
           </div>
           ) : null}
 
@@ -262,7 +268,7 @@ export function ResearchWorkspace() {
               <LegalGraphView
                 evidence={result.evidence}
                 selected={selected}
-                onSelect={setSelected}
+                onSelect={openSource}
                 query={result.query}
               />
             ) : null}
@@ -272,103 +278,36 @@ export function ResearchWorkspace() {
                 edges={result.trace_edges}
                 evidence={result.evidence}
                 selected={selected}
-                onSelect={setSelected}
+                onSelect={openSource}
               />
             ) : null}
             {(!result && !error && !loading) || (result && !loading && tab !== "graf" && tab !== "iz") ? (
               <>
                 {!result && !error ? (
                   <div className="empty-state">
-                    <p className="muted">
-                      Kaynak odaklı araştırma için sorunuzu yazın. Atıflar tıklanabilir; sağ panelde madde
-                      metni ve bilgi grafı açılır.
-                    </p>
+                    <p className="muted">Sorunuzu yazın. Atıflar kaynağı açar.</p>
                   </div>
                 ) : null}
                 {result ? (
                   <>
-                    {result.reasoning ? <ReasoningPanel reasoning={result.reasoning} /> : null}
                     <article className="answer">
-                      <h1>Gerekçe</h1>
-                      <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
-                        {`Yazım: ${writerLabel(result.writer)}`}
-                        {` · ${routeLabel(result.route)} · ${result.evidence.length} kaynak`}
-                      </p>
+                      <h1>Cevap</h1>
                       {result.answer ? (
-                        <AnswerBody text={result.answer} selected={selected} onCite={setSelected} />
+                        <AnswerBody text={result.answer} selected={selected} onCite={openSource} />
                       ) : (
-                        <p className="muted">Cevap metni boş döndü; yukarıdaki akıl yürütmeye bakın.</p>
+                        <p className="muted">Cevap metni boş döndü.</p>
                       )}
                     </article>
+                    {result.reasoning ? (
+                      <ReasoningPanel reasoning={result.reasoning} hideSemantic={hideSemantic} collapsible />
+                    ) : null}
                   </>
                 ) : null}
               </>
             ) : null}
           </div>
-
-          <div className="bottom-tabs" role="tablist">
-            {(
-              [
-                ["metin", "Metin"],
-                ["kaynaklar", "Kaynaklar"],
-                ["graf", "Bilgi grafı"],
-                ["iz", "Arama izi"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className={tab === id ? "active" : ""}
-                onClick={() => setTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className={`bottom-panel ${tab === "graf" || tab === "iz" ? "hidden" : ""}`} role="tabpanel">
-            {!result ? <p className="muted">Sonuç bekleniyor.</p> : null}
-            {result && tab === "metin" ? (
-              <p className="muted">
-                Rota: <strong>{routeLabel(result.route)}</strong> · Aktif kaynak:{" "}
-                {result.evidence.filter((e) => e.used_in_answer).length}
-              </p>
-            ) : null}
-            {result && tab === "kaynaklar" ? (
-              <div>
-                {result.evidence.map((item) => (
-                  <button
-                    key={item.chunk_id}
-                    type="button"
-                    className={`source-row ${selected === item.n ? "selected" : ""}`}
-                    onClick={() => setSelected(item.n)}
-                  >
-                    [{item.n}] {isDecision(item) ? item.title || "Mahkeme kararı" : `${lawPrefix(item.law_no)} ${item.article_no}`} —{" "}
-                    {isDecision(item) ? "içtihat" : item.title || "Başlıksız"}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
           </> ) : (
           <div className="content-area">
-            {side === "dosyalar" ? (
-              result ? (
-                result.evidence.map((item) => (
-                  <button
-                    key={item.chunk_id}
-                    type="button"
-                    className={`source-row ${selected === item.n ? "selected" : ""}`}
-                    onClick={() => setSelected(item.n)}
-                  >
-                    [{item.n}] {isDecision(item) ? item.title || "Mahkeme kararı" : `${lawPrefix(item.law_no)} ${item.article_no}`}
-                  </button>
-                ))
-              ) : (
-                <p className="muted">Henüz dosya yok. Araştırmalar’dan bir sorgu çalıştırın.</p>
-              )
-            ) : null}
             {side === "gecmis" ? (
               history.length ? (
                 history.map((item) => (
@@ -407,39 +346,72 @@ export function ResearchWorkspace() {
                 <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
               )
             ) : null}
-            {side === "acik-kaynaklar" ? (
-              catalog ? (
-                <div className="source-catalog">
-                  {catalog.official.map((item) => (
-                    <a
-                      key={item.id || item.url}
-                      className="source-row"
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {item.name}
-                      <span className="muted">
-                        {" "}
-                        · {item.documents ?? 0} belge · {item.status || "resmi"}
-                      </span>
-                    </a>
-                  ))}
-                  <p className="muted" style={{ marginTop: 16 }}>
-                    Hugging Face (ikincil, içe aktarılmadı)
-                  </p>
-                  {catalog.huggingface.map((item) => (
-                    <p key={item.id || item.repo} className="muted">
-                      {item.repo}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted">Kaynak listesi yükleniyor…</p>
-              )
-            ) : null}
           </div>
           )}
+          </div>
+          {side === "arastirmalar" && tab !== "graf" && tab !== "iz" ? (
+            <>
+              <button
+                type="button"
+                className="bottom-resizer"
+                aria-label="Alt paneli boyutlandır"
+                onPointerDown={onBottomStart}
+                onPointerMove={onBottomMove}
+              />
+              <div className="bottom-tabs" role="tablist">
+                {(
+                  [
+                    ["metin", "Metin"],
+                    ["kaynaklar", "Kaynaklar"],
+                    ["graf", "Bilgi grafı"],
+                    ["iz", "Arama izi"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    className={tab === id ? "active" : ""}
+                    onClick={() => onTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="bottom-panel" style={{ height: bottomHeight }} role="tabpanel">
+                {!result ? <p className="muted">Sonuç bekleniyor.</p> : null}
+                {result && tab === "metin" ? (
+                  <p className="muted">
+                    Cevaptaki atıflar sağ panelde kaynağı açar. {result.evidence.filter((e) => e.used_in_answer).length} kaynak kullanıldı.
+                  </p>
+                ) : null}
+                {result && tab === "kaynaklar" ? (
+                  <p className="muted">Kaynak açıklamaları sağ panelde. Atıfa veya Kaynaklar’a tıklayın.</p>
+                ) : null}
+              </div>
+            </>
+          ) : side === "arastirmalar" ? (
+            <div className="bottom-tabs" role="tablist">
+              {(
+                [
+                  ["metin", "Metin"],
+                  ["kaynaklar", "Kaynaklar"],
+                  ["graf", "Bilgi grafı"],
+                  ["iz", "Arama izi"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  className={tab === id ? "active" : ""}
+                  onClick={() => onTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
     </AppShell>
   );

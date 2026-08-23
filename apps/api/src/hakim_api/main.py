@@ -206,15 +206,14 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
     return payload
 
 
-def _record_activity(user: Any, kind: str, summary: str, detail: dict[str, Any] | None = None) -> None:
-    if user is None:
-        return
-    try:
-        from auth.store import get_store
+def _record_activity(_user: Any, _kind: str, _summary: str, _detail: dict[str, Any] | None = None) -> None:
+    return
 
-        get_store().log(str(user.id), kind, summary, detail or {})
-    except Exception:
-        pass
+
+# Topbar pills are live probes only. "ok" means that process answered now.
+# Docker Desktop being open, a key in .env, or a Python import is not enough.
+LIVE_OK = "ok"
+LIVE_DOWN = "kapalı"
 
 
 def _check_elasticsearch() -> str:
@@ -223,9 +222,9 @@ def _check_elasticsearch() -> str:
         from retrieval.es_client import DEFAULT_ES_URL
 
         es = Elasticsearch(DEFAULT_ES_URL, request_timeout=1.5)
-        return "ok" if es.ping() else "kapalı"
+        return LIVE_OK if es.ping() else LIVE_DOWN
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_neo4j() -> str:
@@ -235,9 +234,9 @@ def _check_neo4j() -> str:
         driver = create_neo4j_driver()
         driver.verify_connectivity()
         driver.close()
-        return "ok"
+        return LIVE_OK
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_postgres() -> str:
@@ -247,23 +246,46 @@ def _check_postgres() -> str:
         url = os.environ.get("HAKIM_DATABASE_URL", "postgresql://hakim:hakim@127.0.0.1:5433/hakim")
         with psycopg.connect(url, connect_timeout=1) as conn:
             conn.execute("SELECT 1")
-        return "ok"
+        return LIVE_OK
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
-_OLLAMA_CHECK: dict[str, Any] = {"at": 0.0, "value": "kapalı"}
+_OLLAMA_CHECK: dict[str, Any] = {"at": 0.0, "value": LIVE_DOWN}
+_YAZIM_CHECK: dict[str, Any] = {"at": 0.0, "value": LIVE_DOWN}
 
 
 def _check_yazim() -> str:
+    now = time.monotonic()
+    if now - float(_YAZIM_CHECK["at"]) < 20:
+        return str(_YAZIM_CHECK["value"])
+    value = LIVE_DOWN
     try:
-        from llm.api_client import api_configured
+        from llm.api_client import api_configured, _headers
+        from hakim_config import get_models
 
         if api_configured():
-            return "ok"
+            import urllib.request
+
+            key = os.environ.get("HAKIM_LLM_API_KEY", "").strip()
+            base = get_models().llm_url.rstrip("/")
+            request = urllib.request.Request(f"{base}/models", headers=_headers(key), method="GET")
+            with urllib.request.urlopen(request, timeout=2.5) as response:
+                if 200 <= int(response.status) < 300:
+                    value = LIVE_OK
+        else:
+            value = _check_ollama()
     except Exception:
-        pass
-    return _check_ollama()
+        try:
+            from llm.api_client import api_configured
+
+            if not api_configured():
+                value = _check_ollama()
+        except Exception:
+            value = LIVE_DOWN
+    _YAZIM_CHECK["at"] = now
+    _YAZIM_CHECK["value"] = value
+    return value
 
 
 def _check_ollama() -> str:
@@ -273,9 +295,9 @@ def _check_ollama() -> str:
     try:
         from llm.client import ping
 
-        value = "ok" if ping() else "kapalı"
+        value = LIVE_OK if ping() else LIVE_DOWN
     except Exception:
-        value = "kapalı"
+        value = LIVE_DOWN
     _OLLAMA_CHECK["at"] = now
     _OLLAMA_CHECK["value"] = value
     return value
@@ -285,24 +307,19 @@ def _check_langfuse() -> str:
     try:
         from document_ai.observability import langfuse_configured
 
-        return "ok" if langfuse_configured() else "kapalı"
+        return LIVE_OK if langfuse_configured() else LIVE_DOWN
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_langgraph() -> str:
-    try:
-        import langgraph  # noqa: F401
-
-        return "ok"
-    except Exception:
-        return "kapalı"
+    return _check_neo4j()
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
     checks = {
-        "api": "ok",
+        "api": LIVE_OK,
         "elasticsearch": _check_elasticsearch(),
         "neo4j": _check_neo4j(),
         "postgres": _check_postgres(),
@@ -312,10 +329,11 @@ def health() -> dict[str, Any]:
         "langgraph": _check_langgraph(),
     }
     required = ("api", "elasticsearch", "neo4j", "postgres")
+    live = all(checks[key] == LIVE_OK for key in required)
     return {
-        "status": "ok",
+        "status": LIVE_OK if live else LIVE_DOWN,
         "service": "hakim-api",
-        "ready": all(checks[key] == "ok" for key in required),
+        "ready": live,
         "checks": checks,
     }
 
@@ -477,8 +495,8 @@ def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchRes
     _record_activity(
         user,
         "arastirma",
-        f"Sorgu: {result.query[:160]}",
-        {"query": result.query, "route": result.route, "writer": result.writer, "answer": (result.answer or "")[:500]},
+        "Araştırma sorgusu çalıştırıldı",
+        {"route": result.route, "writer": result.writer},
     )
     return ResearchResponse(
         query=result.query,
