@@ -56,7 +56,9 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const biasRef = useRef(0);
   const rootRef = useRef<HTMLElement>(null);
+  const progressRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const onBiasChange = useCallback((v: number) => {
     biasRef.current = v;
   }, []);
@@ -87,6 +89,62 @@ export function LoginScreen() {
     window.addEventListener("pointermove", onMove, { passive: true });
     return () => window.removeEventListener("pointermove", onMove);
   }, []);
+
+  const applyProgress = useCallback((delta: number) => {
+    const next = Math.min(1, Math.max(0, progressRef.current + delta));
+    if (next === progressRef.current) return;
+    progressRef.current = next;
+    setScrollProgress(next);
+  }, []);
+
+  useEffect(() => {
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement;
+
+    const onWheel = (event: WheelEvent) => {
+      if (typing(event.target)) return;
+      event.preventDefault();
+      applyProgress(event.deltaY / 900);
+    };
+
+    const onKey = (event: KeyboardEvent) => {
+      if (typing(event.target)) return;
+      if (event.key === "ArrowDown" || event.key === "PageDown") {
+        event.preventDefault();
+        applyProgress(event.key === "PageDown" ? 0.22 : 0.1);
+      }
+      if (event.key === "ArrowUp" || event.key === "PageUp") {
+        event.preventDefault();
+        applyProgress(event.key === "PageUp" ? -0.22 : -0.1);
+      }
+    };
+
+    let touchY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      if (typing(event.target) || (event.target as HTMLElement | null)?.closest(".login-card")) return;
+      touchY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (typing(event.target) || (event.target as HTMLElement | null)?.closest(".login-card")) return;
+      const y = event.touches[0]?.clientY ?? touchY;
+      event.preventDefault();
+      applyProgress((touchY - y) / 520);
+      touchY = y;
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", onWheel, { capture: true });
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [applyProgress]);
 
   function go(next: Mode) {
     setMode(next);
@@ -236,46 +294,37 @@ export function LoginScreen() {
               ? "Şifreyi Güncelle"
               : "Giriş Yap";
 
+  const deep = scrollProgress > 0.12;
+
   return (
-    <main ref={rootRef} className={ready ? "login-screen cinematic is-ready" : "login-screen cinematic"}>
-      <div className="login-atmosphere" aria-hidden="true">
-        <div className="login-aurora" />
-        <div className="login-shaft login-shaft-a" />
-        <div className="login-shaft login-shaft-b" />
-        <div className="login-orb login-orb-a" />
-        <div className="login-orb login-orb-b" />
-        <div className="login-orb login-orb-c" />
-        <div className="login-horizon" />
-        <div className="login-grain" />
-        <div className="login-vignette" />
-        <div className="login-curtain" />
-      </div>
+    <main
+      ref={rootRef}
+      className={ready ? "login-screen cinematic is-ready" : "login-screen cinematic"}
+      data-scroll={deep ? "deep" : "hero"}
+    >
+      <div className="login-sticky">
+        <div className="login-atmosphere" aria-hidden="true">
+          <div className="login-depth" />
+          <div className="login-vignette" />
+          <div className="login-curtain" />
+        </div>
 
-      <div className="login-stage">
-        <InteractiveScale onBiasChange={onBiasChange} size="hero" />
-      </div>
+        <div className="login-stage">
+          <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} />
+        </div>
 
-      <header className="login-brand">
-        <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
-        <span>HÂKİM</span>
-      </header>
+        <header className="login-brand">
+          <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
+          <span>HÂKİM</span>
+        </header>
 
-      <div className="login-titlecard">
-        <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>
-        <h1 className="login-hero-title">HÂKİM</h1>
-        <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
-      </div>
+        <div className="login-titlecard">
+          <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>
+          <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
+        </div>
 
       <section className="login-panel" aria-label="HÂKİM Giriş">
         <div className="login-card">
-          <Image
-            src="/hakim-emblem.png"
-            alt="HÂKİM amblemi"
-            width={56}
-            height={56}
-            className="login-emblem"
-            priority
-          />
           <h2>{title}</h2>
           <p className="login-slogan">{slogan}</p>
 
@@ -407,7 +456,17 @@ export function LoginScreen() {
         </div>
       </section>
 
-      <p className="login-legal">HÂKİM · Kaynak odaklı hukuki araştırma</p>
+        <p className="login-legal">HÂKİM · Kaynak odaklı hukuki araştırma</p>
+        <button
+          type="button"
+          className="login-scroll-cue"
+          aria-label="Sahneyi ilerlet"
+          onClick={() => applyProgress(scrollProgress >= 0.96 ? -1 : 0.28)}
+        >
+          <span className="login-scroll-cue-label">Kanun · Vicdan</span>
+          <span className="login-scroll-cue-chevron" aria-hidden="true" />
+        </button>
+      </div>
     </main>
   );
 }
