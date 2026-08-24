@@ -5,20 +5,20 @@ import { useEffect, useState } from "react";
 export type ThinkStep = { title: string; text: string };
 
 export const RESEARCH_THINK_STEPS: ThinkStep[] = [
-  { title: "Soru", text: "Soru okunuyor…" },
-  { title: "Metin taraması", text: "Metin taranıyor…" },
-  { title: "Yakın hüküm", text: "Yakın hükümler bakılıyor…" },
-  { title: "Birleşim", text: "Kaynaklar birleştiriliyor…" },
-  { title: "Cevap", text: "Cevap yazılıyor…" },
+  { title: "Soru", text: "Soru Okunuyor…" },
+  { title: "Metin Taraması", text: "Metin Taranıyor…" },
+  { title: "Yakın Hüküm", text: "Yakın Hükümler Bakılıyor…" },
+  { title: "Birleşim", text: "Kaynaklar Birleştiriliyor…" },
+  { title: "Cevap", text: "Cevap Yazılıyor…" },
 ];
 
 export const EVRAK_THINK_STEPS: ThinkStep[] = [
-  { title: "Okuyucu", text: "Evrak okunuyor…" },
-  { title: "Sınıf", text: "Tür ve nitelik bakılıyor…" },
-  { title: "Mevzuat", text: "Dayanak maddeler aranıyor…" },
-  { title: "Süre", text: "Süre kuralları işleniyor…" },
-  { title: "Taslak", text: "Resmi yazı kalıbı seçiliyor…" },
-  { title: "Havale", text: "Birim önerisi yazılıyor…" },
+  { title: "Okuyucu", text: "Evrak Okunuyor…" },
+  { title: "Sınıf", text: "Tür ve Nitelik Bakılıyor…" },
+  { title: "Mevzuat", text: "Dayanak Maddeler Aranıyor…" },
+  { title: "Süre", text: "Süre Kuralları İşleniyor…" },
+  { title: "Taslak", text: "Resmi Yazı Kalıbı Seçiliyor…" },
+  { title: "Havale", text: "Birim Önerisi Yazılıyor…" },
 ];
 
 export function ThinkingHops({
@@ -42,7 +42,7 @@ export function ThinkingHops({
     <article className="reasoning-panel thinking-live" aria-live="polite" aria-busy="true">
       <header className="reasoning-head">
         <h2>Düşünüyor</h2>
-        <span className="reasoning-status thinking">akıl yürütülüyor</span>
+        <span className="reasoning-status thinking">Akıl Yürütülüyor</span>
       </header>
       {query ? <p className="thinking-query">«{query}»</p> : null}
       <ol className="reasoning-hops">

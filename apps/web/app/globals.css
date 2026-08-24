@@ -42,6 +42,33 @@ body {
   line-height: 1.5;
 }
 
+.session-check {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: var(--navy-950);
+  color: var(--silver-200);
+}
+
+.session-check-card {
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  text-align: center;
+}
+
+.session-check-card strong {
+  font-family: var(--font-brand);
+  letter-spacing: 0.14em;
+  color: var(--gold-400);
+}
+
+.session-check-card p {
+  margin: 0;
+  color: var(--silver-400);
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -810,6 +837,43 @@ button {
   padding: 0.55rem 0.7rem;
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 2.55rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.22rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--silver-400);
+}
+
+.password-toggle:hover,
+.password-toggle[aria-pressed="true"] {
+  color: var(--gold-400);
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .settings-meta p {
   margin: 0;
   font-size: 0.88rem;
@@ -952,6 +1016,26 @@ button {
   gap: 0.65rem;
 }
 
+.inspector-scrim {
+  display: none;
+}
+
+.workspace-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-wrap .workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-subnav {
+  display: none;
+}
+
 .account-menu {
   position: relative;
 }
@@ -968,6 +1052,30 @@ button {
 
 .account-menu-toggle.open,
 .account-menu-toggle:hover {
+  color: var(--navy-950);
+  background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+  border-color: transparent;
+}
+
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: transparent;
+  color: var(--gold-400);
+}
+
+.theme-toggle svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+.theme-toggle:hover {
   color: var(--navy-950);
   background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
   border-color: transparent;
@@ -1216,6 +1324,11 @@ button {
   background: rgba(212, 175, 55, 0.12);
   color: var(--gold-400);
   box-shadow: inset 3px 0 0 var(--gold-500);
+}
+
+.side-nav li button.current:not(.active) {
+  box-shadow: inset 3px 0 0 rgba(212, 175, 55, 0.45);
+  color: var(--silver-200);
 }
 
 .side-nav-group {
@@ -1769,10 +1882,72 @@ a.source-row {
   }
 
   .side-nav,
-  .inspector,
   .pane-resizer,
   .bottom-resizer {
     display: none;
+  }
+
+  .inspector {
+    display: none;
+  }
+
+  .inspector.overlay-ready {
+    display: block;
+    position: fixed;
+    z-index: 29;
+    top: 58px;
+    right: 0;
+    bottom: 34px;
+    width: min(22rem, 92vw);
+    border-left: 1px solid rgba(212, 175, 55, 0.18);
+  }
+
+  .app-shell.no-status .inspector.overlay-ready {
+    bottom: 0;
+  }
+
+  .inspector-scrim {
+    display: block;
+    position: fixed;
+    z-index: 28;
+    inset: 58px 0 34px;
+    border: 0;
+    padding: 0;
+    background: rgba(5, 12, 24, 0.55);
+  }
+
+  .app-shell.no-status .inspector-scrim {
+    bottom: 0;
+  }
+
+  .workspace-subnav {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+    overflow-x: auto;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.18);
+    background: rgba(10, 22, 40, 0.92);
+  }
+
+  .workspace-subnav button {
+    flex: 0 0 auto;
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    background: transparent;
+    color: var(--silver-400);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .workspace-subnav button.active,
+  .workspace-subnav button:hover {
+    color: var(--navy-950);
+    background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+    border-color: transparent;
   }
 
   .system-pills.compact {
@@ -2028,7 +2203,15 @@ a.source-row {
 
 .download-actions {
   display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.download-hint {
+  font-size: 0.78rem;
+  color: var(--silver-400);
+  font-weight: 500;
 }
 
 .file-btn {
@@ -2430,14 +2613,19 @@ a.source-row {
   border-color: rgba(212, 175, 55, 0.22);
 }
 
-.islem-compose textarea {
-  min-height: 6rem;
-  resize: vertical;
+.islem-compose textarea,
+.islem-compose input[type="text"],
+.islem-compose input:not([type]) {
   background: rgba(5, 12, 24, 0.7);
   color: var(--silver-200);
   border: 1px solid rgba(212, 175, 55, 0.22);
   border-radius: 8px;
   padding: 0.65rem 0.75rem;
+}
+
+.islem-compose textarea {
+  min-height: 6rem;
+  resize: vertical;
 }
 
 .islem-compose-actions > button[type="submit"] {
@@ -3007,4 +3195,296 @@ a.source-row {
   margin: 0.7rem 0 0;
   font-size: 0.84rem;
   color: var(--silver-200);
+}
+
+.theme-choice {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.theme-choice button {
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: rgba(8, 16, 30, 0.55);
+  color: var(--silver-200);
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+  font-weight: 600;
+}
+
+.theme-choice button.active {
+  background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+  color: var(--navy-950);
+  border-color: transparent;
+}
+
+.shelf-empty {
+  margin: 0.35rem 0 0.7rem;
+  font-size: 0.78rem;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --navy-950: #f3ecdc;
+  --navy-900: #ebe3d0;
+  --navy-800: #e2d8c2;
+  --navy-700: #d4c7ab;
+  --gold-200: #6e5414;
+  --gold-400: #8a6a18;
+  --gold-500: #b8962c;
+  --gold-600: #9a7820;
+  --gold-800: #5c4510;
+  --silver-200: #1c160c;
+  --silver-400: #5c5346;
+  --steel: #7a7164;
+  --danger: #9b2c2c;
+  --source: #2f6a4d;
+  --shadow-gold: 0 0 0 1px rgba(154, 120, 32, 0.2), 0 18px 40px rgba(48, 36, 12, 0.08);
+}
+
+html[data-theme="light"] body {
+  background: var(--navy-950);
+  color: var(--silver-200);
+}
+
+html[data-theme="light"] .app-shell {
+  background:
+    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(184, 150, 44, 0.1), transparent 52%),
+    var(--navy-950);
+}
+
+html[data-theme="light"] .topbar {
+  background: linear-gradient(180deg, #fffdf7, #f4ead6);
+  border-bottom-color: rgba(154, 120, 32, 0.22);
+}
+
+html[data-theme="light"] .workspace-subnav {
+  background: #f4ead6;
+  border-bottom-color: rgba(154, 120, 32, 0.22);
+}
+
+html[data-theme="light"] .workspace-subnav button {
+  color: var(--silver-400);
+  border-color: rgba(154, 120, 32, 0.28);
+}
+
+html[data-theme="light"] .side-nav,
+html[data-theme="light"] .inspector {
+  background: #faf6ec;
+  border-color: rgba(154, 120, 32, 0.16);
+}
+
+html[data-theme="light"] .status-bar {
+  background: #efe6d2;
+  border-top-color: rgba(154, 120, 32, 0.18);
+  color: var(--steel);
+}
+
+html[data-theme="light"] .main-pane,
+html[data-theme="light"] .settings-pane,
+html[data-theme="light"] .admin-pane {
+  background: #efe6d2;
+}
+
+html[data-theme="light"] .side-nav-group-title {
+  color: rgba(92, 83, 70, 0.72);
+}
+
+html[data-theme="light"] .theme-toggle {
+  background: transparent;
+  color: var(--gold-400);
+  border-color: rgba(154, 120, 32, 0.28);
+}
+
+html[data-theme="light"] .password-toggle {
+  color: var(--silver-400);
+}
+
+html[data-theme="light"] .password-toggle:hover,
+html[data-theme="light"] .password-toggle[aria-pressed="true"] {
+  color: var(--gold-400);
+}
+
+html[data-theme="light"] .account-menu-toggle {
+  background: #fffdf8;
+  color: var(--silver-200);
+  border-color: rgba(154, 120, 32, 0.28);
+}
+
+html[data-theme="light"] .theme-toggle:hover {
+  color: #1a1204;
+}
+
+html[data-theme="light"] .account-menu-toggle:hover,
+html[data-theme="light"] .account-menu-toggle.open {
+  color: #1a1204;
+}
+
+html[data-theme="light"] .account-menu-panel {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.22);
+  box-shadow: 0 16px 36px rgba(48, 36, 12, 0.12);
+}
+
+html[data-theme="light"] .account-menu-panel a:hover,
+html[data-theme="light"] .account-menu-panel button:hover {
+  background: rgba(184, 150, 44, 0.12);
+}
+
+html[data-theme="light"] .sys-pill {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.22);
+  color: var(--silver-400);
+}
+
+html[data-theme="light"] .sys-pill.ok {
+  color: #215c40;
+  border-color: rgba(47, 106, 77, 0.35);
+}
+
+html[data-theme="light"] .sys-pill.down {
+  color: #8a3030;
+  border-color: rgba(155, 44, 44, 0.35);
+}
+
+html[data-theme="light"] .query-bar,
+html[data-theme="light"] .bottom-tabs,
+html[data-theme="light"] .bottom-panel {
+  background: #f7f1e3;
+  border-color: rgba(154, 120, 32, 0.16);
+}
+
+html[data-theme="light"] .bottom-tabs button.active {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.22);
+}
+
+html[data-theme="light"] .query-bar input,
+html[data-theme="light"] .query-bar.stacked textarea,
+html[data-theme="light"] .islem-compose textarea,
+html[data-theme="light"] .islem-compose input[type="text"],
+html[data-theme="light"] .islem-compose input:not([type]),
+html[data-theme="light"] .islem-compose .kalip-select,
+html[data-theme="light"] .surec-input textarea,
+html[data-theme="light"] .settings-card input,
+html[data-theme="light"] .trace-node {
+  background: #fffdf8;
+  color: var(--silver-200);
+  border-color: rgba(154, 120, 32, 0.28);
+}
+
+html[data-theme="light"] .answer,
+html[data-theme="light"] .settings-card,
+html[data-theme="light"] .admin-dossier,
+html[data-theme="light"] .evrak-draft,
+html[data-theme="light"] .mini-deadline,
+html[data-theme="light"] .theme-choice button {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.18);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .theme-choice button.active {
+  background: linear-gradient(180deg, var(--gold-500), var(--gold-600));
+  color: #1a1204;
+  border-color: transparent;
+}
+
+html[data-theme="light"] .download-actions button {
+  background: #fffdf8;
+  color: var(--gold-400);
+  border-color: rgba(154, 120, 32, 0.3);
+}
+
+html[data-theme="light"] .sheet-head .download-actions button {
+  background: #f8f3e6;
+  color: #6f5210;
+}
+
+html[data-theme="light"] .stage-rail li.current,
+html[data-theme="light"] .last-day {
+  color: #1d5c3c;
+}
+
+html[data-theme="light"] .deadline-tile {
+  background: #fffdf8;
+  color: var(--silver-200);
+  border-color: rgba(47, 106, 77, 0.28);
+}
+
+html[data-theme="light"] .deadline-tile span,
+html[data-theme="light"] .deadline-tile em {
+  color: var(--silver-400);
+}
+
+html[data-theme="light"] .deadline-tile strong {
+  color: #1d5c3c;
+}
+
+html[data-theme="light"] .deadline-tile.selected {
+  background: #f2f6ef;
+  border-color: #2f6a4d;
+}
+
+html[data-theme="light"] .deadline-tile.missed {
+  background: #fbf3f1;
+  border-color: #9b2c2c;
+  color: #7a1f1f;
+}
+
+html[data-theme="light"] .deadline-tile.missed strong {
+  color: #7a1f1f;
+}
+
+html[data-theme="light"] .deadline-card.missed {
+  background: #fbf3f1;
+}
+
+html[data-theme="light"] .graph-node circle,
+html[data-theme="light"] .graph-node rect {
+  fill: #fffdf8;
+  stroke: #8a7340;
+}
+
+html[data-theme="light"] .graph-node.decision circle,
+html[data-theme="light"] .graph-node.decision rect {
+  fill: #f4ead4;
+  stroke: var(--gold-600);
+}
+
+html[data-theme="light"] .graph-edge {
+  stroke: #a89878;
+}
+
+html[data-theme="light"] .graph-stats,
+html[data-theme="light"] .class-card,
+html[data-theme="light"] .reasoning-panel,
+html[data-theme="light"] .agent-rail li,
+html[data-theme="light"] .stage-map li,
+html[data-theme="light"] .admin-stats span,
+html[data-theme="light"] .admin-users button,
+html[data-theme="light"] .admin-create input,
+html[data-theme="light"] .admin-create select,
+html[data-theme="light"] .admin-actions select {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.18);
+  color: var(--silver-200);
+}
+
+html[data-theme="light"] .legend-dot {
+  background: #fffdf8;
+  border-color: #8a7340;
+}
+
+html[data-theme="light"] .login-screen.cinematic {
+  color-scheme: dark;
+  background: #05070c;
+  --navy-950: #050c18;
+  --navy-900: #0a1628;
+  --gold-200: #f6e7b0;
+  --gold-400: #e8c56a;
+  --gold-500: #d4af37;
+  --gold-600: #b8942a;
+  --silver-200: #e8eef6;
+  --silver-400: #a8b4c8;
+  --steel: #8fa0b8;
 }

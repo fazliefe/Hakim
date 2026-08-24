@@ -35,10 +35,10 @@ GENELGE
 };
 
 export const KAMU_FALLBACK = [
-  { id: "ust_yazi", title: "Üst yazı / havale", when: "Gelen evrak havalesi", makam: "Evrak kayıt", family: "kamu", legal_basis: [], sections: [] },
-  { id: "bilgi_yazisi", title: "Bilgi yazısı", when: "Duyuru / bilgilendirme", makam: "Dağıtım yerleri", family: "kamu", legal_basis: [], sections: [] },
-  { id: "olur", title: "Olur", when: "Makama arz", makam: "Üst makam", family: "kamu", legal_basis: [], sections: [] },
-  { id: "cevap_yazisi", title: "Cevap yazısı", when: "İlgi yazıya cevap", makam: "Cevap veren birim", family: "kamu", legal_basis: [], sections: [] },
+  { id: "ust_yazi", title: "Üst Yazı / Havale", when: "Gelen Evrak Havalesi", makam: "Evrak Kayıt", family: "kamu", legal_basis: [], sections: [] },
+  { id: "bilgi_yazisi", title: "Bilgi Yazısı", when: "Duyuru / Bilgilendirme", makam: "Dağıtım Yerleri", family: "kamu", legal_basis: [], sections: [] },
+  { id: "olur", title: "Olur", when: "Makama Arz", makam: "Üst Makam", family: "kamu", legal_basis: [], sections: [] },
+  { id: "cevap_yazisi", title: "Cevap Yazısı", when: "İlgi Yazıya Cevap", makam: "Cevap Veren Birim", family: "kamu", legal_basis: [], sections: [] },
 ];
 
 export const SABLON_BLOCK_LABELS: Record<string, string> = {
@@ -51,6 +51,6 @@ export const SABLON_BLOCK_LABELS: Record<string, string> = {
   olur: "Olur",
   ek: "Ek",
   dagitim: "Dağıtım",
-  onay: "Onay notu",
+  onay: "Onay Notu",
   acele: "Acele",
 };

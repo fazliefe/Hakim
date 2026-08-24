@@ -3,21 +3,12 @@
 import { FormEvent, useState } from "react";
 import { DocumentAnalysis, analyzeEvrakFile, analyzeWorkspace } from "@/lib/api";
 
-export const SAMPLE_EVRAK = `T.C.
-ANKARA 4. AĞIR CEZA MAHKEMESİ
-GEREKÇELİ KARAR
-
-Sanığın 5237 sayılı TCK'nın 158/1-f maddesinde düzenlenen nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. Hükmün istinaf kanun yolunun açık olduğuna.
-
-Karar tarihi: 01.08.2026
-Tebliğ tarihi: 14.08.2026`;
-
 export function useDocumentAnalysis(
   path: "/v1/evrak" | "/v1/surec" | "/v1/islem" | "/v1/senaryo",
   initialAction?: string,
   initialText?: string,
 ) {
-  const [text, setText] = useState(initialText ?? (path === "/v1/islem" ? "" : SAMPLE_EVRAK));
+  const [text, setText] = useState(initialText ?? "");
   const [action, setAction] = useState(initialAction ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,22 +74,22 @@ export function useDocumentAnalysis(
     }
   }
 
-  return { text, setText, action, setAction, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName };
+  return { text, setText, action, setAction, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName, setFileName };
 }
 
 export const TYPE_LABEL: Record<string, string> = {
   tebligat: "Tebligat",
   iddianame: "İddianame",
-  mahkeme_karari: "Mahkeme kararı",
+  mahkeme_karari: "Mahkeme Kararı",
   dilekce: "Dilekçe",
-  ust_yazi: "Üst yazı",
+  ust_yazi: "Üst Yazı",
   olur: "Olur",
   genelge: "Genelge",
   tutanak: "Tutanak",
   rapor: "Rapor",
-  cevap_yazisi: "Cevap yazısı",
-  bilgi_yazisi: "Bilgi yazısı",
-  belirsiz: "Tür belirsiz",
+  cevap_yazisi: "Cevap Yazısı",
+  bilgi_yazisi: "Bilgi Yazısı",
+  belirsiz: "Tür Belirsiz",
 };
 
 export const FIELD_LABEL: Record<string, string> = {
@@ -108,8 +99,8 @@ export const FIELD_LABEL: Record<string, string> = {
   kurum: "Kurum",
   muhatap: "Muhatap",
   tarih: "Tarih",
-  teblig: "Tebliğ tarihi",
-  karar: "Karar tarihi",
+  teblig: "Tebliğ Tarihi",
+  karar: "Karar Tarihi",
   ek: "Ek",
   dagitim: "Dağıtım",
 };
@@ -118,7 +109,7 @@ export const NATURE_LABEL: Record<string, string> = {
   ceza: "Ceza",
   idare: "İdare",
   anayasa: "Anayasa",
-  kamu: "Kamu idaresi",
+  kamu: "Kamu İdaresi",
   belirsiz: "Belirsiz",
 };
 
@@ -127,6 +118,6 @@ export const STAGE_LABEL: Record<string, string> = {
   kovusturma: "Kovuşturma",
   istinaf: "İstinaf",
   temyiz: "Temyiz",
-  bireysel_basvuru: "Bireysel başvuru",
+  bireysel_basvuru: "Bireysel Başvuru",
   belirsiz: "Belirsiz",
 };

@@ -5,6 +5,11 @@ import hmac
 import secrets
 
 ITERATIONS = 210_000
+MIN_PASSWORD_LENGTH = 6
+
+
+def password_too_short(password: str) -> bool:
+    return len(password or "") < MIN_PASSWORD_LENGTH
 
 
 def hash_password(password: str) -> str:

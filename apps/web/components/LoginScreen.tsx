@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FormEvent, useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { InteractiveScale } from "@/components/InteractiveScale";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   loginAccount,
   registerAccount,
@@ -49,7 +50,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [code, setCode] = useState("");
-  const [previewCode, setPreviewCode] = useState<string | null>(null);
+  const [mailOffline, setMailOffline] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -65,6 +66,7 @@ export function LoginScreen() {
     if (next === "giris" || next === "kayit" || next === "unuttum") {
       setPassword("");
       setPasswordConfirm("");
+      setMailOffline(false);
       if (next !== "unuttum") setCode("");
     }
   }
@@ -82,10 +84,14 @@ export function LoginScreen() {
         }
         const pending = await registerAccount(username.trim(), email.trim(), password, username.trim());
         setIdentifier(username.trim());
-        setPreviewCode(pending.preview_code ?? null);
-        setCode(pending.preview_code ?? "");
+        setMailOffline(!pending.mailed);
+        setCode("");
         setMode("dogrula");
-        setInfo(pending.message);
+        setInfo(
+          pending.mailed
+            ? pending.message
+            : "E-posta sunucusu bağlı değil. Kod iletilmedi.",
+        );
         return;
       }
       if (mode === "dogrula") {
@@ -95,12 +101,16 @@ export function LoginScreen() {
       }
       if (mode === "unuttum") {
         const result = await requestPasswordReset(identifier.trim());
-        setPreviewCode(result.preview_code ?? null);
-        setCode(result.preview_code ?? "");
+        setMailOffline(!result.mailed);
+        setCode("");
         setPassword("");
         setPasswordConfirm("");
         setMode("reset-kod");
-        setInfo(result.message ?? "E-postanıza gönderilen kodu girin.");
+        setInfo(
+          result.mailed
+            ? result.message ?? "E-postanıza gönderilen kodu girin."
+            : "E-posta sunucusu bağlı değil. Kod iletilmedi.",
+        );
         return;
       }
       if (mode === "reset-kod") {
@@ -120,7 +130,6 @@ export function LoginScreen() {
           return;
         }
         await resetPassword(identifier.trim(), code.trim(), password);
-        setPreviewCode(null);
         setCode("");
         setPassword("");
         setPasswordConfirm("");
@@ -150,9 +159,8 @@ export function LoginScreen() {
         mode === "reset-kod"
           ? await requestPasswordReset(identifier.trim())
           : await resendVerification(identifier.trim());
-      setPreviewCode(result.preview_code ?? null);
-      setInfo(result.mailed ? "Yeni kod e-postanıza gönderildi." : "Yeni kod oluşturuldu.");
-      if (result.preview_code) setCode(result.preview_code);
+      setMailOffline(!result.mailed);
+      setInfo(result.mailed ? "Yeni kod e-postanıza gönderildi." : "E-posta sunucusu bağlı değil. Kod iletilmedi.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kod gönderilemedi");
     } finally {
@@ -162,15 +170,15 @@ export function LoginScreen() {
 
   const title =
     mode === "kayit"
-      ? "Hesap oluştur"
+      ? "Hesap Oluştur"
       : mode === "dogrula"
-        ? "E-posta doğrulama"
+        ? "E-Posta Doğrulama"
         : mode === "unuttum"
-          ? "Şifremi unuttum"
+          ? "Şifremi Unuttum"
           : mode === "reset-kod"
-            ? "Sıfırlama kodu"
+            ? "Sıfırlama Kodu"
             : mode === "yeni-sifre"
-              ? "Yeni şifre"
+              ? "Yeni Şifre"
               : "Giriş";
   const slogan =
     mode === "kayit"
@@ -188,16 +196,16 @@ export function LoginScreen() {
   const submitLabel = loading
     ? "İşleniyor…"
     : mode === "kayit"
-      ? "Kayıt ol"
+      ? "Kayıt Ol"
       : mode === "dogrula"
-        ? "Doğrula ve gir"
+        ? "Doğrula ve Gir"
         : mode === "unuttum"
-          ? "Kod gönder"
+          ? "Kod Gönder"
           : mode === "reset-kod"
-            ? "Kodu doğrula"
+            ? "Kodu Doğrula"
             : mode === "yeni-sifre"
-              ? "Şifreyi güncelle"
-              : "Giriş yap";
+              ? "Şifreyi Güncelle"
+              : "Giriş Yap";
 
   return (
     <main className="login-screen cinematic">
@@ -206,12 +214,12 @@ export function LoginScreen() {
       </div>
 
       <header className="login-titlecard">
-        <p className="login-kicker">Kaynak odaklı hukuk zekâsı</p>
+        <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>
         <h1 className="login-hero-title">HÂKİM</h1>
         <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
       </header>
 
-      <section className="login-panel" aria-label="HÂKİM giriş">
+      <section className="login-panel" aria-label="HÂKİM Giriş">
         <div className="login-card">
           <Image
             src="/hakim-emblem.png"
@@ -230,7 +238,7 @@ export function LoginScreen() {
                 Giriş
               </button>
               <button type="button" className={mode === "kayit" ? "active" : ""} onClick={() => go("kayit")}>
-                Kayıt ol
+                Kayıt Ol
               </button>
             </div>
           ) : null}
@@ -267,7 +275,7 @@ export function LoginScreen() {
             ) : null}
             {mode === "giris" || mode === "unuttum" ? (
               <label>
-                Kullanıcı adı
+                Kullanıcı Adı
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -280,11 +288,11 @@ export function LoginScreen() {
             {mode === "dogrula" || mode === "reset-kod" ? (
               <>
                 <label>
-                  Kullanıcı adı
+                  Kullanıcı Adı
                   <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
                 </label>
                 <label>
-                  {mode === "reset-kod" ? "Sıfırlama kodu" : "Doğrulama kodu"}
+                  {mode === "reset-kod" ? "Sıfırlama Kodu" : "Doğrulama Kodu"}
                   <input
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
@@ -294,36 +302,32 @@ export function LoginScreen() {
                     required
                   />
                 </label>
-                {previewCode ? (
-                  <p className="login-code-hint">
-                    E-posta sunucusu bağlı değil. Kod: <strong>{previewCode}</strong>
-                  </p>
+                {mailOffline ? (
+                  <p className="login-code-hint">E-posta sunucusu bağlı değil. Kod iletilmedi.</p>
                 ) : null}
               </>
             ) : null}
             {mode === "giris" || mode === "kayit" || mode === "yeni-sifre" ? (
               <label>
                 Şifre
-                <input
-                  type="password"
+                <PasswordInput
                   autoComplete={mode === "giris" ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "giris" ? "Şifreniz" : "Şifrenizi oluşturun"}
+                  placeholder={mode === "giris" ? "Şifreniz" : "En Az 6 Karakter"}
                   required
-                  minLength={6}
+                  minLength={mode === "giris" ? 1 : 6}
                 />
               </label>
             ) : null}
             {mode === "kayit" || mode === "yeni-sifre" ? (
               <label>
                 Şifre Tekrarı
-                <input
-                  type="password"
+                <PasswordInput
                   autoComplete="new-password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
-                  placeholder="Şifreyi tekrar girin"
+                  placeholder="Şifreyi Tekrar Girin"
                   required
                   minLength={6}
                 />
@@ -331,7 +335,7 @@ export function LoginScreen() {
             ) : null}
             {mode === "giris" ? (
               <button type="button" className="login-forgot" onClick={() => go("unuttum")}>
-                Şifremi unuttum
+                Şifremi Unuttum
               </button>
             ) : null}
             {info ? <p className="login-info">{info}</p> : null}
@@ -342,12 +346,12 @@ export function LoginScreen() {
               </button>
               {mode === "dogrula" || mode === "reset-kod" ? (
                 <button className="btn-ghost" type="button" onClick={() => void onResend()} disabled={loading}>
-                  Kodu yeniden gönder
+                  Kodu Yeniden Gönder
                 </button>
               ) : null}
               {mode === "dogrula" || mode === "unuttum" || mode === "reset-kod" ? (
                 <button className="btn-ghost" type="button" onClick={() => go("giris")}>
-                  Girişe dön
+                  Girişe Dön
                 </button>
               ) : null}
             </div>

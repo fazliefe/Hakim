@@ -7,7 +7,7 @@ import { STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const SIDE = [
   { id: "asama", label: "Aşama" },
-  { id: "kanun", label: "Kanun yolları" },
+  { id: "kanun", label: "Kanun Yolları" },
   { id: "sureler", label: "Süreler" },
 ];
 
@@ -15,8 +15,8 @@ const REMEDY_LABEL: Record<string, string> = {
   itiraz: "İtiraz",
   istinaf: "İstinaf",
   temyiz: "Temyiz",
-  bireysel_basvuru: "Bireysel başvuru",
-  istinaf_idari: "İdari istinaf",
+  bireysel_basvuru: "Bireysel Başvuru",
+  istinaf_idari: "İdari İstinaf",
   sikayet: "Şikayet",
 };
 
@@ -41,7 +41,7 @@ export function SurecWorkbench() {
       onSidebarSelect={setSide}
       quote="“Süre tahmini değil, hesaptır.”"
       quoteMeta="CMK 5271 · TCK 5237"
-      inspectorTitle="Süre kartı"
+      inspectorTitle="Süre Kartı"
       inspector={
         selected ? (
           <div className={`deadline-card ${selected.last_day && missed.includes(selected) ? "missed" : ""}`}>
@@ -66,33 +66,34 @@ export function SurecWorkbench() {
       }
       footer={
         loading
-          ? "Aşama ve süreler hesaplanıyor…"
+          ? "Aşama ve Süreler Hesaplanıyor…"
           : result
             ? `${STAGE_LABEL[result.classification.stage] ?? result.classification.stage} · ${result.deadlines.length} süre · ${writerLabel(result.writer)}`
-            : "Süreç bekleniyor"
+            : "Süreç Bekleniyor"
       }
     >
       <section className="main-pane surec-pane">
         <div className="pane-hero">
-          <h1>{side === "asama" ? "Aşama" : side === "kanun" ? "Kanun yolları" : "Süreler"}</h1>
+          <h1>{side === "asama" ? "Aşama" : side === "kanun" ? "Kanun Yolları" : "Süreler"}</h1>
           <p>Aşama, kanun yolu ve son gün — LLM değil, süre motoru.</p>
         </div>
         <form className="surec-input" onSubmit={submit}>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            aria-label="Karar veya tebligat metni"
+            aria-label="Karar veya Tebligat Metni"
+            placeholder="Karar veya tebligat metnini yapıştırın."
             rows={4}
             spellCheck={false}
           />
           <button type="submit" disabled={loading || text.trim().length < 8}>
-            {loading ? "Hesaplanıyor…" : "Süreleri hesapla"}
+            {loading ? "Hesaplanıyor…" : "Süreleri Hesapla"}
           </button>
         </form>
         {error ? <p className="error">{error}</p> : null}
         {result?.draft ? (
           <article className="evrak-draft" style={{ margin: "0 0.9rem 1rem" }}>
-            <h2>Usul anlatımı</h2>
+            <h2>Usul Anlatımı</h2>
             <p className="muted" style={{ fontSize: 12 }}>
               Süre rakamları kural motorundan. Yazıcı: {writerLabel(result.writer)}
               {result.writer_error ? ` · ${result.writer_error}` : ""}
@@ -115,7 +116,7 @@ export function SurecWorkbench() {
           <div className="deadline-board" style={{ padding: "0 0.9rem 1rem" }}>
             {(result.classification.remedies.length ? result.classification.remedies : ["belirsiz"]).map((remedy) => (
               <div key={remedy} className="deadline-tile">
-                <span>Kanun yolu</span>
+                <span>Kanun Yolu</span>
                 <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
                 <em>{result.classification.label}</em>
               </div>

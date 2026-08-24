@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
 import { AppShell, InspectorMode } from "@/components/AppShell";
@@ -23,7 +23,14 @@ type SideView = "arastirmalar" | "gecmis" | "kaydedilen";
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
   { id: "gecmis", label: "Geçmiş" },
-  { id: "kaydedilen", label: "Kaydedilen maddeler" },
+  { id: "kaydedilen", label: "Kaydedilen Maddeler" },
+];
+
+const RESEARCH_TABS: Array<[Tab, string]> = [
+  ["metin", "Metin"],
+  ["kaynaklar", "Kaynaklar"],
+  ["graf", "Bilgi Grafı"],
+  ["iz", "Arama İzi"],
 ];
 
 const HISTORY_KEY = "hakim-research-history";
@@ -81,13 +88,13 @@ function isDecision(item: Evidence) {
 
 function sourceHeading(item: Evidence) {
   if (isDecision(item)) {
-    return item.title || item.document_id || "Mahkeme kararı";
+    return item.title || item.document_id || "Mahkeme Kararı";
   }
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
 
 export function ResearchWorkspace() {
-  const [query, setQuery] = useState("nitelikli dolandırıcılıkta banka hesabının kullanılması");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResponse | null>(null);
@@ -97,8 +104,7 @@ export function ResearchWorkspace() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [saved, setSaved] = useState<SavedArticle[]>([]);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("collapsed");
-  const [bottomHeight, setBottomHeight] = useState(190);
-  const bottomDrag = useRef({ startY: 0, startH: 190 });
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
@@ -111,6 +117,7 @@ export function ResearchWorkspace() {
   }, [result, selected]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const reading = saved.find((item) => item.id === readingId) ?? null;
   const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
 
   function persistHistory(next: HistoryEntry[]) {
@@ -130,7 +137,6 @@ export function ResearchWorkspace() {
 
   function onTab(next: Tab) {
     setTab(next);
-    if (next === "kaynaklar") setInspectorMode("open");
   }
 
   async function runQuery(text: string) {
@@ -170,18 +176,6 @@ export function ResearchWorkspace() {
     ]);
   }
 
-  function onBottomStart(event: PointerEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    bottomDrag.current = { startY: event.clientY, startH: bottomHeight };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onBottomMove(event: PointerEvent<HTMLButtonElement>) {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-    const next = bottomDrag.current.startH - (event.clientY - bottomDrag.current.startY);
-    setBottomHeight(Math.min(420, Math.max(120, next)));
-  }
-
   const inspector = (
     <div className="source-stack">
       {result?.evidence.length ? (
@@ -205,11 +199,11 @@ export function ResearchWorkspace() {
             <span className="badge">{selectedEvidence.authority || "resmi"}</span>
           </div>
           <div className="source-title">
-            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
+            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız Karar" : "Başlıksız Madde")}
           </div>
           <p className="source-content">{selectedEvidence.content}</p>
           <button type="button" className="side-action" onClick={toggleSave}>
-            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
+            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan Çıkar" : "Maddeyi Kaydet"}
           </button>
         </article>
       ) : null}
@@ -219,10 +213,16 @@ export function ResearchWorkspace() {
   return (
     <AppShell
       module="arastirma"
-      sidebarTitle="Hukuki araştırma"
+      sidebarTitle="Hukuki Araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
-      onSidebarSelect={(id) => setSide(id as SideView)}
+      onSidebarSelect={(id) => {
+        const next = id as SideView;
+        setSide(next);
+        if (next === "kaydedilen" && saved[0] && !saved.some((item) => item.id === readingId)) {
+          setReadingId(saved[0].id);
+        }
+      }}
       inspectorTitle="Kaynak"
       inspector={inspector}
       inspectorMode={inspectorMode}
@@ -233,16 +233,16 @@ export function ResearchWorkspace() {
           <div className="research-scroll">
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
-              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
+              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen Maddeler"}</h1>
               <p>
                 {side === "gecmis"
                   ? "Önceki araştırmalar. Tıklayınca yeniden çalışır."
-                  : "Tuttuğunuz madde ve kararlar."}
+                  : "Tıklayınca madde metni açılır."}
               </p>
             </div>
           ) : tab !== "graf" && tab !== "iz" ? (
           <div className="pane-hero">
-            <h1>Hukuki araştırma</h1>
+            <h1>Hukuki Araştırma</h1>
             <p>Cevap, madde metni ve atıflarla birlikte gelir.</p>
           </div>
           ) : null}
@@ -254,10 +254,10 @@ export function ResearchWorkspace() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Hukuki sorunuzu yazın… örn. Madde 158"
-              aria-label="Hukuki soru"
+              aria-label="Hukuki Soru"
             />
             <button type="submit" disabled={loading || query.trim().length < 2}>
-              {loading ? "Kaynaklar tartılıyor…" : "Araştır"}
+              {loading ? "Kaynaklar Tartılıyor…" : "Araştır"}
             </button>
           </form>
 
@@ -281,7 +281,7 @@ export function ResearchWorkspace() {
                 onSelect={openSource}
               />
             ) : null}
-            {(!result && !error && !loading) || (result && !loading && tab !== "graf" && tab !== "iz") ? (
+            {(!result && !error && !loading) || (result && !loading && tab === "metin") ? (
               <>
                 {!result && !error ? (
                   <div className="empty-state">
@@ -305,6 +305,7 @@ export function ResearchWorkspace() {
                 ) : null}
               </>
             ) : null}
+            {result && !loading && tab === "kaynaklar" ? inspector : null}
           </div>
           </> ) : (
           <div className="content-area">
@@ -330,76 +331,46 @@ export function ResearchWorkspace() {
             ) : null}
             {side === "kaydedilen" ? (
               saved.length ? (
-                saved.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="source-row"
-                    onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
-                    title="Kayıttan çıkarmak için tıklayın"
-                  >
-                    {item.heading}
-                    <span className="muted"> — tıkla, kayıttan çıkar</span>
-                  </button>
-                ))
+                <>
+                  {saved.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`source-row ${readingId === item.id ? "selected" : ""}`}
+                      onClick={() => setReadingId(item.id)}
+                    >
+                      {item.heading}
+                    </button>
+                  ))}
+                  {reading ? (
+                    <article className="source-detail">
+                      <div className="source-title">{reading.heading}</div>
+                      <p className="source-content">{reading.content}</p>
+                      <button
+                        type="button"
+                        className="side-action"
+                        onClick={() => {
+                          persistSaved(saved.filter((row) => row.id !== reading.id));
+                          setReadingId(null);
+                        }}
+                      >
+                        Kayıttan Çıkar
+                      </button>
+                    </article>
+                  ) : (
+                    <p className="muted">Bir madde seçin.</p>
+                  )}
+                </>
               ) : (
-                <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
+                <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi Kaydet» deyin.</p>
               )
             ) : null}
           </div>
           )}
           </div>
-          {side === "arastirmalar" && tab !== "graf" && tab !== "iz" ? (
-            <>
-              <button
-                type="button"
-                className="bottom-resizer"
-                aria-label="Alt paneli boyutlandır"
-                onPointerDown={onBottomStart}
-                onPointerMove={onBottomMove}
-              />
-              <div className="bottom-tabs" role="tablist">
-                {(
-                  [
-                    ["metin", "Metin"],
-                    ["kaynaklar", "Kaynaklar"],
-                    ["graf", "Bilgi grafı"],
-                    ["iz", "Arama izi"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    className={tab === id ? "active" : ""}
-                    onClick={() => onTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="bottom-panel" style={{ height: bottomHeight }} role="tabpanel">
-                {!result ? <p className="muted">Sonuç bekleniyor.</p> : null}
-                {result && tab === "metin" ? (
-                  <p className="muted">
-                    Cevaptaki atıflar sağ panelde kaynağı açar. {result.evidence.filter((e) => e.used_in_answer).length} kaynak kullanıldı.
-                  </p>
-                ) : null}
-                {result && tab === "kaynaklar" ? (
-                  <p className="muted">Kaynak açıklamaları sağ panelde. Atıfa veya Kaynaklar’a tıklayın.</p>
-                ) : null}
-              </div>
-            </>
-          ) : side === "arastirmalar" ? (
+          {side === "arastirmalar" ? (
             <div className="bottom-tabs" role="tablist">
-              {(
-                [
-                  ["metin", "Metin"],
-                  ["kaynaklar", "Kaynaklar"],
-                  ["graf", "Bilgi grafı"],
-                  ["iz", "Arama izi"],
-                ] as const
-              ).map(([id, label]) => (
+              {RESEARCH_TABS.map(([id, label]) => (
                 <button
                   key={id}
                   type="button"

@@ -12,6 +12,8 @@ import {
   revokeOwnSessions,
   updateAccountProfile,
 } from "@/lib/api";
+import { PasswordInput } from "@/components/PasswordInput";
+import { HakimTheme, applyTheme, readTheme } from "@/lib/theme";
 
 function when(value?: string | null) {
   if (!value) return "—";
@@ -23,6 +25,7 @@ function when(value?: string | null) {
 }
 
 const SECTIONS = [
+  { id: "gorunum", label: "Görünüm" },
   { id: "profil", label: "Profil" },
   { id: "eposta", label: "E-posta" },
   { id: "sifre", label: "Şifre" },
@@ -33,7 +36,8 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function SettingsPanel() {
   const [user, setUser] = useState<AuthUser | null>(getStoredUser());
-  const [section, setSection] = useState<SectionId>("profil");
+  const [section, setSection] = useState<SectionId>("gorunum");
+  const [theme, setTheme] = useState<HakimTheme>("dark");
   const [displayName, setDisplayName] = useState(getStoredUser()?.display_name || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -41,7 +45,7 @@ export function SettingsPanel() {
   const [emailPassword, setEmailPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [emailCode, setEmailCode] = useState("");
-  const [previewCode, setPreviewCode] = useState<string | null>(null);
+  const [mailOffline, setMailOffline] = useState(false);
   const [pendingEmail, setPendingEmail] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +55,9 @@ export function SettingsPanel() {
   const [savingSessions, setSavingSessions] = useState(false);
 
   useEffect(() => {
+    setTheme(readTheme());
+    const onTheme = () => setTheme(readTheme());
+    window.addEventListener("hakim-theme", onTheme);
     getCurrentUser()
       .then((next) => {
         setUser(next);
@@ -58,6 +65,7 @@ export function SettingsPanel() {
         if (next.pending_email) setPendingEmail(true);
       })
       .catch(() => undefined);
+    return () => window.removeEventListener("hakim-theme", onTheme);
   }, []);
 
   function flash(nextInfo: string | null, nextError: string | null = null) {
@@ -109,9 +117,12 @@ export function SettingsPanel() {
     try {
       const result = await requestEmailChange(emailPassword, newEmail.trim());
       setPendingEmail(true);
-      setPreviewCode(result.preview_code ?? null);
-      if (result.preview_code) setEmailCode(result.preview_code);
-      flash(result.message ?? "Onay kodu gönderildi.");
+      setMailOffline(!result.mailed);
+      flash(
+        result.mailed
+          ? result.message ?? "Onay kodu gönderildi."
+          : "E-posta sunucusu bağlı değil. Kod iletilmedi.",
+      );
     } catch (err) {
       flash(null, err instanceof Error ? err.message : "E-posta güncellenemedi");
     } finally {
@@ -127,7 +138,7 @@ export function SettingsPanel() {
       const next = await confirmEmailChange(emailCode.trim());
       setUser(next);
       setPendingEmail(false);
-      setPreviewCode(null);
+      setMailOffline(false);
       setNewEmail("");
       setEmailPassword("");
       setEmailCode("");
@@ -162,7 +173,7 @@ export function SettingsPanel() {
       onSidebarSelect={(id) => setSection(id as SectionId)}
       quote="“Hesap bilgileri yalnızca sizin oturumunuzdan güncellenir.”"
       quoteMeta="Ayarlar · profil, e-posta, şifre, oturum"
-      inspectorTitle="Hesap özeti"
+      inspectorTitle="Hesap Özeti"
       inspector={
         <div className="settings-meta">
           <p>
@@ -171,7 +182,7 @@ export function SettingsPanel() {
           <p>@{user?.username || "—"}</p>
           <p>{user?.email}</p>
           <p>{user?.role === "admin" ? "Yönetici" : "Kullanıcı"}</p>
-          <p>{user?.email_verified ? "E-posta doğrulanmış" : "Doğrulama bekliyor"}</p>
+          <p>{user?.email_verified ? "E-Posta Doğrulanmış" : "Doğrulama Bekliyor"}</p>
           <p>Son giriş: {when(user?.last_login_at)}</p>
         </div>
       }
@@ -180,21 +191,50 @@ export function SettingsPanel() {
       <section className="main-pane settings-pane">
         <div className="pane-hero">
           <h1>Ayarlar</h1>
-          <p>Profil, e-posta, şifre ve oturumları buradan yönetin. Kullanıcı adı sabit kalır.</p>
+          <p>Görünüm, profil, e-posta, şifre ve oturumları buradan yönetin. Kullanıcı adı sabit kalır.</p>
         </div>
         {error ? <p className="login-error">{error}</p> : null}
         {info ? <p className="login-info">{info}</p> : null}
 
         <div className="settings-grid">
+          {section === "gorunum" ? (
+            <div className="settings-card">
+              <h2>Görünüm</h2>
+              <p className="muted">Çalışma masası açık veya koyu tema kullanır. Giriş sahnesi koyu kalır.</p>
+              <div className="theme-choice">
+                <button
+                  type="button"
+                  className={theme === "light" ? "active" : ""}
+                  onClick={() => {
+                    applyTheme("light");
+                    setTheme("light");
+                  }}
+                >
+                  Açık
+                </button>
+                <button
+                  type="button"
+                  className={theme === "dark" ? "active" : ""}
+                  onClick={() => {
+                    applyTheme("dark");
+                    setTheme("dark");
+                  }}
+                >
+                  Koyu
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {section === "profil" ? (
             <form className="settings-card" onSubmit={onProfile}>
               <h2>Profil</h2>
               <label>
-                Kullanıcı adı
+                Kullanıcı Adı
                 <input value={user?.username || ""} readOnly />
               </label>
               <label>
-                Görünen ad
+                Görünen Ad
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -204,10 +244,10 @@ export function SettingsPanel() {
                 />
               </label>
               <p className="muted">
-                Rol: {user?.role === "admin" ? "yönetici" : "kullanıcı"} · kayıt {when(user?.created_at)}
+                Rol: {user?.role === "admin" ? "Yönetici" : "Kullanıcı"} · Kayıt {when(user?.created_at)}
               </p>
               <button className="btn-gold" type="submit" disabled={savingProfile}>
-                {savingProfile ? "Kaydediliyor…" : "Profili kaydet"}
+                {savingProfile ? "Kaydediliyor…" : "Profili Kaydet"}
               </button>
             </form>
           ) : null}
@@ -215,12 +255,12 @@ export function SettingsPanel() {
           {section === "eposta" ? (
             <form className="settings-card" onSubmit={pendingEmail ? onEmailConfirm : onEmailRequest}>
               <h2>E-posta</h2>
-              <p className="muted">Mevcut adres: {user?.email}</p>
-              {user?.pending_email ? <p className="muted">Bekleyen adres: {user.pending_email}</p> : null}
+              <p className="muted">Mevcut Adres: {user?.email}</p>
+              {user?.pending_email ? <p className="muted">Bekleyen Adres: {user.pending_email}</p> : null}
               {pendingEmail ? (
                 <>
                   <label>
-                    Onay kodu
+                    Onay Kodu
                     <input
                       value={emailCode}
                       onChange={(e) => setEmailCode(e.target.value)}
@@ -230,19 +270,17 @@ export function SettingsPanel() {
                       required
                     />
                   </label>
-                  {previewCode ? (
-                    <p className="login-code-hint">
-                      E-posta sunucusu bağlı değil. Kod: <strong>{previewCode}</strong>
-                    </p>
+                  {mailOffline ? (
+                    <p className="login-code-hint">E-posta sunucusu bağlı değil. Kod iletilmedi.</p>
                   ) : null}
                   <button className="btn-gold" type="submit" disabled={savingEmail}>
-                    {savingEmail ? "Doğrulanıyor…" : "Kodu doğrula"}
+                    {savingEmail ? "Doğrulanıyor…" : "Kodu Doğrula"}
                   </button>
                 </>
               ) : (
                 <>
                   <label>
-                    Yeni e-posta
+                    Yeni E-Posta
                     <input
                       type="email"
                       value={newEmail}
@@ -252,9 +290,8 @@ export function SettingsPanel() {
                     />
                   </label>
                   <label>
-                    Mevcut şifre
-                    <input
-                      type="password"
+                    Mevcut Şifre
+                    <PasswordInput
                       value={emailPassword}
                       onChange={(e) => setEmailPassword(e.target.value)}
                       autoComplete="current-password"
@@ -262,7 +299,7 @@ export function SettingsPanel() {
                     />
                   </label>
                   <button className="btn-gold" type="submit" disabled={savingEmail}>
-                    {savingEmail ? "Kod gönderiliyor…" : "Doğrulama kodu gönder"}
+                    {savingEmail ? "Kod Gönderiliyor…" : "Doğrulama Kodu Gönder"}
                   </button>
                 </>
               )}
@@ -273,9 +310,8 @@ export function SettingsPanel() {
             <form className="settings-card" onSubmit={onPassword}>
               <h2>Şifre</h2>
               <label>
-                Mevcut şifre
-                <input
-                  type="password"
+                Mevcut Şifre
+                <PasswordInput
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   autoComplete="current-password"
@@ -283,9 +319,8 @@ export function SettingsPanel() {
                 />
               </label>
               <label>
-                Yeni şifre
-                <input
-                  type="password"
+                Yeni Şifre
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
@@ -294,9 +329,8 @@ export function SettingsPanel() {
                 />
               </label>
               <label>
-                Yeni şifre tekrarı
-                <input
-                  type="password"
+                Yeni Şifre Tekrarı
+                <PasswordInput
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
                   autoComplete="new-password"
@@ -305,7 +339,7 @@ export function SettingsPanel() {
                 />
               </label>
               <button className="btn-gold" type="submit" disabled={savingPassword}>
-                {savingPassword ? "Kaydediliyor…" : "Şifreyi güncelle"}
+                {savingPassword ? "Kaydediliyor…" : "Şifreyi Güncelle"}
               </button>
             </form>
           ) : null}
@@ -319,7 +353,7 @@ export function SettingsPanel() {
                 Ayarlar menüsünü kullanın.
               </p>
               <button className="btn-gold" type="button" disabled={savingSessions} onClick={() => void onRevokeSessions()}>
-                {savingSessions ? "Kapatılıyor…" : "Diğer oturumları kapat"}
+                {savingSessions ? "Kapatılıyor…" : "Diğer Oturumları Kapat"}
               </button>
             </div>
           ) : null}

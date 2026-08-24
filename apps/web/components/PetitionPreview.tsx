@@ -63,9 +63,9 @@ export function PetitionPreview({
 }
 
 function headerLabel(layout: string, title?: string) {
-  if (layout === "resmi") return "Resmî yazı önizleme";
-  if (layout === "aym") return "Bireysel başvuru önizleme";
-  if (layout === "idari") return "İdari dava önizleme";
-  if (layout === "savcilik" || layout === "ihbar") return "Savcılık yazısı önizleme";
-  return title ? `${title} önizleme` : "Dilekçe önizleme";
+  if (layout === "resmi") return "Resmî Yazı Önizleme";
+  if (layout === "aym") return "Bireysel Başvuru Önizleme";
+  if (layout === "idari") return "İdari Dava Önizleme";
+  if (layout === "savcilik" || layout === "ihbar") return "Savcılık Yazısı Önizleme";
+  return title ? `${title} Önizleme` : "Dilekçe Önizleme";
 }

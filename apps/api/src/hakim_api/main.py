@@ -229,11 +229,18 @@ def _check_elasticsearch() -> str:
 
 def _check_neo4j() -> str:
     try:
-        from graph.neo4j_client import create_neo4j_driver
+        from neo4j import GraphDatabase
+        from graph.neo4j_client import DEFAULT_NEO4J_PASSWORD, DEFAULT_NEO4J_URI, DEFAULT_NEO4J_USER
 
-        driver = create_neo4j_driver()
-        driver.verify_connectivity()
-        driver.close()
+        driver = GraphDatabase.driver(
+            DEFAULT_NEO4J_URI,
+            auth=(DEFAULT_NEO4J_USER, DEFAULT_NEO4J_PASSWORD),
+            connection_timeout=1.5,
+        )
+        try:
+            driver.verify_connectivity()
+        finally:
+            driver.close()
         return LIVE_OK
     except Exception:
         return LIVE_DOWN

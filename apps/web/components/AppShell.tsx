@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CSSProperties, PointerEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SystemStatus, getStoredUser, getSystemStatus, isLiveCheck, logoutAccount, type AuthUser } from "@/lib/api";
+import { HakimTheme, applyTheme, readTheme } from "@/lib/theme";
 
 const OFFLINE_STATUS: SystemStatus = {
   status: "kapalı",
@@ -42,6 +43,7 @@ export type InspectorMode = "open" | "collapsed" | "hidden";
 export type SidebarItem = {
   id: string;
   label: string;
+  current?: boolean;
 };
 
 export type SidebarSection = {
@@ -85,6 +87,7 @@ export function AppShell({
   const router = useRouter();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [theme, setTheme] = useState<HakimTheme>("dark");
   const [menuOpen, setMenuOpen] = useState(false);
   const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT);
   const [navWidth, setNavWidth] = useState(NAV_DEFAULT);
@@ -93,8 +96,11 @@ export function AppShell({
 
   useEffect(() => {
     setUser(getStoredUser());
+    setTheme(readTheme());
     const onAuth = () => setUser(getStoredUser());
+    const onTheme = () => setTheme(readTheme());
     window.addEventListener("hakim-auth-updated", onAuth);
+    window.addEventListener("hakim-theme", onTheme);
     let cancelled = false;
     let inFlight: AbortController | null = null;
     let seq = 0;
@@ -130,6 +136,7 @@ export function AppShell({
       inFlight?.abort();
       window.clearInterval(timer);
       window.removeEventListener("hakim-auth-updated", onAuth);
+      window.removeEventListener("hakim-theme", onTheme);
       window.removeEventListener("mousedown", onPointer);
       window.removeEventListener("keydown", onKey);
     };
@@ -168,7 +175,9 @@ export function AppShell({
   const navSections =
     sidebarSections ??
     (sidebarItems ? [{ items: sidebarItems }] : []);
+  const navItems = navSections.flatMap((section) => section.items);
   const showInspector = inspectorMode === "open";
+  const canToggleInspector = Boolean(onInspectorModeChange) && inspectorMode !== "hidden";
 
   return (
     <div className={`app-shell${hideStatusBar ? " no-status" : ""}`} data-module={module}>
@@ -189,7 +198,7 @@ export function AppShell({
           ))}
         </nav>
         <div className="topbar-actions">
-          <div className="system-pills compact" aria-label="Sistem durumu">
+          <div className="system-pills compact" aria-label="Sistem Durumu">
             {CHECK_LABELS.map(([key, label]) => {
               const ok = isLiveCheck(status?.checks[key]);
               return (
@@ -200,6 +209,29 @@ export function AppShell({
               );
             })}
           </div>
+          <button
+            type="button"
+            className="theme-toggle"
+            aria-label={theme === "light" ? "Koyu Temaya Geç" : "Açık Temaya Geç"}
+            title={theme === "light" ? "Koyu Tema" : "Açık Tema"}
+            onClick={() => applyTheme(theme === "light" ? "dark" : "light")}
+          >
+            {theme === "light" ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M12.15 3.2a7.5 7.5 0 1 0 8.65 8.65 6.35 6.35 0 0 1-8.65-8.65z"
+                />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.55" fill="currentColor" />
+                <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                  <path d="M12 3.1v2.15M12 18.75V20.9M20.9 12h-2.15M5.25 12H3.1M18.25 5.75l-1.52 1.52M7.27 16.73 5.75 18.25M18.25 18.25l-1.52-1.52M7.27 7.27 5.75 5.75" />
+                </g>
+              </svg>
+            )}
+          </button>
           <div className="account-menu" ref={menuRef}>
             <button
               type="button"
@@ -217,7 +249,7 @@ export function AppShell({
                   <span>@{user?.username || "—"}</span>
                 </p>
                 <Link href="/ayarlar" role="menuitem" onClick={() => setMenuOpen(false)}>
-                  Hesap ayarları
+                  Hesap Ayarları
                 </Link>
                 {user?.role === "admin" ? (
                   <Link href="/yonetim" role="menuitem" onClick={() => setMenuOpen(false)}>
@@ -232,6 +264,21 @@ export function AppShell({
           </div>
         </div>
       </header>
+      <div className="workspace-wrap">
+        {navItems.length ? (
+          <nav className="workspace-subnav" aria-label={sidebarTitle || "Bölümler"}>
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`${sidebarActive === item.id ? "active" : ""}${item.current ? " current" : ""}`}
+                onClick={() => onSidebarSelect(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
       <div
         className={`workspace${showInspector ? "" : " no-inspector"}`}
         style={
@@ -252,7 +299,7 @@ export function AppShell({
                     <li key={item.id}>
                       <button
                         type="button"
-                        className={sidebarActive === item.id ? "active" : ""}
+                        className={`${sidebarActive === item.id ? "active" : ""}${item.current ? " current" : ""}`}
                         onClick={() => onSidebarSelect(item.id)}
                       >
                         {item.label}
@@ -273,7 +320,7 @@ export function AppShell({
         <button
           type="button"
           className="pane-resizer"
-          aria-label="Sol paneli boyutlandır"
+          aria-label="Sol Paneli Boyutlandır"
           onPointerDown={(event) => onResizeStart("nav", event)}
           onPointerMove={onResizeMove}
           onPointerUp={onResizeEnd}
@@ -282,16 +329,24 @@ export function AppShell({
         {children}
         {showInspector ? (
           <>
+            {canToggleInspector ? (
+              <button
+                type="button"
+                className="inspector-scrim"
+                aria-label="Paneli kapat"
+                onClick={() => onInspectorModeChange?.("collapsed")}
+              />
+            ) : null}
             <button
               type="button"
               className="pane-resizer"
-              aria-label="Sağ paneli boyutlandır"
+              aria-label="Sağ Paneli Boyutlandır"
               onPointerDown={(event) => onResizeStart("inspector", event)}
               onPointerMove={onResizeMove}
               onPointerUp={onResizeEnd}
               onPointerCancel={onResizeEnd}
             />
-            <aside className="inspector">
+            <aside className={`inspector${canToggleInspector ? " overlay-ready" : ""}`}>
               <div className="inspector-head">
                 <h2>{inspectorTitle}</h2>
                 {onInspectorModeChange ? (
@@ -308,6 +363,7 @@ export function AppShell({
             </aside>
           </>
         ) : null}
+      </div>
       </div>
       {hideStatusBar ? null : (
         <footer className="status-bar">
