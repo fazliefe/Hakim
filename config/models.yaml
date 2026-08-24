@@ -1,8 +1,8 @@
 # HÂKİM model routing. Secrets stay in .env (HAKIM_LLM_API_KEY).
-# Switch stack with `active` below, or env: HAKIM_PROFILE=groq|ollama|colab
+# Switch stack with `active` below, or env: HAKIM_PROFILE=groq|ollama|colab|evren
 # Optional path override: HAKIM_MODELS_CONFIG=/path/to/models.yaml
 
-active: groq
+active: evren
 
 defaults:
   embedding:
@@ -57,3 +57,20 @@ profiles:
       dims: 768
     research:
       allow_ollama: true
+
+  # TEKNOFEST 2026 çıkarım servisi: 8xH200, OpenAI-uyumlu, kota yok.
+  # Anahtar takım başına: HAKIM_LLM_API_KEY=sk-evren-team06-... (.env, gerçek key)
+  # vlm (video) ve bge-m3-embed ayrı uçlar üzerinden çalışır, bu writer profili
+  # llm-fast/llm-large metin çağrılarını kapsar. Detay: https://evren-teknofest.ssyz.org.tr/
+  evren:
+    writer: api
+    llm:
+      url: https://evren-llmapi.ssyz.org.tr/v1
+      model: llm-fast
+      timeout: 120
+      max_tokens: 2048
+    ollama:
+      enabled: false
+      url: http://127.0.0.1:11434
+      model: llama3.2:3b
+      keep_alive: 30m
