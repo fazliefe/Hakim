@@ -109,6 +109,8 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
       <Column position={[-3.15, 0, -2.55]} />
       <Column position={[2.55, 0, -2.9]} />
       <Column position={[-1.7, 0, -4.1]} />
+      <InscribedPanel position={[-3.55, 1.55, -3.15]} rotation={[0, 0.55, 0]} title="ANAYASA" opacity={0.92} />
+      <InscribedPanel position={[2.95, 1.58, -3.45]} rotation={[0, -0.48, 0]} title="HUKUK" opacity={0.92} />
       <mesh position={[-1.4, 4.4, -3.2]} rotation={[0.55, 0.15, -0.18]}>
         <planeGeometry args={[1.6, 7.5]} />
         <meshBasicMaterial color="#e8c56a" transparent opacity={0.05} depthWrite={false} />
@@ -123,6 +125,27 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
           <GoldMaterial roughness={0.32} />
         </mesh>
       ))}
+      {Array.from({ length: 12 }, (_, index) => {
+        const angle = (index / 12) * Math.PI * 2;
+        return (
+          <mesh
+            key={`tick-${index}`}
+            position={[Math.cos(angle) * 3.35, 0.02, Math.sin(angle) * 3.35]}
+            rotation={[0, -angle, 0]}
+          >
+            <boxGeometry args={[0.12, 0.012, 0.04]} />
+            <GoldMaterial roughness={0.3} />
+          </mesh>
+        );
+      })}
+      <mesh position={[0, 2.12, 0]}>
+        <cylinderGeometry args={[12.42, 12.42, 0.22, 48, 1, true]} />
+        <meshStandardMaterial color="#151820" roughness={0.8} metalness={0.12} side={THREE.BackSide} />
+      </mesh>
+      <mesh position={[0, 2.0, 0]}>
+        <cylinderGeometry args={[12.38, 12.38, 0.02, 48, 1, true]} />
+        <meshStandardMaterial color={GOLD} roughness={0.3} metalness={1} side={THREE.BackSide} />
+      </mesh>
       <DistantHalo reducedMotion={reducedMotion} />
       {!reducedMotion ? (
         <Sparkles
@@ -162,32 +185,183 @@ function HallLantern({ position }: { position: [number, number, number] }) {
   );
 }
 
-function WallTablet({
+function InscribedPanel({
   position,
   rotation,
-  opacity,
+  title,
+  opacity = 1,
+  width = 0.78,
+  height = 1.12,
 }: {
   position: [number, number, number];
   rotation: [number, number, number];
-  opacity: number;
+  title: string;
+  opacity?: number;
+  width?: number;
+  height?: number;
 }) {
+  const lines = [0.82, 0.7, 0.76, 0.52, 0.68, 0.44, 0.6];
   return (
     <group position={position} rotation={rotation}>
       <mesh castShadow>
-        <boxGeometry args={[0.52, 0.74, 0.04]} />
-        <meshStandardMaterial color="#161922" roughness={0.7} metalness={0.2} />
+        <boxGeometry args={[width + 0.08, height + 0.1, 0.05]} />
+        <meshStandardMaterial color="#141820" roughness={0.74} metalness={0.16} />
       </mesh>
-      <mesh position={[0, 0, 0.024]}>
-        <planeGeometry args={[0.4, 0.58]} />
-        <meshStandardMaterial
+      <mesh position={[0, 0, 0.028]}>
+        <planeGeometry args={[width, height]} />
+        <meshStandardMaterial color="#1b202b" roughness={0.62} metalness={0.22} transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0, height * 0.28, 0.032]}>
+        <planeGeometry args={[width * 0.72, 0.012]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+      </mesh>
+      <Text
+        position={[0, height * 0.36, 0.034]}
+        fontSize={0.078}
+        color={GOLD}
+        anchorX="center"
+        anchorY="middle"
+        letterSpacing={0.18}
+        fillOpacity={0.35 + opacity * 0.55}
+      >
+        {title}
+      </Text>
+      {lines.map((span, index) => (
+        <mesh key={index} position={[-(width * 0.32) + span * width * 0.18, height * 0.12 - index * 0.085, 0.034]}>
+          <planeGeometry args={[width * span * 0.55, 0.012]} />
+          <meshStandardMaterial
+            color="#c9b37a"
+            metalness={0.45}
+            roughness={0.4}
+            transparent
+            opacity={0.25 + opacity * 0.45}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function MiniScale({ opacity }: { opacity: number }) {
+  return (
+    <group>
+      <mesh position={[0, 0.028, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.01, 0.01, 0.5, 8]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.25} transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 0.028, 0.01]}>
+        <boxGeometry args={[0.02, 0.014, 0.14]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.25} transparent opacity={opacity} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.25, 0.026, 0]}>
+        <circleGeometry args={[0.065, 16]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0.25, 0.026, 0]}>
+        <circleGeometry args={[0.065, 16]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+      </mesh>
+    </group>
+  );
+}
+
+function FloorCompass({ opacity }: { opacity: number }) {
+  const labels = [
+    { text: "HUKUK", angle: 0 },
+    { text: "KANUN", angle: Math.PI / 2 },
+    { text: "ADALET", angle: Math.PI },
+    { text: "VİCDAN", angle: (Math.PI * 3) / 2 },
+  ];
+  return (
+    <group position={[-0.3, 0.02, -5.7]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1.15, 48]} />
+        <meshStandardMaterial color="#12151c" roughness={0.52} metalness={0.32} />
+      </mesh>
+      {[0.42, 0.72, 1.08].map((radius) => (
+        <mesh key={radius} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
+          <ringGeometry args={[radius, radius + 0.025, 64]} />
+          <meshStandardMaterial
+            color={GOLD}
+            metalness={1}
+            roughness={0.26}
+            transparent
+            opacity={opacity * (radius === 0.72 ? 0.85 : 0.55)}
+          />
+        </mesh>
+      ))}
+      {Array.from({ length: 8 }, (_, index) => {
+        const angle = (index / 8) * Math.PI * 2;
+        return (
+          <mesh
+            key={index}
+            rotation={[-Math.PI / 2, 0, angle]}
+            position={[Math.cos(angle) * 0.75, 0.006, Math.sin(angle) * 0.75]}
+          >
+            <planeGeometry args={[0.018, 0.55]} />
+            <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
+          </mesh>
+        );
+      })}
+      {Array.from({ length: 16 }, (_, index) => {
+        const angle = (index / 16) * Math.PI * 2;
+        return (
+          <mesh
+            key={`key-${index}`}
+            position={[Math.cos(angle) * 1.05, 0.008, Math.sin(angle) * 1.05]}
+            rotation={[0, -angle, 0]}
+          >
+            <boxGeometry args={[0.07, 0.012, 0.07]} />
+            <GoldMaterial roughness={0.3} />
+          </mesh>
+        );
+      })}
+      <MiniScale opacity={opacity} />
+      {labels.map((item) => (
+        <Text
+          key={item.text}
+          position={[Math.sin(item.angle) * 0.88, 0.03, Math.cos(item.angle) * 0.88]}
+          rotation={[-Math.PI / 2, 0, item.angle]}
+          fontSize={0.07}
           color={GOLD}
-          metalness={0.9}
-          roughness={0.28}
-          transparent
-          opacity={opacity}
-          envMapIntensity={1.2}
-        />
-      </mesh>
+          anchorX="center"
+          anchorY="middle"
+          letterSpacing={0.16}
+          fillOpacity={opacity * 0.85}
+        >
+          {item.text}
+        </Text>
+      ))}
+    </group>
+  );
+}
+
+function Frieze({ position, width, opacity }: { position: [number, number, number]; width: number; opacity: number }) {
+  const count = 9;
+  const words = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+  return (
+    <group position={position}>
+      {Array.from({ length: count }, (_, index) => {
+        const x = (index - (count - 1) / 2) * (width / count);
+        return (
+          <group key={index} position={[x, 0, 0]}>
+            <mesh>
+              <boxGeometry args={[0.22, 0.16, 0.06]} />
+              <StoneMaterial color="#171b24" />
+            </mesh>
+            <Text
+              position={[0, 0, 0.04]}
+              fontSize={0.05}
+              color={GOLD}
+              anchorX="center"
+              anchorY="middle"
+              fillOpacity={0.3 + opacity * 0.55}
+            >
+              {words[index]}
+            </Text>
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -222,6 +396,21 @@ function Drape({
         <boxGeometry args={[0.9, 0.018, 0.018]} />
         <GoldMaterial roughness={0.32} />
       </mesh>
+      <mesh position={[0, 0.18, 0.01]}>
+        <circleGeometry args={[0.11, 24]} />
+        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
+      </mesh>
+      <Text
+        position={[0, -0.22, 0.02]}
+        fontSize={0.055}
+        color={GOLD}
+        anchorX="center"
+        anchorY="middle"
+        letterSpacing={0.2}
+        fillOpacity={opacity * 0.7}
+      >
+        HÂKİM
+      </Text>
     </group>
   );
 }
@@ -306,6 +495,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
         <boxGeometry args={[8.6, 0.028, 0.34]} />
         <GoldMaterial roughness={0.3} />
       </mesh>
+      <Frieze position={[-0.3, 2.82, -6.28]} width={6.4} opacity={mid} />
       <mesh position={[-0.3, 3.18, -8.05]}>
         <boxGeometry args={[6.8, 0.14, 0.28]} />
         <StoneMaterial color="#14171f" />
@@ -376,24 +566,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
         />
       </mesh>
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.3, 0.02, -5.7]}>
-        <circleGeometry args={[0.95, 48]} />
-        <meshStandardMaterial color="#12151c" roughness={0.55} metalness={0.35} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.3, 0.022, -5.7]}>
-        <ringGeometry args={[0.38, 0.92, 48]} />
-        <meshStandardMaterial
-          color={GOLD}
-          metalness={1}
-          roughness={0.28}
-          transparent
-          opacity={0.2 + mid * 0.7}
-        />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.3, 0.024, -5.7]}>
-        <ringGeometry args={[0.12, 0.22, 32]} />
-        <GoldMaterial roughness={0.24} />
-      </mesh>
+      <FloorCompass opacity={0.35 + mid * 0.65} />
 
       {[0, 1, 2].map((step) => (
         <mesh key={step} position={[-0.3, 0.05 + step * 0.075, -7.15 + step * 0.32]} castShadow receiveShadow>
@@ -419,10 +592,38 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
         </mesh>
       ))}
 
-      <WallTablet position={[-3.55, 1.62, -5.85]} rotation={[0, 0.52, 0]} opacity={0.2 + mid * 0.7} />
-      <WallTablet position={[3.05, 1.68, -6.05]} rotation={[0, -0.48, 0]} opacity={0.2 + mid * 0.7} />
-      <WallTablet position={[-3.85, 1.72, -7.55]} rotation={[0, 0.38, 0]} opacity={0.15 + deep * 0.75} />
-      <WallTablet position={[3.25, 1.78, -7.7]} rotation={[0, -0.34, 0]} opacity={0.15 + deep * 0.75} />
+      <InscribedPanel
+        position={[-3.55, 1.62, -5.85]}
+        rotation={[0, 0.52, 0]}
+        title="CEZA"
+        opacity={0.45 + mid * 0.55}
+      />
+      <InscribedPanel
+        position={[3.05, 1.68, -6.05]}
+        rotation={[0, -0.48, 0]}
+        title="MEDENİ"
+        opacity={0.45 + mid * 0.55}
+      />
+      <InscribedPanel
+        position={[-3.85, 1.72, -7.55]}
+        rotation={[0, 0.38, 0]}
+        title="İDARE"
+        opacity={0.4 + deep * 0.6}
+      />
+      <InscribedPanel
+        position={[3.25, 1.78, -7.7]}
+        rotation={[0, -0.34, 0]}
+        title="USUL"
+        opacity={0.4 + deep * 0.6}
+      />
+      <InscribedPanel
+        position={[-0.3, 1.55, -8.72]}
+        rotation={[0, 0, 0]}
+        title="ANAYASA"
+        opacity={0.35 + far * 0.65}
+        width={1.15}
+        height={1.55}
+      />
 
       <Drape position={[-3.85, 1.55, -5.35]} rotation={[0, 0.55, 0]} opacity={0.35 + mid * 0.55} />
       <Drape position={[3.35, 1.58, -5.55]} rotation={[0, -0.5, 0]} opacity={0.35 + mid * 0.55} />
