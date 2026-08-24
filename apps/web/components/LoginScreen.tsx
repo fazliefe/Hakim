@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useCallback, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { InteractiveScale } from "@/components/InteractiveScale";
 import { PasswordInput } from "@/components/PasswordInput";
@@ -55,8 +55,37 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const biasRef = useRef(0);
+  const rootRef = useRef<HTMLElement>(null);
+  const [ready, setReady] = useState(false);
   const onBiasChange = useCallback((v: number) => {
     biasRef.current = v;
+  }, []);
+
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setReady(true);
+      return;
+    }
+    let inner = 0;
+    const outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => setReady(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(outer);
+      window.cancelAnimationFrame(inner);
+    };
+  }, []);
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const onMove = (event: PointerEvent) => {
+      node.style.setProperty("--mx", String(event.clientX / window.innerWidth));
+      node.style.setProperty("--my", String(event.clientY / window.innerHeight));
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
   }, []);
 
   function go(next: Mode) {
@@ -208,24 +237,42 @@ export function LoginScreen() {
               : "Giriş Yap";
 
   return (
-    <main className="login-screen cinematic">
+    <main ref={rootRef} className={ready ? "login-screen cinematic is-ready" : "login-screen cinematic"}>
+      <div className="login-atmosphere" aria-hidden="true">
+        <div className="login-aurora" />
+        <div className="login-shaft login-shaft-a" />
+        <div className="login-shaft login-shaft-b" />
+        <div className="login-orb login-orb-a" />
+        <div className="login-orb login-orb-b" />
+        <div className="login-orb login-orb-c" />
+        <div className="login-horizon" />
+        <div className="login-grain" />
+        <div className="login-vignette" />
+        <div className="login-curtain" />
+      </div>
+
       <div className="login-stage">
         <InteractiveScale onBiasChange={onBiasChange} size="hero" />
       </div>
 
-      <header className="login-titlecard">
+      <header className="login-brand">
+        <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
+        <span>HÂKİM</span>
+      </header>
+
+      <div className="login-titlecard">
         <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>
         <h1 className="login-hero-title">HÂKİM</h1>
         <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
-      </header>
+      </div>
 
       <section className="login-panel" aria-label="HÂKİM Giriş">
         <div className="login-card">
           <Image
             src="/hakim-emblem.png"
             alt="HÂKİM amblemi"
-            width={72}
-            height={72}
+            width={56}
+            height={56}
             className="login-emblem"
             priority
           />
@@ -233,7 +280,7 @@ export function LoginScreen() {
           <p className="login-slogan">{slogan}</p>
 
           {mode === "giris" || mode === "kayit" ? (
-            <div className="login-mode" role="tablist">
+            <div className="login-mode" data-mode={mode} role="tablist">
               <button type="button" className={mode === "giris" ? "active" : ""} onClick={() => go("giris")}>
                 Giriş
               </button>
@@ -299,6 +346,7 @@ export function LoginScreen() {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="000000"
+                    className="login-otp"
                     required
                   />
                 </label>
@@ -358,6 +406,8 @@ export function LoginScreen() {
           </form>
         </div>
       </section>
+
+      <p className="login-legal">HÂKİM · Kaynak odaklı hukuki araştırma</p>
     </main>
   );
 }

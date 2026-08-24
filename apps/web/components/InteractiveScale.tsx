@@ -20,9 +20,6 @@ export const InteractiveScale = memo(function InteractiveScale({ onBiasChange, s
   return (
     <div className={`scale-theater ${size}`}>
       <JusticeScaleCanvas size={size} onBiasChange={onBiasChange} />
-      {size === "hero" ? (
-        <p className="scale-hint">Fareyi gezdirin · kefeleri tutup çekin</p>
-      ) : null}
     </div>
   );
 });

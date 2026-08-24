@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, Lightformer, Text } from "@react-three/drei";
+import { ContactShadows, Environment, Lightformer, Sparkles, Text } from "@react-three/drei";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
 
 type DragSide = "left" | "right" | "beam" | null;
@@ -14,13 +15,25 @@ type Props = {
 
 const GOLD = "#d4af37";
 
-function GoldMaterial({ roughness = 0.22, metalness = 1 }: { roughness?: number; metalness?: number }) {
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduced(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return reduced;
+}
+
+function GoldMaterial({ roughness = 0.16, metalness = 1 }: { roughness?: number; metalness?: number }) {
   return (
     <meshStandardMaterial
       color={GOLD}
       metalness={metalness}
       roughness={roughness}
-      envMapIntensity={1.35}
+      envMapIntensity={1.7}
     />
   );
 }
@@ -32,8 +45,8 @@ function SteelMaterial() {
 function CameraRig({ compact }: { compact: boolean }) {
   const { camera } = useThree();
   const mouse = useRef({ x: 0, y: 0 });
-  const goal = useRef(new THREE.Vector3(compact ? 0.4 : 0.7, compact ? 1.2 : 1.35, compact ? 2.2 : 2.7));
-  const look = useRef(new THREE.Vector3(0, compact ? 0.85 : 0.95, 0));
+  const goal = useRef(new THREE.Vector3(compact ? 0.4 : 0.05, compact ? 1.2 : 1.22, compact ? 2.2 : 3.15));
+  const look = useRef(new THREE.Vector3(compact ? 0 : -0.55, compact ? 0.85 : 0.92, 0));
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -48,14 +61,28 @@ function CameraRig({ compact }: { compact: boolean }) {
     const px = mouse.current.x;
     const py = mouse.current.y;
     if (compact) {
-      goal.current.set(0.4 + px * 0.22, 1.18 + py * 0.08, 2.2);
+      goal.current.set(0.4 + px * 0.18, 1.18 + py * 0.06, 2.2);
     } else {
-      goal.current.set(0.65 + px * 0.45, 1.32 + py * 0.1, 2.65);
+      goal.current.set(0.08 + px * 0.38, 1.22 + py * 0.08, 3.12);
     }
-    camera.position.lerp(goal.current, 0.04);
+    camera.position.lerp(goal.current, 0.028);
     camera.lookAt(look.current);
   });
   return null;
+}
+
+function OrbitingKeyLight() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * 0.22;
+    ref.current.position.set(Math.cos(t) * 3.4, 3.2 + Math.sin(t * 0.6) * 0.25, Math.sin(t) * 3.4);
+  });
+  return (
+    <group ref={ref}>
+      <spotLight intensity={7.5} angle={0.42} penumbra={0.85} color="#ffe3a3" distance={14} />
+    </group>
+  );
 }
 
 function Bowl({ onGrab }: { onGrab?: (e: { clientY: number; clientX: number }) => void }) {
@@ -108,7 +135,8 @@ function Chain({ length = 0.52 }: { length?: number }) {
   );
 }
 
-function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void }) {
+function ScaleModel({ onBiasChange, reducedMotion }: { onBiasChange?: (bias: number) => void; reducedMotion: boolean }) {
+  const rootRef = useRef<THREE.Group>(null);
   const beamRef = useRef<THREE.Group>(null);
   const leftHang = useRef<THREE.Group>(null);
   const rightHang = useRef<THREE.Group>(null);
@@ -127,12 +155,15 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
       vel.current += -tilt.current * 10 * clampedDt;
       vel.current *= Math.exp(-5 * clampedDt);
       tilt.current += vel.current * clampedDt;
-      tilt.current += Math.sin(state.clock.elapsedTime * 1.05) * 0.0018;
+      tilt.current += Math.sin(state.clock.elapsedTime * 0.85) * 0.0014;
     }
     const angle = THREE.MathUtils.clamp(tilt.current, -1, 1) * 0.38;
     if (beamRef.current) beamRef.current.rotation.z = angle;
     if (leftHang.current) leftHang.current.rotation.z = -angle;
     if (rightHang.current) rightHang.current.rotation.z = -angle;
+    if (rootRef.current && !reducedMotion) {
+      rootRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.16) * 0.16;
+    }
   });
 
   useEffect(() => {
@@ -175,7 +206,7 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
   const arm = 1.05;
 
   return (
-    <group>
+    <group ref={rootRef}>
       <mesh position={[0, 0.05, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.52, 0.58, 0.1, 48]} />
         <GoldMaterial roughness={0.3} />
@@ -251,49 +282,75 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
 
 export function JusticeScaleCanvas({ size = "hero", onBiasChange }: Props) {
   const compact = size === "compact";
+  const reducedMotion = usePrefersReducedMotion();
   return (
     <div className={`scale-canvas ${size}`}>
       <Canvas
         shadows
-        dpr={[1, 1.5]}
-        camera={{ fov: compact ? 36 : 28, position: compact ? [0.4, 1.2, 2.2] : [0.7, 1.35, 2.7], near: 0.1, far: 30 }}
+        dpr={[1, 1.6]}
+        camera={{
+          fov: compact ? 36 : 26,
+          position: compact ? [0.4, 1.2, 2.2] : [0.05, 1.22, 3.15],
+          near: 0.1,
+          far: 30,
+        }}
         gl={{
           antialias: true,
           alpha: false,
           powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.08,
+          toneMappingExposure: 1.12,
         }}
         resize={{ scroll: false, debounce: 50 }}
       >
-        <color attach="background" args={["#05070c"]} />
-        <fog attach="fog" args={["#05070c", 6, 14]} />
-        <ambientLight intensity={0.22} />
+        <color attach="background" args={["#03040a"]} />
+        <fog attach="fog" args={["#03040a", 5.5, 13]} />
+        <ambientLight intensity={0.12} />
         <directionalLight
           castShadow
-          position={[2.8, 4.2, 2.2]}
-          intensity={2.1}
-          color="#fff3d6"
+          position={[2.6, 4.6, 2.4]}
+          intensity={1.55}
+          color="#fff6e0"
           shadow-mapSize={[1024, 1024]}
         />
-        <directionalLight position={[-3.2, 1.8, 1.4]} intensity={0.55} color="#8eb6ff" />
-        <spotLight position={[-1.6, 3.4, -2.2]} intensity={6} angle={0.45} penumbra={0.7} color="#ffd978" />
-        <pointLight position={[0, 1.5, 0.4]} intensity={0.4} color="#f3e0a6" />
+        <directionalLight position={[-3.4, 1.4, 1.8]} intensity={0.7} color="#8ea8ff" />
+        <spotLight position={[-2.1, 3.8, -2.4]} intensity={5.2} angle={0.5} penumbra={0.82} color="#ffd27a" />
+        <pointLight position={[0, 1.6, 0.5]} intensity={0.28} color="#f3e0a6" />
+        {!reducedMotion ? <OrbitingKeyLight /> : null}
 
         <CameraRig compact={compact} />
-        <ScaleModel onBiasChange={onBiasChange} />
+        <group position={compact ? [0, 0, 0] : [-0.72, -0.04, 0]}>
+          <ScaleModel onBiasChange={onBiasChange} reducedMotion={reducedMotion} />
+        </group>
+
+        {!reducedMotion ? (
+          <Sparkles
+            count={compact ? 18 : 48}
+            scale={compact ? [3.2, 2.2, 2.2] : [7.5, 3.6, 4.5]}
+            size={2.4}
+            speed={0.22}
+            opacity={0.38}
+            color="#e8c56a"
+            position={compact ? [0, 1.1, 0] : [-0.7, 1.15, 0]}
+          />
+        ) : null}
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <circleGeometry args={[8, 48]} />
-          <meshStandardMaterial color="#080b12" metalness={0.55} roughness={0.42} />
+          <circleGeometry args={[10, 64]} />
+          <meshStandardMaterial color="#07080f" metalness={0.82} roughness={0.18} envMapIntensity={0.9} />
         </mesh>
-        <ContactShadows position={[0, 0.012, 0]} opacity={0.5} scale={7} blur={2.4} far={2.6} frames={1} />
+        <ContactShadows position={[0, 0.01, 0]} opacity={0.62} scale={9} blur={2.8} far={3.2} />
 
         <Environment resolution={256} frames={1}>
-          <Lightformer intensity={3.2} position={[0, 5, 1]} scale={[8, 2, 1]} />
-          <Lightformer intensity={1.6} position={[-4, 2, 2]} scale={[4, 4, 1]} color="#9bb7ff" />
-          <Lightformer intensity={2.2} position={[4, 3, -2]} scale={[5, 2, 1]} color="#ffd978" />
+          <Lightformer intensity={4.1} position={[0, 5.2, 1]} scale={[10, 1.6, 1]} />
+          <Lightformer intensity={1.8} position={[-5, 2.2, 2]} scale={[5, 5, 1]} color="#9bb7ff" />
+          <Lightformer intensity={2.6} position={[5, 3.2, -2]} scale={[6, 2.2, 1]} color="#ffd978" />
+          <Lightformer intensity={1.2} position={[0, 1, -5]} scale={[8, 4, 1]} color="#ffffff" />
         </Environment>
+
+        <EffectComposer enableNormalPass={false} multisampling={0}>
+          <Bloom luminanceThreshold={0.78} intensity={0.55} mipmapBlur radius={0.62} />
+        </EffectComposer>
       </Canvas>
     </div>
   );
