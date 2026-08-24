@@ -105,40 +105,40 @@ function xmlEscape(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function trUpper(text: string): string {
-  return text.replace(/i/g, "İ").replace(/ı/g, "I").toLocaleUpperCase("tr-TR");
-}
-
 export function petitionToBlocks(petition: PetitionView): ExportBlock[] {
   const blocks: ExportBlock[] = [{ text: "T.C.", align: "center", bold: true }];
-  if (petition.via) blocks.push({ text: trUpper(petition.via), align: "center" });
-  if (petition.hitap) blocks.push({ text: petition.hitap, align: "center", bold: true });
-  if (petition.subtitle) blocks.push({ text: petition.subtitle, align: "center", bold: true });
+  if (petition.via) blocks.push({ text: petition.via, align: "center" });
+  if (petition.hitap) blocks.push({ text: petition.hitap, align: "center" });
+  if (petition.sehir) blocks.push({ text: petition.sehir, align: "center" });
   blocks.push({ text: "" });
-  if (petition.meta?.length) {
-    for (const row of petition.meta) {
-      const pad = " ".repeat(Math.max(1, 18 - row.label.length));
-      blocks.push({ text: `${row.label}${pad}: ${row.value}` });
-    }
+  const paragraphs =
+    petition.paragraphs?.length
+      ? petition.paragraphs
+      : (petition.sections || [])
+          .filter((section) => section.kind !== "eksik" && section.text?.trim())
+          .map((section) => section.text);
+  paragraphs.forEach((paragraph, idx) => {
+    blocks.push({ text: idx === 0 ? `     ${paragraph}` : paragraph });
     blocks.push({ text: "" });
-  } else if (petition.konu) {
-    blocks.push({ text: `KONU: ${petition.konu}`, bold: true });
-    blocks.push({ text: "" });
-  }
-  for (const section of petition.sections || []) {
-    if (!section.text?.trim() && !section.label) continue;
-    if (section.label) blocks.push({ text: trUpper(section.label), bold: true });
-    for (const line of (section.text || "").replace(/\r\n/g, "\n").split("\n")) {
-      blocks.push({ text: line });
-    }
-    blocks.push({ text: "" });
-  }
+  });
   if (petition.closing) {
-    blocks.push({ text: petition.closing, bold: true });
+    blocks.push({ text: `     ${petition.closing}` });
     blocks.push({ text: "" });
   }
-  if (petition.signature?.role) blocks.push({ text: petition.signature.role, align: "right", bold: true });
-  if (petition.signature?.name) blocks.push({ text: petition.signature.name, align: "right" });
+  const adresLines = (petition.adres || "«[adres]»").split(/[\n;]+/).map((part) => part.trim()).filter(Boolean);
+  blocks.push({ text: "Adres:" });
+  for (const line of adresLines.length ? adresLines : ["«[adres]»"]) {
+    blocks.push({ text: line });
+  }
+  if (petition.tarih) blocks.push({ text: petition.tarih, align: "right" });
+  blocks.push({ text: "(imza)", align: "right" });
+  blocks.push({ text: petition.signature?.name || "«[ad soyad]»", align: "right" });
+  blocks.push({ text: "" });
+  blocks.push({ text: "EKLER:" });
+  const ekler = petition.ekler?.length ? petition.ekler : ["—"];
+  ekler.forEach((item, idx) => {
+    blocks.push({ text: `EK-${idx + 1}  ${item}` });
+  });
   return blocks;
 }
 
@@ -155,7 +155,8 @@ function docxParagraph(block: ExportBlock): string {
   const after = block.text ? 160 : 80;
   const body = xmlEscape(block.text || " ");
   const bold = block.bold ? "<w:b/>" : "";
-  return `<w:p><w:pPr><w:jc w:val="${align}"/><w:spacing w:after="${after}" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/>${bold}</w:rPr><w:t xml:space="preserve">${body}</w:t></w:r></w:p>`;
+  const font = "Arial";
+  return `<w:p><w:pPr><w:jc w:val="${align}"/><w:spacing w:after="${after}" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:sz w:val="22"/><w:szCs w:val="22"/>${bold}</w:rPr><w:t xml:space="preserve">${body}</w:t></w:r></w:p>`;
 }
 
 function docxBlob(blocks: ExportBlock[]): Blob {

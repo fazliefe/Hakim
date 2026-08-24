@@ -23,3 +23,9 @@ def test_routes_detention_to_tahliye() -> None:
 def test_routes_idari_iptal() -> None:
     text = "Valiliğin idari işlemine karşı iptal davası açmak istiyorum, idare mahkemesine."
     assert route_islem(text).action == "idari_dava"
+
+
+def test_routes_natural_language_traps() -> None:
+    assert route_islem("Mahkeme beni mahkum etti, üst mahkemeye gitmek istiyorum.").action == "istinaf"
+    assert route_islem("Cezaevindeyim, evime dönmek istiyorum.").action == "tahliye"
+    assert route_islem("Komşum bana hakaret etti, savcıya gitmek istiyorum.").action == "sikayet"

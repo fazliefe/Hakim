@@ -1,42 +1,117 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+RESEARCH_HEADINGS = (
+    "Sonuç",
+    "Hukuki dayanak",
+    "İlgili hükümler",
+    "Değerlendirme",
+    "Kaynak",
+)
+
+KAYNAK_UYARI = "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır."
+MIN_SONUC_SENTENCES = 5
+_SONUC_PAD = (
+    "Bu hüküm arşivdeki resmi metnin lafzına göre okunur; kaynakta olmayan unsur yazılmaz [{n}].",
+    "Somut olayın maddede aranan hareket, sonuç ve kast unsurlarını taşıyıp taşımadığı dosya incelemesine bağlıdır [{n}].",
+    "Nitelendirme madde başlığıyla yetinmez; ilgili fıkra ve seçimlik hareket birlikte bakılır [{n}].",
+    "Bu metin nitelendirme çerçevesi verir; mahkeme hükmü veya savcılık takdirinin yerini tutmaz [{n}].",
+    "Komşu maddeler aynı konuyu düzenlese de asıl dayanak yine bu kaynak olarak kalır [{n}].",
+)
+
+
+def count_sonuc_sentences(text: str) -> int:
+    blob = str(text or "").strip()
+    if not blob:
+        return 0
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜÂÊÎÔÛ«\"])", blob)
+    return len([part for part in parts if part.strip()])
+
+
+def ensure_sonuc(text: str, *, min_sentences: int = MIN_SONUC_SENTENCES) -> str:
+    current = str(text or "").strip()
+    if not current:
+        return current
+    cite = "1"
+    found = re.search(r"\[(\d+)\]", current)
+    if found:
+        cite = found.group(1)
+    folded = current.casefold()
+    for pad in _SONUC_PAD:
+        if count_sonuc_sentences(current) >= min_sentences:
+            break
+        line = pad.replace("{n}", cite)
+        if line.casefold() in folded:
+            continue
+        current = f"{current} {line}"
+        folded = current.casefold()
+    return current
 
 
 def _lines(*parts: str) -> str:
     return "\n".join(part for part in parts if part is not None)
 
 
+def _with_cite(text: str, n: Any) -> str:
+    cumle = str(text or "").strip()
+    if not cumle:
+        return ""
+    if n is not None and f"[{n}]" not in cumle:
+        return f"{cumle} [{n}]"
+    return cumle
+
+
+def render_research_memo(
+    *,
+    sonuc: str,
+    gerekce: list[str] | None = None,
+    ilgili: list[str] | None = None,
+    degerlendirme: str | None = None,
+    uyari: str | None = None,
+) -> str:
+    """Hukuki mütalaa düzeni: Sonuç → dayanak → ilgili → değerlendirme → kaynak."""
+    parts: list[str] = ["Sonuç", ensure_sonuc(str(sonuc or "").strip())]
+    dayanak = [line.strip() for line in (gerekce or []) if str(line).strip()]
+    if dayanak:
+        numbered = "\n".join(f"{index}. {line}" for index, line in enumerate(dayanak, start=1))
+        parts.extend(["Hukuki dayanak", numbered])
+    komsu = [line.strip() for line in (ilgili or []) if str(line).strip()]
+    if komsu:
+        bullets = "\n".join(f"• {line}" for line in komsu)
+        parts.extend(["İlgili hükümler", bullets])
+    note = str(degerlendirme or "").strip()
+    if note:
+        parts.extend(["Değerlendirme", note])
+    kaynak = str(uyari or KAYNAK_UYARI).strip().strip("_")
+    parts.extend(["Kaynak", kaynak])
+    return "\n\n".join(part for part in parts if part)
+
+
 def render_arastirma(parsed: dict[str, Any]) -> str:
-    blocks = [str(parsed.get("ozet") or "").strip()]
+    gerekce: list[str] = []
     for item in parsed.get("gerekce") or []:
         if isinstance(item, dict):
-            n = item.get("n")
-            cumle = str(item.get("cumle") or "").strip()
-            if not cumle:
-                continue
-            if n is not None and f"[{n}]" not in cumle:
-                cumle = f"{cumle} [{n}]"
-            blocks.append(cumle)
+            line = _with_cite(item.get("cumle"), item.get("n"))
         else:
-            blocks.append(str(item))
-    ilgili_parts: list[str] = []
+            line = str(item).strip()
+        if line:
+            gerekce.append(line)
+    ilgili: list[str] = []
     for item in parsed.get("ilgili") or []:
         if isinstance(item, dict):
-            n = item.get("n")
-            neden = str(item.get("neden") or "").strip()
-            if not neden:
-                continue
-            if n is not None and f"[{n}]" not in neden:
-                neden = f"{neden} [{n}]"
-            ilgili_parts.append(neden)
+            line = _with_cite(item.get("neden"), item.get("n"))
         else:
-            ilgili_parts.append(str(item))
-    if ilgili_parts:
-        blocks.append("Ayrıca " + " ".join(ilgili_parts))
-    uyari = str(parsed.get("kaynak_uyari") or "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır.")
-    blocks.append(f"_{uyari}_")
-    return "\n\n".join(part for part in blocks if part)
+            line = str(item).strip()
+        if line:
+            ilgili.append(line)
+    return render_research_memo(
+        sonuc=str(parsed.get("ozet") or "").strip(),
+        gerekce=gerekce,
+        ilgili=ilgili,
+        uyari=str(parsed.get("kaynak_uyari") or "") or None,
+    )
 
 
 def render_evrak(parsed: dict[str, Any]) -> str:

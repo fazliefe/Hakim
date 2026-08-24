@@ -35,6 +35,36 @@ export type TraceEdge = {
   label: string;
 };
 
+export type TraceHop = {
+  id: string;
+  title: string;
+  ms: number;
+  state: string;
+  summary?: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cost_usd?: number;
+};
+
+export type Observability = {
+  engine?: string;
+  graph_nodes?: string[];
+  graph_edges?: Array<{ source: string; target: string }>;
+  langfuse_enabled?: boolean;
+  langfuse_trace_id?: string | null;
+  langfuse_url?: string | null;
+  hops?: TraceHop[];
+  totals?: {
+    ms?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    cost_usd?: number;
+    provider?: string;
+    model?: string;
+    model_label?: string;
+  };
+};
+
 export type ResearchResponse = {
   query: string;
   answer: string;
@@ -45,6 +75,7 @@ export type ResearchResponse = {
   writer?: string;
   writer_error?: string | null;
   reasoning?: ReasoningTrace;
+  observability?: Observability;
 };
 
 export type SystemStatus = {
@@ -513,11 +544,17 @@ export type PetitionView = {
   title?: string;
   family?: string;
   layout?: string;
+  form?: string;
   makam?: string;
   hitap?: string;
   via?: string;
   subtitle?: string;
   konu?: string;
+  tarih?: string;
+  sehir?: string;
+  adres?: string;
+  ekler?: string[];
+  paragraphs?: string[];
   meta?: PetitionMeta[];
   sections?: PetitionSection[];
   closing?: string;
@@ -573,14 +610,7 @@ export type DocumentAnalysis = {
   petition?: PetitionView;
   gaps?: Array<{ id: string; label: string; hint: string }>;
   havale?: { unit: string; note?: string };
-  observability?: {
-    engine?: string;
-    graph_nodes?: string[];
-    graph_edges?: Array<{ source: string; target: string }>;
-    langfuse_enabled?: boolean;
-    langfuse_trace_id?: string | null;
-    langfuse_url?: string | null;
-  };
+  observability?: Observability;
 };
 
 export type AgentStep = {
@@ -641,6 +671,26 @@ export async function getKamuSablon(): Promise<KamuSablon> {
   const response = await apiFetch("/v1/kamu/sablon", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Kamu şablonu alınamadı");
+  }
+  return response.json();
+}
+
+export type IslemGuess = {
+  action: string;
+  title: string;
+  reason: string;
+  evidence?: string;
+  confidence: number;
+};
+
+export async function guessIslem(text: string): Promise<IslemGuess> {
+  const response = await apiFetch("/v1/islem/anla", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) {
+    throw new Error("Anlatı anlaşılamadı");
   }
   return response.json();
 }

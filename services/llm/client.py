@@ -76,6 +76,12 @@ def chat(
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.URLError as exc:
         raise OllamaError(str(exc)) from exc
+    try:
+        from llm.usage import record_usage_from_response
+
+        record_usage_from_response(body, model=model or cfg.ollama_model)
+    except Exception:
+        pass
     message = (body.get("message") or {}).get("content") or ""
     if not str(message).strip():
         raise OllamaError("Ollama boş cevap döndü")

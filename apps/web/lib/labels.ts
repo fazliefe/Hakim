@@ -38,12 +38,32 @@ export function calendarLabel(calendar?: string | null): string {
   return calendar || "";
 }
 
+const HOP_TITLES: Record<string, string> = {
+  sorgu: "Soru",
+  query: "Soru",
+  kontrol: "Kontrol",
+  bm25: "Metin taraması",
+  vektor: "Yakın hüküm",
+  vector: "Yakın hüküm",
+  rrf: "Birleşim",
+  rerank: "Sıralama",
+  graf: "Bağlantılar",
+  graph: "Bağlantılar",
+  cevap: "Cevap",
+  answer: "Cevap",
+  reddet: "Red",
+};
+
 export function hopTitle(id?: string, fallback?: string): string {
-  if (id === "sorgu") return "Soru";
-  if (id === "bm25") return "Metin taraması";
-  if (id === "vektor") return "Yakın hüküm";
-  if (id === "rrf") return "Birleşim";
-  if (id === "cevap") return "Cevap";
+  const key = (id || "").toLowerCase();
+  if (HOP_TITLES[key]) return HOP_TITLES[key];
+  const fb = (fallback || "").trim().toLowerCase();
+  if (HOP_TITLES[fb]) return HOP_TITLES[fb];
+  if (/bm25/.test(fb)) return HOP_TITLES.bm25;
+  if (/vekt|semantic/.test(fb)) return HOP_TITLES.vektor;
+  if (/rrf|birleşim|birlesim/.test(fb)) return HOP_TITLES.rrf;
+  if (/rerank/.test(fb)) return HOP_TITLES.rerank;
+  if (/langgraph|langfuse|groq|openai|gpt-/.test(fb)) return "";
   return fallback || "";
 }
 

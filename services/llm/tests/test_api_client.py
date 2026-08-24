@@ -19,6 +19,113 @@ def test_headers_are_not_python_urllib() -> None:
     assert headers["Authorization"] == "Bearer sk-test"
 
 
+def test_http_error_records_usage_then_raises(monkeypatch) -> None:
+    import io
+    import json
+    import urllib.error
+
+    from llm.api_client import _api_chat_body
+    from llm.client import OllamaError
+    from llm.usage import peek_usage, reset_usage
+
+    reset_usage()
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    err = {
+        "error": {"message": "Failed to validate JSON", "code": "json_validate_failed"},
+        "usage": {"prompt_tokens": 100, "completion_tokens": 20},
+        "model": "openai/gpt-oss-20b",
+    }
+
+    def boom(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "https://api.groq.com/openai/v1/chat/completions",
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(json.dumps(err).encode("utf-8")),
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    try:
+        _api_chat_body([{"role": "user", "content": "hi"}], json_mode=True)
+        raise AssertionError("expected OllamaError")
+    except OllamaError as exc:
+        assert "400" in str(exc)
+    usage = peek_usage()
+    assert usage.prompt_tokens == 100
+    assert usage.completion_tokens == 20
+
+
+def test_json_validate_retry_drops_json_mode(monkeypatch) -> None:
+    import io
+    import json
+    import urllib.error
+    from types import SimpleNamespace
+
+    from llm.api_client import api_chat
+    from llm.usage import peek_usage, reset_usage
+
+    reset_usage()
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    payloads: list[dict] = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "choices": [{"message": {"content": '{"ok": true}'}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 4},
+                    "model": "openai/gpt-oss-20b",
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        payloads.append(json.loads(request.data.decode("utf-8")))
+        if len(payloads) == 1:
+            raise urllib.error.HTTPError(
+                "https://api.groq.com/openai/v1/chat/completions",
+                400,
+                "Bad Request",
+                hdrs=None,
+                fp=io.BytesIO(
+                    json.dumps(
+                        {
+                            "error": {
+                                "message": "Failed to validate JSON",
+                                "code": "json_validate_failed",
+                            }
+                        }
+                    ).encode("utf-8")
+                ),
+            )
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "llm.api_client.get_models",
+        lambda: SimpleNamespace(
+            llm_url="https://api.groq.com/openai/v1",
+            llm_model="openai/gpt-oss-20b",
+            llm_temperature=0.2,
+            llm_max_tokens=900,
+            llm_timeout=25,
+        ),
+    )
+    text = api_chat([{"role": "user", "content": "hi"}], json_mode=True)
+    assert '{"ok": true}' in text
+    assert "response_format" in payloads[0]
+    assert "response_format" not in payloads[1]
+    usage = peek_usage()
+    assert usage.prompt_tokens == 12
+    assert usage.completion_tokens == 4
+
+
 def test_api_payload_url() -> None:
     assert api_payload_url("https://api.groq.com/openai/v1") == "https://api.groq.com/openai/v1/chat/completions"
 

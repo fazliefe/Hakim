@@ -14,18 +14,30 @@ class IslemRoute:
 
 # Kullanıcı derdini anlatır; kalıp buradan seçilir. Eşitlikte daha özgül kazanır.
 _INTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
-    ("tahliye", ("tahliye", "tutukluyum", "tutukluluk halinin", "cezaevinden çıkmak")),
+    ("tahliye", ("tahliye", "tutukluyum", "tutukluluk halinin", "cezaevinden çıkmak", "cezaevindeyim", "tutuklu kaldım")),
     (
         "adli_kontrol_itiraz",
         ("adli kontrol", "imza yükümlülüğü", "yurt dışı yasağı", "yurt dışına çıkış yasağı"),
     ),
     ("bireysel_basvuru", ("bireysel başvuru", "anayasa mahkemesi", "temel hak ihlali")),
-    ("temyiz", ("temyiz", "yargıtay'a", "yargitaya")),
-    ("istinaf", ("istinaf", "bölge adliye", "hükmü istinaf", "kanun yoluna", "hükme karşı")),
+    ("temyiz", ("temyiz", "yargıtay'a", "yargitaya", "yargıtaya")),
+    (
+        "istinaf",
+        (
+            "istinaf",
+            "bölge adliye",
+            "hükmü istinaf",
+            "kanun yoluna",
+            "hükme karşı",
+            "üst mahkeme",
+            "ust mahkeme",
+            "mahkumiyet kararı",
+        ),
+    ),
     ("katilma", ("davaya katılma", "katılma talebi", "katılan sıfatı")),
     ("idari_dava", ("idare mahkemesi", "iptal davası", "tam yargı", "idari işlem", "2577")),
     ("itiraz", ("itiraz dilekçesi", "hakimlik kararına itiraz", "sulh ceza hakimliği")),
-    ("cevap", ("cevap dilekçesi", "iddianameye cevap", "savunma dilekçesi")),
+    ("cevap", ("cevap dilekçesi", "iddianameye cevap", "savunma dilekçesi", "iddianame tebliğ")),
     ("suc_duyurusu", ("suç duyurusu", "ihbar etmek", "ihbarda bulun")),
     (
         "sikayet",
@@ -37,6 +49,9 @@ _INTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
             "paramı çaldı",
             "şikayetçiyim",
             "savcılığa başvur",
+            "savcıya gitmek",
+            "hakaret",
+            "darp edildi",
         ),
     ),
 ]

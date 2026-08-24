@@ -1252,6 +1252,8 @@ button {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .query-bar {
@@ -1303,7 +1305,13 @@ button {
 }
 
 .research-pane .content-area.graph-mode {
-  min-height: 28rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.research-scroll.graph-fill {
   overflow: hidden;
 }
 
@@ -1363,10 +1371,50 @@ button {
 }
 
 .answer-body {
-  white-space: pre-wrap;
   font-size: 15px;
   color: var(--silver-200);
   max-width: 54rem;
+  line-height: 1.65;
+}
+
+.answer-body.memo {
+  white-space: normal;
+}
+
+.answer-section {
+  margin: 1.15rem 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-400);
+}
+
+.answer-section:first-child {
+  margin-top: 0;
+}
+
+.answer-p {
+  margin: 0 0 0.65rem;
+}
+
+.answer-points,
+.answer-related {
+  margin: 0 0 0.85rem;
+  padding: 0 0 0 1.2rem;
+}
+
+.answer-points li,
+.answer-related li {
+  margin: 0 0 0.45rem;
+}
+
+.answer-source {
+  margin: 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--silver-400);
 }
 
 .cite {
@@ -1718,6 +1766,56 @@ a.source-row {
   font-weight: 700;
 }
 
+.graph-stats a {
+  color: var(--gold-400);
+}
+
+.trace-hops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  list-style: none;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.12);
+  background: rgba(10, 22, 40, 0.88);
+}
+
+.trace-hop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 4.4rem;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 6px;
+  background: rgba(6, 16, 31, 0.85);
+  color: var(--gold-200, #e8c56a);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.trace-hop.skip {
+  opacity: 0.5;
+  border-color: rgba(138, 160, 192, 0.35);
+  color: var(--silver-400);
+}
+
+.trace-hop.warn {
+  border-color: rgba(212, 175, 55, 0.55);
+}
+
+.trace-hop-title {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trace-hop-ms {
+  font-size: 10px;
+  color: var(--silver-400);
+}
+
 .trace-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1797,6 +1895,77 @@ a.source-row {
   font-family: var(--font-body);
   font-size: 0.92rem;
   line-height: 1.45;
+}
+
+.research-composer {
+  flex-shrink: 0;
+  border-bottom: none;
+  border-top: 1px solid rgba(212, 175, 55, 0.16);
+  align-items: center;
+}
+
+.research-composer .composer-new {
+  flex-shrink: 0;
+  padding: 0 0.35rem;
+}
+
+.saved-article {
+  margin: 0 0 0.9rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  border-radius: 8px;
+  background: rgba(10, 22, 40, 0.45);
+}
+
+.saved-article-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+  margin-bottom: 0.45rem;
+}
+
+.saved-article p {
+  margin: 0;
+  color: var(--silver-400);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.chat-turn {
+  margin: 0 0 1.35rem;
+}
+
+.chat-q {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  color: var(--gold-200);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.chat-answer-label {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+  color: var(--gold-200);
+}
+
+.text-btn {
+  border: 0;
+  background: transparent;
+  color: var(--gold-400);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.text-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .stage-map {
@@ -1913,6 +2082,51 @@ a.source-row {
   display: inline;
   margin-right: 0.35rem;
   color: var(--gold-200);
+}
+
+.gap-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.gap-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.gap-field span {
+  color: var(--silver-400);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.gap-field input {
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: rgba(6, 16, 31, 0.85);
+  color: var(--silver-200);
+}
+
+.gap-field input:focus {
+  outline: none;
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+}
+
+.gap-form > button {
+  justify-self: start;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 0.95rem;
+  background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+  color: #1a1204;
+  font-weight: 700;
+}
+
+.gap-form > button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .official-links {
@@ -2415,6 +2629,66 @@ a.source-row {
   padding: 0.75rem 0.9rem;
 }
 
+.mode-switch {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: rgba(5, 12, 24, 0.72);
+}
+
+.mode-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--silver-400);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.38rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.mode-switch button.on {
+  background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+  color: #1a1204;
+}
+
+.islem-guess {
+  margin: 0;
+  padding: 0.45rem 0.15rem 0;
+  font-size: 0.88rem;
+  color: var(--gold-300);
+}
+
+.islem-guess strong {
+  color: var(--gold-200);
+}
+
+.islem-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.islem-examples button {
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: rgba(5, 12, 24, 0.65);
+  color: var(--silver-300);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.islem-examples button.on,
+.islem-examples button:hover {
+  border-color: rgba(212, 175, 55, 0.55);
+  color: var(--gold-200);
+}
+
 .islem-compose-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2537,134 +2811,94 @@ a.source-row {
 }
 
 .petition-body {
-  padding: 1.1rem 1.4rem 1.35rem;
-  font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+  padding: 1.25rem 1.6rem 1.45rem;
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 0.95rem;
   line-height: 1.55;
+  color: #1a1408;
+}
+
+.petition-classic {
+  min-height: 22rem;
 }
 
 .petition-tc {
   margin: 0;
   text-align: center;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.18em;
   font-weight: 700;
 }
 
 .petition-via {
   margin: 0.2rem 0 0;
   text-align: center;
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #5c4a24;
+  font-size: 0.92rem;
+  text-transform: none;
+  color: #1a1408;
 }
 
 .petition-makam {
-  margin: 0.15rem 0 0.35rem;
+  margin: 0.12rem 0 0;
   text-align: center;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.petition-subtitle {
-  margin: 0.35rem 0 1.05rem;
+.petition-city {
+  margin: 0.12rem 0 2.2rem;
   text-align: center;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  font-size: 0.86rem;
+  letter-spacing: 0;
+  font-weight: 400;
 }
 
-.petition-sheet[data-layout="aym"] .petition-subtitle {
-  letter-spacing: 0.18em;
-  border: 1px solid #7a1f2b;
-  display: inline-block;
-  width: 100%;
-  padding: 0.35rem 0;
-  box-sizing: border-box;
-}
-
-.petition-konu {
-  margin: 0 0 1.1rem;
-  font-weight: 600;
-}
-
-.petition-meta {
-  margin: 0 0 1.05rem;
-  display: grid;
-  gap: 0.28rem;
-}
-
-.petition-meta-row {
-  display: grid;
-  grid-template-columns: minmax(7.5rem, 38%) 1fr;
-  gap: 0.55rem;
-  align-items: baseline;
-}
-
-.petition-meta-row dt {
-  margin: 0;
-  font-weight: 700;
-  font-size: 0.84rem;
-}
-
-.petition-meta-row dt::after {
-  content: " :";
-}
-
-.petition-meta-row dd {
-  margin: 0;
-}
-
-.petition-sheet[data-layout="idari"] .petition-meta {
-  border: 1px solid rgba(47, 74, 60, 0.28);
-  padding: 0.55rem 0.7rem;
-}
-
-.petition-section {
-  margin: 0 0 0.95rem;
-}
-
-.petition-section h3 {
-  margin: 0 0 0.25rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #6f5210;
-}
-
-.petition-section p {
-  margin: 0;
+.petition-prose {
+  margin: 0 0 0.85rem;
+  text-align: justify;
   white-space: pre-wrap;
+  text-indent: 0;
 }
 
-.petition-section.kind-eksik {
-  padding: 0.7rem 0.8rem;
-  border: 1px solid #b8942a;
-  border-radius: 4px;
-  background: #efe4c4;
-  color: #1a1408;
-}
-
-.petition-section.kind-eksik h3 {
-  color: #6f5210;
-}
-
-.petition-section.kind-eksik p {
-  color: #1a1408;
+.petition-prose.indent {
+  text-indent: 2.4em;
 }
 
 .petition-closing {
-  margin: 0.4rem 0 0.9rem;
-  font-weight: 600;
+  margin: 0.35rem 0 1.8rem;
+  text-indent: 2.4em;
+}
+
+.petition-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin: 0 0 1.6rem;
+}
+
+.petition-adres {
+  margin: 0;
+}
+
+.petition-adres p {
+  margin: 0;
 }
 
 .petition-sign {
-  margin: 0 0 1rem;
+  margin: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.1rem;
-  font-weight: 600;
+  gap: 0.2rem;
+  text-align: right;
+}
+
+.petition-ekler {
+  margin: 0.2rem 0 0;
+}
+
+.petition-ekler p {
+  margin: 0 0 0.12rem;
 }
 
 .petition-onay {

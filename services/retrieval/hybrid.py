@@ -73,21 +73,34 @@ class HybridSearcher:
         self.rrf_k = rrf_k
         self.limit = limit
 
-    def search(
+    def search_bm25(
         self,
         query: str,
         *,
         law_no: str | None = None,
         at: datetime | None = None,
+    ) -> list[SearchHit]:
+        return self.bm25.search(query, size=self.bm25_size, law_no=law_no, at=at)
+
+    def search_semantic(
+        self,
+        query: str,
+        *,
+        law_no: str | None = None,
+        at: datetime | None = None,
+    ) -> list[SearchHit]:
+        return self.semantic.search(query, size=self.semantic_size, law_no=law_no, at=at)
+
+    def fuse(
+        self,
+        query: str,
+        bm25_hits: list[SearchHit],
+        semantic_hits: list[SearchHit] | None,
+        *,
         limit: int | None = None,
     ) -> list[FusedHit]:
         top_n = limit or self.limit
         pool = max(top_n * 3, top_n)
-        bm25_hits = self.bm25.search(
-            query, size=self.bm25_size, law_no=law_no, at=at
-        )
-
-        # Exact citation queries are lexical; semantic vectors add noise.
         if _is_exact_citation_query(query):
             cited = [
                 FusedHit(
@@ -103,11 +116,8 @@ class HybridSearcher:
             ]
             return unique_by_article(cited, limit=top_n)
 
-        semantic_hits = self.semantic.search(
-            query, size=self.semantic_size, law_no=law_no, at=at
-        )
         fused = reciprocal_rank_fusion(
-            {"bm25": bm25_hits, "semantic": semantic_hits},
+            {"bm25": bm25_hits, "semantic": semantic_hits or []},
             k=self.rrf_k,
             limit=pool,
         )
@@ -122,6 +132,20 @@ class HybridSearcher:
             rest = [h for h in fused if h not in exact]
             fused = exact + rest
         return unique_by_article(fused, limit=top_n)
+
+    def search(
+        self,
+        query: str,
+        *,
+        law_no: str | None = None,
+        at: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[FusedHit]:
+        bm25_hits = self.search_bm25(query, law_no=law_no, at=at)
+        if _is_exact_citation_query(query):
+            return self.fuse(query, bm25_hits, [], limit=limit)
+        semantic_hits = self.search_semantic(query, law_no=law_no, at=at)
+        return self.fuse(query, bm25_hits, semantic_hits, limit=limit)
 
 
 

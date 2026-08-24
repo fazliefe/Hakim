@@ -92,7 +92,22 @@ def test_islem_incomplete_text_lists_gaps() -> None:
     assert body["draft"]
     assert "«[şikayetçi" in body["draft"]
     labels = [section.get("label", "") for section in (body.get("petition") or {}).get("sections") or []]
-    assert any("Eksik hususlar" in label for label in labels)
+    assert not any("Eksik hususlar" in label for label in labels)
+    assert "EKSİK HUSUSLAR" not in (body.get("draft") or "")
+
+
+def test_islem_anla_guesses_format_without_writing() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/v1/islem/anla",
+        json={"text": "Tutukluyum, tahliye talebinde bulunmak istiyorum."},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "tahliye"
+    assert "Tahliye" in body["title"]
+    assert body["confidence"] > 0.4
+    assert "draft" not in body
 
 
 def test_islem_accepts_sikayet_template() -> None:
