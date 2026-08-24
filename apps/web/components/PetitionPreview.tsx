@@ -14,6 +14,11 @@ export function PetitionPreview({
 }) {
   const layout = petition?.layout || (draft ? "dilekce" : "");
   const family = petition?.family || "ceza";
+  const paragraphs = petition?.paragraphs?.length
+    ? petition.paragraphs
+    : fallbackParagraphs(petition);
+  const ekler = petition?.ekler?.length ? petition.ekler : ["—"];
+  const adresLines = splitAdres(petition?.adres);
 
   return (
     <article className={`petition-sheet ${layout}`} data-layout={layout} data-family={family}>
@@ -25,41 +30,58 @@ export function PetitionPreview({
       {layout === "resmi" || !petition ? (
         <pre className="draft-pre">{draft}</pre>
       ) : (
-        <div className="petition-body">
+        <div className="petition-body petition-classic">
           <p className="petition-tc">T.C.</p>
           {petition.via ? <p className="petition-via">{petition.via}</p> : null}
           <p className="petition-makam">{petition.hitap}</p>
-          {petition.subtitle ? <p className="petition-subtitle">{petition.subtitle}</p> : null}
-          {petition.meta?.length ? (
-            <dl className="petition-meta">
-              {petition.meta.map((row) => (
-                <div key={row.label} className="petition-meta-row">
-                  <dt>{row.label}</dt>
-                  <dd>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : petition.konu && layout === "dilekce" ? (
-            <p className="petition-konu">KONU: {petition.konu}</p>
-          ) : null}
-          {petition.sections?.map((section) => (
-            <section key={section.id} className={`petition-section kind-${section.kind || "prose"}`}>
-              <h3>{section.label}</h3>
-              <p>{section.text}</p>
-            </section>
+          {petition.sehir ? <p className="petition-city">{petition.sehir}</p> : null}
+          {paragraphs.map((paragraph, idx) => (
+            <p
+              key={`${idx}-${paragraph.slice(0, 24)}`}
+              className={idx === 0 ? "petition-prose indent" : "petition-prose"}
+            >
+              {paragraph}
+            </p>
           ))}
           {petition.closing ? <p className="petition-closing">{petition.closing}</p> : null}
-          {petition.signature?.role ? (
-            <p className="petition-sign">
-              <span>{petition.signature.role}</span>
-              <span>{petition.signature.name || "(İmza)"}</span>
-            </p>
-          ) : null}
+          <div className="petition-footer">
+            <div className="petition-adres">
+              <p>Adres:</p>
+              {adresLines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+            <div className="petition-sign">
+              {petition.tarih ? <span>{petition.tarih}</span> : null}
+              <span>(imza)</span>
+              <span>{petition.signature?.name || "«[ad soyad]»"}</span>
+            </div>
+          </div>
+          <div className="petition-ekler">
+            <p>EKLER:</p>
+            {ekler.map((item, idx) => (
+              <p key={`${idx}-${item}`}>
+                EK-{idx + 1}  {item}
+              </p>
+            ))}
+          </div>
           {petition.onay_notu ? <p className="petition-onay">{petition.onay_notu}</p> : null}
         </div>
       )}
     </article>
   );
+}
+
+function splitAdres(adres?: string): string[] {
+  const raw = (adres || "«[adres]»").trim();
+  const parts = raw.split(/[\n;]+/).map((part) => part.trim()).filter(Boolean);
+  return parts.length ? parts : ["«[adres]»"];
+}
+
+function fallbackParagraphs(petition?: PetitionView | null): string[] {
+  return (petition?.sections || [])
+    .filter((section) => section.kind !== "eksik" && section.text?.trim())
+    .map((section) => section.text);
 }
 
 function headerLabel(layout: string, title?: string) {

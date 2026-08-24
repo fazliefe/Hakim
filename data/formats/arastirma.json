@@ -29,8 +29,8 @@
     "properties": {
       "ozet": {
         "type": "string",
-        "max_chars": 900,
-        "rule": "İki-üç cümle. İlk cümle hukuki sonucu söyler. Madde numarası yalnız evidence içinden. «en yakın resmi dayanak» deme."
+        "max_chars": 1800,
+        "rule": "4–6 cümle, 80–140 kelime. İlk cümle hukuki sonucu söyler. Madde numarası yalnız evidence içinden. «en yakın resmi dayanak» deme."
       },
       "ana_kaynak_n": {
         "type": "integer",
@@ -43,16 +43,16 @@
           "required": ["n", "cumle"],
           "properties": {
             "n": "atıf numarası, evidence.n ile aynı",
-            "cumle": "O kaynağa dayanan açıklayıcı bir cümle. Metin uydurma yok; parafraz et, maddeyi yapıştırma."
+            "cumle": "İki tam cümle. Kaynağa dayan; parafraz et, maddeyi yapıştırma."
           }
         },
-        "min_items": 3,
-        "max_items": 6
+        "min_items": 6,
+        "max_items": 10
       },
       "ilgili": {
         "type": "array",
-        "items": { "n": "integer", "neden": "string, tek cümle" },
-        "max_items": 3
+        "items": { "n": "integer", "neden": "string, bir veya iki cümle" },
+        "max_items": 4
       },
       "kaynak_uyari": {
         "type": "string",
@@ -70,7 +70,7 @@
       "evidence.law_no hangi kanunu gösteriyorsa onu yaz (CMK ise TCK yazma).",
       "Ana kaynak cümlesinde madde veya karar künyesi geçsin.",
       "İlk cümle soruyu cevaplar. Evidence’daki her maddeyi sırayla sayma.",
-      "En az dört tam cümle yaz.",
+      "En az on tam cümle yaz; ozet uzun, gerekce maddeleri ikişer cümle olsun.",
       "Her cümle parafraz; atıf [n] cümlenin sonunda. Maddeyi ayrı blok olarak yapıştırma."
     ],
     "must_not": [
@@ -86,27 +86,40 @@
     ]
   },
   "example": {
-    "ozet": "Evet: banka hesabının araç olarak kullanılması, TCK m.158 kapsamında nitelikli dolandırıcılıktır [1]. Madde, banka veya kredi kurumunun araç olarak kullanıldığı hâlleri temel dolandırıcılıktan ayırır [1]. Somut olayda bu seçimlik hareketin gerçekleşip gerçekleşmediği dosyadan bakılır [1].",
+    "ozet": "Evet: banka hesabının araç olarak kullanılması, TCK m.158 kapsamında nitelikli dolandırıcılıktır [1]. Madde, banka veya kredi kurumunun araç olarak kullanıldığı hâlleri temel dolandırıcılıktan ayırır ve cezayı ağırlaştırır [1]. Bu seçenek, hesabın dolandırıcılık fiilinde vasıta kılınmasını arar; salt hesap sahibi olmak tek başına yeterli sayılmaz [1]. Somut olayda hesabın gerçekten araç olarak kullanılıp kullanılmadığı ve dolandırıcılığın diğer unsurlarının oluşup oluşmadığı dosyadan bakılır [1]. Aşağıdaki gerekçe yalnız verilen resmi kaynaklara dayanır [1].",
     "ana_kaynak_n": 1,
     "gerekce": [
       {
         "n": 1,
-        "cumle": "TCK m.158, dolandırıcılığın bilişim sistemleri ile banka veya kredi kurumları kullanılarak işlenmesini nitelikli hâl sayar [1]."
+        "cumle": "TCK m.158, dolandırıcılığın bilişim sistemleri ile banka veya kredi kurumları kullanılarak işlenmesini nitelikli hâl sayar [1]. Bu düzenleme, temel dolandırıcılığa eklenen seçimlik hareketlerden biridir [1]."
       },
       {
         "n": 1,
-        "cumle": "Bu seçenek gerçekleştiğinde fiil, maddenin nitelikli şekli içinde kalır; klasik dolandırıcılıktan ayrı bir ağırlaştırıcı yoldur [1]."
+        "cumle": "Banka hesabının araç olarak kullanılması, maddenin lafzındaki banka veya kredi kurumu seçeneğine karşılık gelir [1]. Araç olma, hesabın hileli teminin veya zararın gerçekleşmesinde vasıta işlevi görmesini ifade eder [1]."
+      },
+      {
+        "n": 1,
+        "cumle": "Bu seçenek gerçekleştiğinde fiil, maddenin nitelikli şekli içinde kalır [1]. Kanun koyucu bu yolu klasik dolandırıcılıktan ayrı bir ağırlaştırıcı yol olarak düzenlemiştir [1]."
       },
       {
         "n": 3,
-        "cumle": "Suçun temel şekli TCK m.157’de düzenlenir; nitelikli seçenekler 158’de toplanır [3]."
+        "cumle": "Suçun temel şekli TCK m.157’de düzenlenir; nitelikli seçenekler 158’de toplanır [3]. 157, hile ve zarar unsurlarını kurar; 158 ise belirli araç ve ortamları ağırlaştırıcı sebep yapar [3]."
       },
       {
         "n": 1,
-        "cumle": "Hesabın gerçekten araç olarak kullanıldığının ve dolandırıcılığın diğer unsurlarının da oluştuğunun dosyadan incelenmesi gerekir [1]."
+        "cumle": "Uygulamada hesabın kime ait olduğu, kimin talimatıyla hareket edildiği ve hilenin nasıl icra edildiği birlikte okunur [1]. Bu olgular arşiv maddesinden çıkarılamaz; dosya incelemesine bırakılır [1]."
+      },
+      {
+        "n": 1,
+        "cumle": "Hesabın gerçekten araç olarak kullanıldığının ve dolandırıcılığın diğer unsurlarının da oluştuğunun dosyadan incelenmesi gerekir [1]. Kaynak, soyut hükmü verir; somut subsumption mahkemenin işidir [1]."
       }
     ],
-    "ilgili": [],
+    "ilgili": [
+      {
+        "n": 3,
+        "neden": "TCK m.157 temel dolandırıcılığı kurar; nitelikli hâlin anlaşılması için yanına konur [3]."
+      }
+    ],
     "kaynak_uyari": "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır."
   }
 }

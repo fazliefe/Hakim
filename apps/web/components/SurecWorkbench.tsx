@@ -94,8 +94,7 @@ export function SurecWorkbench() {
           <article className="evrak-draft" style={{ margin: "0 0.9rem 1rem" }}>
             <h2>Usul anlatımı</h2>
             <p className="muted" style={{ fontSize: 12 }}>
-              Süre rakamları kural motorundan. Yazıcı: {writerLabel(result.writer)}
-              {result.writer_error ? ` · ${result.writer_error}` : ""}
+              Süreler mevzuattaki süre kurallarına göre hesaplanır.
             </p>
             <pre className="draft-pre">{result.draft}</pre>
           </article>

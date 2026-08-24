@@ -25,20 +25,23 @@ export function useDocumentAnalysis(
 
   const [fileName, setFileName] = useState<string | null>(null);
 
-  async function submit(event?: FormEvent, nextAction?: string) {
+  async function submit(event?: FormEvent, nextAction?: string, nextText?: string) {
     event?.preventDefault();
     const usedAction = nextAction ?? action;
+    const payload = (nextText ?? text).trim();
     if (nextAction) setAction(nextAction);
+    if (nextText) setText(nextText);
     setLoading(true);
     setError(null);
     try {
       const data = await analyzeWorkspace(
         path,
-        text.trim(),
+        payload,
         path === "/v1/islem" || path === "/v1/senaryo" ? usedAction || undefined : undefined,
       );
       setResult(data);
-      if ((path === "/v1/islem" || path === "/v1/senaryo") && data.action) setAction(data.action);
+      if (path === "/v1/islem" && usedAction && data.action) setAction(data.action);
+      if (path === "/v1/senaryo" && data.action) setAction(data.action);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bilinmeyen hata");
     } finally {

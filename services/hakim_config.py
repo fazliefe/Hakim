@@ -40,6 +40,8 @@ class ModelsConfig:
     llm_max_tokens: int
     llm_timeout: float
     llm_temperature: float
+    llm_input_per_million: float
+    llm_output_per_million: float
     embedding_model: str
     embedding_dims: int
     ollama_enabled: bool
@@ -67,6 +69,8 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         llm_max_tokens=int(llm.get("max_tokens") or 900),
         llm_timeout=float(llm.get("timeout") or 25),
         llm_temperature=float(llm.get("temperature") or 0.2),
+        llm_input_per_million=float(llm.get("input_per_million") or 0.075),
+        llm_output_per_million=float(llm.get("output_per_million") or 0.30),
         embedding_model=str(embedding.get("model") or "newmindai/Mursit-Base-TR-Retrieval"),
         embedding_dims=int(embedding.get("dims") or 768),
         ollama_enabled=bool(ollama.get("enabled", False)),
@@ -86,6 +90,25 @@ def get_models() -> ModelsConfig:
     if not isinstance(raw, dict):
         raise ValueError(f"models.yaml nesne değil: {path}")
     return _parse(raw)
+
+
+PROVIDER_LABELS = {
+    "groq": "Groq",
+    "ollama": "Ollama",
+    "colab": "Colab",
+}
+
+
+def model_display_name(model: str) -> str:
+    raw = (model or "").strip()
+    return raw.rsplit("/", 1)[-1] if raw else ""
+
+
+def model_label(cfg: ModelsConfig | None = None) -> str:
+    chosen = cfg or get_models()
+    provider = PROVIDER_LABELS.get(chosen.profile, chosen.profile or "LLM")
+    name = model_display_name(chosen.llm_model) or chosen.llm_model
+    return f"{provider} · {name}"
 
 
 def reload_models() -> ModelsConfig:

@@ -39,7 +39,7 @@
     "tone": "Savcılığa hitap eden şikayet dilekçesi. Dava dilekçesi gibi «davacı-davalı» kullanma.",
     "must": [
       "Hukuki nitelendirmede yalnız engine.related / evidence içindeki TCK maddelerini kullan",
-      "related boşsa madde numarası yazma; «eşleşen madde yok» de",
+      "related boşsa TCK madde numarası yazma; sistem notu koyma",
       "Talep yalnızca soruşturma, delil toplama ve kamu davası açılsın diye bitsin",
       "Bölüm sırasını sections ile aynı tut"
     ],
@@ -57,9 +57,7 @@
     "sikayetci": "Şikayetçi",
     "sikayet_edilen": "Kimliği belirsiz şüpheli",
     "olay": "Banka hesabı kullanılarak dolandırıcılık niteliğinde işlem yapıldığı beyan edilmektedir.",
-    "hukuki_nitelendirme": [
-      { "cumle": "Mevzuat aramasında eşleşen madde yok; taslağa TCK maddesi yazılmadı." }
-    ],
+    "hukuki_nitelendirme": [],
     "deliller": ["Banka dekontları", "Yazışmalar"],
     "talep": "Şikayet edilen hakkında soruşturma açılması, delillerin toplanması ve kamu davası açılması talep olunur.",
     "sure_notu": "Şikayet süresi TCK m.73’e tabidir."

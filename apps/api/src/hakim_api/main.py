@@ -116,6 +116,7 @@ class ResearchResponse(BaseModel):
     writer: str = "extractive"
     writer_error: str | None = None
     reasoning: dict[str, Any] | None = None
+    observability: dict[str, Any] | None = None
 
 
 class DocumentRequest(BaseModel):
@@ -199,6 +200,10 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             payload["draft"] = draft
             payload["writer"] = writer_name()
             mark_writer(payload.get("agents") or [], writer=payload["writer"], ms=elapsed_ms(started))
+            if surface != "surec":
+                from document_ai.gaps import merge_placeholder_gaps
+
+                payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
     except Exception as exc:
         payload["writer"] = "extractive"
         payload["writer_error"] = str(exc)[:280]
@@ -508,6 +513,7 @@ def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchRes
         writer=result.writer,
         writer_error=result.writer_error,
         reasoning=result.reasoning or None,
+        observability=result.observability or None,
     )
 
 
@@ -589,6 +595,20 @@ def islem(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     return payload
 
 
+@app.post("/v1/islem/anla")
+def islem_anla(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    from document_ai.route_islem import route_islem
+
+    routed = route_islem(body.text)
+    return {
+        "action": routed.action,
+        "title": routed.title,
+        "reason": routed.reason,
+        "evidence": routed.evidence,
+        "confidence": routed.confidence,
+    }
+
+
 @app.post("/v1/senaryo")
 def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     """Görev 1+2 tek paket: oku → sınıf → mevzuat → süre → resmi yazı → havale."""
@@ -628,6 +648,9 @@ def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any
             payload["petition"] = petition
             payload["writer"] = writer_name()
             mark_writer(payload.get("agents") or [], writer=payload["writer"], ms=elapsed_ms(started))
+            from document_ai.gaps import merge_placeholder_gaps
+
+            payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
     except Exception as exc:
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
 import { AppShell, InspectorMode } from "@/components/AppShell";
@@ -19,6 +19,7 @@ const TraceGraphView = dynamic(
 
 type Tab = "metin" | "kaynaklar" | "graf" | "iz";
 type SideView = "arastirmalar" | "gecmis" | "kaydedilen";
+type ChatTurn = { id: string; query: string; answer: string; result: ResearchResponse };
 
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
@@ -42,7 +43,15 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function AnswerBody({
+const ANSWER_HEADINGS = new Set([
+  "Sonuç",
+  "Hukuki dayanak",
+  "İlgili hükümler",
+  "Değerlendirme",
+  "Kaynak",
+]);
+
+function CiteText({
   text,
   selected,
   onCite,
@@ -53,7 +62,7 @@ function AnswerBody({
 }) {
   const parts = text.split(/(\[\d+\])/g);
   return (
-    <div className="answer-body">
+    <>
       {parts.map((part, index) => {
         const match = part.match(/^\[(\d+)\]$/);
         if (!match) {
@@ -71,6 +80,60 @@ function AnswerBody({
           </button>
         );
       })}
+    </>
+  );
+}
+
+function AnswerBody({
+  text,
+  selected,
+  onCite,
+}: {
+  text: string;
+  selected: number | null;
+  onCite: (n: number) => void;
+}) {
+  const blocks = text.split(/\n\n+/).map((block) => block.trim()).filter(Boolean);
+  return (
+    <div className="answer-body memo">
+      {blocks.map((block, index) => {
+        if (ANSWER_HEADINGS.has(block)) {
+          return (
+            <h2 key={index} className="answer-section">
+              {block}
+            </h2>
+          );
+        }
+        const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+        if (lines.length && lines.every((line) => /^\d+\.\s+/.test(line))) {
+          return (
+            <ol key={index} className="answer-points">
+              {lines.map((line, lineIndex) => (
+                <li key={lineIndex}>
+                  <CiteText text={line.replace(/^\d+\.\s+/, "")} selected={selected} onCite={onCite} />
+                </li>
+              ))}
+            </ol>
+          );
+        }
+        if (lines.length && lines.every((line) => /^[•\-]\s+/.test(line))) {
+          return (
+            <ul key={index} className="answer-related">
+              {lines.map((line, lineIndex) => (
+                <li key={lineIndex}>
+                  <CiteText text={line.replace(/^[•\-]\s+/, "")} selected={selected} onCite={onCite} />
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        const note = index === blocks.length - 1 && blocks[index - 1] === "Kaynak";
+        return (
+          <p key={index} className={note ? "answer-source" : "answer-p"}>
+            <CiteText text={block} selected={selected} onCite={onCite} />
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -86,24 +149,35 @@ function sourceHeading(item: Evidence) {
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
 
+function buildFollowUp(turns: ChatTurn[], userText: string): string {
+  const topic = turns[0]?.query || turns[turns.length - 1]?.query || "";
+  const lead = userText.trim();
+  if (!topic || topic === lead) return lead;
+  return `${lead}\nKonu: ${topic}`;
+}
+
 export function ResearchWorkspace() {
-  const [query, setQuery] = useState("nitelikli dolandırıcılıkta banka hesabının kullanılması");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResponse | null>(null);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("metin");
   const [side, setSide] = useState<SideView>("arastirmalar");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [saved, setSaved] = useState<SavedArticle[]>([]);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("collapsed");
-  const [bottomHeight, setBottomHeight] = useState(190);
-  const bottomDrag = useRef({ startY: 0, startH: 190 });
+  const threadEnd = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
     setSaved(readJson(SAVED_KEY, []));
   }, []);
+
+  useEffect(() => {
+    threadEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns, loading]);
 
   const selectedEvidence: Evidence | null = useMemo(() => {
     if (!result || selected == null) return result?.evidence[0] ?? null;
@@ -133,18 +207,32 @@ export function ResearchWorkspace() {
     if (next === "kaynaklar") setInspectorMode("open");
   }
 
-  async function runQuery(text: string) {
+  async function runQuery(text: string, opts?: { followUp?: boolean; replace?: boolean }) {
+    const display = text.trim();
+    if (display.length < 2) return;
+    const followUp = Boolean(opts?.followUp) && turns.length > 0 && !opts?.replace;
+    const payload = followUp ? buildFollowUp(turns, display) : display;
     setLoading(true);
     setError(null);
     try {
-      const data = await runResearch(text.trim());
+      const data = await runResearch(payload);
       setResult(data);
       setSelected(data.evidence[0]?.n ?? null);
       setTab("metin");
       setSide("arastirmalar");
-      persistHistory(
-        [{ id: String(Date.now()), query: text.trim(), at: new Date().toISOString() }, ...history.filter((h) => h.query !== text.trim())].slice(0, 20),
-      );
+      const turn: ChatTurn = {
+        id: String(Date.now()),
+        query: display,
+        answer: data.answer || "",
+        result: data,
+      };
+      setTurns((prev) => (opts?.replace ? [turn] : [...prev, turn]));
+      setQuery("");
+      if (!followUp) {
+        persistHistory(
+          [{ id: String(Date.now()), query: display, at: new Date().toISOString() }, ...history.filter((h) => h.query !== display)].slice(0, 20),
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bilinmeyen hata");
     } finally {
@@ -152,9 +240,18 @@ export function ResearchWorkspace() {
     }
   }
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    await runQuery(query);
+  async function onSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    await runQuery(query, { followUp: turns.length > 0 });
+  }
+
+  function startNewResearch() {
+    setTurns([]);
+    setResult(null);
+    setQuery("");
+    setError(null);
+    setSelected(null);
+    setTab("metin");
   }
 
   function toggleSave() {
@@ -168,18 +265,6 @@ export function ResearchWorkspace() {
       { id, heading: sourceHeading(selectedEvidence), content: selectedEvidence.content },
       ...saved,
     ]);
-  }
-
-  function onBottomStart(event: PointerEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    bottomDrag.current = { startY: event.clientY, startH: bottomHeight };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onBottomMove(event: PointerEvent<HTMLButtonElement>) {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-    const next = bottomDrag.current.startH - (event.clientY - bottomDrag.current.startY);
-    setBottomHeight(Math.min(420, Math.max(120, next)));
   }
 
   const inspector = (
@@ -230,189 +315,162 @@ export function ResearchWorkspace() {
       hideStatusBar
     >
       <section className="main-pane research-pane">
-          <div className="research-scroll">
+        <div className={`research-scroll${tab === "graf" || tab === "iz" ? " graph-fill" : ""}`}>
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
               <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
               <p>
                 {side === "gecmis"
-                  ? "Önceki araştırmalar. Tıklayınca yeniden çalışır."
+                  ? "Önceki araştırmalar. Tıklayınca yeni sohbet başlar."
                   : "Tuttuğunuz madde ve kararlar."}
               </p>
             </div>
-          ) : tab !== "graf" && tab !== "iz" ? (
-          <div className="pane-hero">
-            <h1>Hukuki araştırma</h1>
-            <p>Cevap, madde metni ve atıflarla birlikte gelir.</p>
-          </div>
+          ) : tab !== "graf" && tab !== "iz" && turns.length === 0 ? (
+            <div className="pane-hero">
+              <h1>Hukuki araştırma</h1>
+              <p>Sorunuzu yazın. Cevaptan sonra aynı sohbette devam edebilirsiniz.</p>
+            </div>
           ) : null}
 
           {side === "arastirmalar" ? (
-          <>
-          <form className="query-bar" onSubmit={onSubmit}>
+            <div className={`content-area ${tab === "graf" || tab === "iz" ? "graph-mode" : ""}`}>
+              {error ? <p className="error">{error}</p> : null}
+              {result && tab === "graf" ? (
+                <LegalGraphView
+                  evidence={result.evidence}
+                  selected={selected}
+                  onSelect={openSource}
+                  query={turns[turns.length - 1]?.query || result.query}
+                />
+              ) : null}
+              {result && tab === "iz" ? (
+                <TraceGraphView
+                  nodes={result.trace_nodes}
+                  edges={result.trace_edges}
+                  evidence={result.evidence}
+                  selected={selected}
+                  onSelect={openSource}
+                  observability={result.observability}
+                />
+              ) : null}
+              {tab !== "graf" && tab !== "iz" ? (
+                <>
+                  {turns.length === 0 && !error && !loading ? (
+                    <div className="empty-state">
+                      <p className="muted">Sorunuzu yazın. Atıflar kaynağı açar. Cevaptan sonra sohbet devam eder.</p>
+                    </div>
+                  ) : null}
+                  {turns.map((turn, index) => (
+                    <div key={turn.id} className="chat-turn">
+                      <p className="chat-q">{turn.query}</p>
+                      <article className="answer">
+                        {index === turns.length - 1 ? <h1>Cevap</h1> : <h2 className="chat-answer-label">Cevap</h2>}
+                        {turn.answer ? (
+                          <AnswerBody text={turn.answer} selected={selected} onCite={openSource} />
+                        ) : (
+                          <p className="muted">Cevap metni boş döndü.</p>
+                        )}
+                      </article>
+                      {index === turns.length - 1 && result?.reasoning ? (
+                        <ReasoningPanel reasoning={result.reasoning} hideSemantic={hideSemantic} collapsible />
+                      ) : null}
+                    </div>
+                  ))}
+                  {loading ? (
+                    <ThinkingHops steps={RESEARCH_THINK_STEPS} query={query || turns[turns.length - 1]?.query || ""} />
+                  ) : null}
+                  <div ref={threadEnd} />
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="content-area">
+              {side === "gecmis" ? (
+                history.length ? (
+                  history.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="source-row"
+                      onClick={() => {
+                        void runQuery(item.query, { replace: true });
+                      }}
+                    >
+                      {item.query}
+                      <span className="muted"> {item.at.slice(0, 10)}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="muted">Kayıtlı sorgu yok.</p>
+                )
+              ) : null}
+              {side === "kaydedilen" ? (
+                saved.length ? (
+                  saved.map((item) => (
+                    <article key={item.id} className="saved-article">
+                      <div className="saved-article-head">
+                        <strong>{item.heading}</strong>
+                        <button
+                          type="button"
+                          className="text-btn"
+                          onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
+                        >
+                          Kayıttan çıkar
+                        </button>
+                      </div>
+                      <p>{item.content}</p>
+                    </article>
+                  ))
+                ) : (
+                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
+                )
+              ) : null}
+            </div>
+          )}
+        </div>
+        {side === "arastirmalar" && tab !== "graf" && tab !== "iz" ? (
+          <form className="query-bar research-composer" onSubmit={onSubmit}>
+            {turns.length ? (
+              <button type="button" className="text-btn composer-new" onClick={startNewResearch} disabled={loading}>
+                Yeni
+              </button>
+            ) : null}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Hukuki sorunuzu yazın… örn. Madde 158"
-              aria-label="Hukuki soru"
+              placeholder={
+                turns.length ? "Devam sorunuzu yazın…" : "Hukuki sorunuzu yazın… örn. Madde 158"
+              }
+              aria-label={turns.length ? "Devam sorusu" : "Hukuki soru"}
             />
             <button type="submit" disabled={loading || query.trim().length < 2}>
-              {loading ? "Kaynaklar tartılıyor…" : "Araştır"}
+              {loading ? "Aranıyor…" : turns.length ? "Devam et" : "Araştır"}
             </button>
           </form>
-
-          <div className={`content-area ${tab === "graf" || tab === "iz" ? "graph-mode" : ""}`}>
-            {error ? <p className="error">{error}</p> : null}
-            {loading ? <ThinkingHops steps={RESEARCH_THINK_STEPS} query={query} /> : null}
-            {result && tab === "graf" ? (
-              <LegalGraphView
-                evidence={result.evidence}
-                selected={selected}
-                onSelect={openSource}
-                query={result.query}
-              />
-            ) : null}
-            {result && tab === "iz" ? (
-              <TraceGraphView
-                nodes={result.trace_nodes}
-                edges={result.trace_edges}
-                evidence={result.evidence}
-                selected={selected}
-                onSelect={openSource}
-              />
-            ) : null}
-            {(!result && !error && !loading) || (result && !loading && tab !== "graf" && tab !== "iz") ? (
-              <>
-                {!result && !error ? (
-                  <div className="empty-state">
-                    <p className="muted">Sorunuzu yazın. Atıflar kaynağı açar.</p>
-                  </div>
-                ) : null}
-                {result ? (
-                  <>
-                    <article className="answer">
-                      <h1>Cevap</h1>
-                      {result.answer ? (
-                        <AnswerBody text={result.answer} selected={selected} onCite={openSource} />
-                      ) : (
-                        <p className="muted">Cevap metni boş döndü.</p>
-                      )}
-                    </article>
-                    {result.reasoning ? (
-                      <ReasoningPanel reasoning={result.reasoning} hideSemantic={hideSemantic} collapsible />
-                    ) : null}
-                  </>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-          </> ) : (
-          <div className="content-area">
-            {side === "gecmis" ? (
-              history.length ? (
-                history.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="source-row"
-                    onClick={() => {
-                      setQuery(item.query);
-                      void runQuery(item.query);
-                    }}
-                  >
-                    {item.query}
-                    <span className="muted"> {item.at.slice(0, 10)}</span>
-                  </button>
-                ))
-              ) : (
-                <p className="muted">Kayıtlı sorgu yok.</p>
-              )
-            ) : null}
-            {side === "kaydedilen" ? (
-              saved.length ? (
-                saved.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="source-row"
-                    onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
-                    title="Kayıttan çıkarmak için tıklayın"
-                  >
-                    {item.heading}
-                    <span className="muted"> — tıkla, kayıttan çıkar</span>
-                  </button>
-                ))
-              ) : (
-                <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
-              )
-            ) : null}
-          </div>
-          )}
-          </div>
-          {side === "arastirmalar" && tab !== "graf" && tab !== "iz" ? (
-            <>
+        ) : null}
+        {side === "arastirmalar" ? (
+          <div className="bottom-tabs" role="tablist">
+            {(
+              [
+                ["metin", "Metin"],
+                ["kaynaklar", "Kaynaklar"],
+                ["graf", "Bilgi grafı"],
+                ["iz", "Arama izi"],
+              ] as const
+            ).map(([id, label]) => (
               <button
+                key={id}
                 type="button"
-                className="bottom-resizer"
-                aria-label="Alt paneli boyutlandır"
-                onPointerDown={onBottomStart}
-                onPointerMove={onBottomMove}
-              />
-              <div className="bottom-tabs" role="tablist">
-                {(
-                  [
-                    ["metin", "Metin"],
-                    ["kaynaklar", "Kaynaklar"],
-                    ["graf", "Bilgi grafı"],
-                    ["iz", "Arama izi"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    className={tab === id ? "active" : ""}
-                    onClick={() => onTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="bottom-panel" style={{ height: bottomHeight }} role="tabpanel">
-                {!result ? <p className="muted">Sonuç bekleniyor.</p> : null}
-                {result && tab === "metin" ? (
-                  <p className="muted">
-                    Cevaptaki atıflar sağ panelde kaynağı açar. {result.evidence.filter((e) => e.used_in_answer).length} kaynak kullanıldı.
-                  </p>
-                ) : null}
-                {result && tab === "kaynaklar" ? (
-                  <p className="muted">Kaynak açıklamaları sağ panelde. Atıfa veya Kaynaklar’a tıklayın.</p>
-                ) : null}
-              </div>
-            </>
-          ) : side === "arastirmalar" ? (
-            <div className="bottom-tabs" role="tablist">
-              {(
-                [
-                  ["metin", "Metin"],
-                  ["kaynaklar", "Kaynaklar"],
-                  ["graf", "Bilgi grafı"],
-                  ["iz", "Arama izi"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  className={tab === id ? "active" : ""}
-                  onClick={() => onTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </section>
+                role="tab"
+                className={tab === id ? "active" : ""}
+                onClick={() => onTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </AppShell>
   );
 }

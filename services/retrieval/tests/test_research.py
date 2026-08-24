@@ -1,4 +1,5 @@
 from retrieval.research import EvidenceItem, _build_extractive_answer, _official_span
+import re
 
 
 def _item(**kwargs) -> EvidenceItem:
@@ -31,6 +32,9 @@ def test_extractive_answer_includes_citation_markers() -> None:
         )
     ]
     answer = _build_extractive_answer("nitelikli dolandırıcılıkta banka hesabı", evidence)
+    assert "Sonuç" in answer
+    assert "Hukuki dayanak" in answer
+    assert "Kaynak" in answer
     assert "TCK m.158" in answer
     assert "[1]" in answer
     assert "banka" in answer.lower()
@@ -38,13 +42,43 @@ def test_extractive_answer_includes_citation_markers() -> None:
     assert "**Cevap.**" not in answer
     assert "en yakın resmi" not in answer.lower()
     assert "birlikte değerlendirilir" not in answer
-    first = answer.split("\n\n")[0]
-    assert first.strip().startswith("Evet:")
-    assert "kapsamında" in first
-    assert "[1]" in first
-    assert not first.strip().startswith("“")
+    parts = answer.split("\n\n")
+    assert parts[0] == "Sonuç"
+    assert parts[1].strip().startswith("Evet:")
+    assert "kapsamında" in parts[1]
+    assert "[1]" in parts[1]
+    assert not parts[1].strip().startswith("“")
     assert "suretiyle, e)" not in answer
     assert "«ası" not in answer
+
+
+def _sonuc_block(answer: str) -> str:
+    parts = answer.split("\n\n")
+    assert parts[0] == "Sonuç"
+    return parts[1].strip()
+
+
+def _sentence_count(text: str) -> int:
+    return len([part for part in re.split(r"(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜÂÊÎÔÛ«\"])", text.strip()) if part.strip()])
+
+
+def test_extractive_sonuc_has_at_least_five_sentences() -> None:
+    answer = _build_extractive_answer(
+        "trafik güvenliğini tehlikeye sokma",
+        [
+            _item(
+                n=1,
+                chunk_id="law:5237:article:179:v1",
+                article_no="179",
+                title="Trafik güvenliğini tehlikeye sokma",
+                content=(
+                    "Madde 179- (1) Kara, deniz, hava veya demiryolu ulaşımının "
+                    "güven içinde akışını sağlamak için konulmuş her türlü işareti değiştirerek,"
+                ),
+            )
+        ],
+    )
+    assert _sentence_count(_sonuc_block(answer)) >= 5
 
 
 def test_extractive_answer_explains_the_holding() -> None:
@@ -65,13 +99,14 @@ def test_extractive_answer_explains_the_holding() -> None:
             ),
         ],
     )
-    body = answer.split("_Bu metin")[0]
-    assert body.strip().startswith("Evet:")
+    body = answer.split("\n\nKaynak\n\n")[0]
+    assert body.startswith("Sonuç")
+    assert "Evet:" in body
     assert "TCK m.158" in body
     assert "banka" in body.lower()
     assert "TCK m.157" in body
     assert "temel" in body.lower()
-    assert len(body) >= 420
+    assert len(body) >= 700
     assert body.count("\n\n") >= 3
     assert "[1]" in body
     assert "m.245" not in body
@@ -191,9 +226,10 @@ def test_how_query_writes_plain_procedure_sentences() -> None:
     )
     assert "CMK m.158" in answer
     assert "TCK" not in answer
-    assert "Evet:" not in answer.split("\n\n")[0]
+    sonuc = answer.split("\n\n")[1]
+    assert "Evet:" not in sonuc
     assert "temel şekli" not in answer.lower()
-    assert "kapsamında" not in answer.split("\n\n")[0].lower()
+    assert "kapsamında" not in sonuc.lower()
     assert "ihbar" in answer.lower()
     assert "[1]" in answer
 
@@ -246,6 +282,107 @@ def test_answer_items_keeps_close_articles_only() -> None:
         ],
     )
     assert [item.article_no for item in items] == ["158", "157"]
+
+
+def test_how_an_offence_is_regulated_is_not_procedure() -> None:
+    from retrieval.research import _is_procedure_query
+
+    assert _is_procedure_query("Trafik güvenliğini tehlikeye sokma TCK m.179’de nasıl düzenlenir?") is False
+    assert _is_procedure_query("Bu maddenin birinci ve ikinci fıkraları nasıl ayrılır?") is False
+    assert _is_procedure_query("Taksirle işlenmesi TCK m.180’de mi, yoksa 179 kapsamında mı kalır?") is False
+    assert _is_procedure_query("CMK madde 158 ihbar ve şikayet nasıl yapılır?") is True
+
+
+def test_extractive_179_is_not_a_procedure_rule() -> None:
+    evidence = [
+        _item(
+            n=1,
+            chunk_id="law:5237:article:179:v1",
+            article_no="179",
+            title="Trafik güvenliğini tehlikeye sokma",
+            content=(
+                "Madde 179- (1) Kara, deniz, hava veya demiryolu ulaşımının güven içinde "
+                "akışını sağlamak için konulmuş her türlü işareti değiştirerek, kullanılamaz "
+                "hale getirerek, konuldukları yerden kaldırarak, yanlış işaretler vererek, "
+                "geçiş, varış, kalkış veya inişleri tehlikeye sokan kişi, bir yıldan altı yıla "
+                "kadar hapis cezası ile cezalandırılır. "
+                "(2) Kara, deniz, hava veya demiryolu ulaşım araçlarını kişilerin hayat, sağlık "
+                "veya malvarlığı açısından tehlikeli olabilecek şekilde sevk ve idare eden kişi, "
+                "üç aydan iki yıla kadar hapis cezası ile cezalandırılır."
+            ),
+        )
+    ]
+    answer = _build_extractive_answer(
+        "Trafik güvenliğini tehlikeye sokma TCK m.179’de nasıl düzenlenir?",
+        evidence,
+    )
+    assert "usul kuralı" not in answer.lower()
+    assert "TCK m.179" in answer
+    assert "başvurunun şeklini" not in answer.lower()
+
+
+def test_extractive_splits_fikralar_when_asked() -> None:
+    evidence = [
+        _item(
+            n=1,
+            chunk_id="law:5237:article:179:v1",
+            article_no="179",
+            title="Trafik güvenliğini tehlikeye sokma",
+            content=(
+                "Madde 179- (1) Kara, deniz, hava veya demiryolu ulaşımının güven içinde "
+                "akışını sağlamak için konulmuş her türlü işareti değiştirerek. "
+                "(2) Kara, deniz, hava veya demiryolu ulaşım araçlarını tehlikeli olabilecek "
+                "şekilde sevk ve idare eden kişi cezalandırılır."
+            ),
+        )
+    ]
+    answer = _build_extractive_answer(
+        "Bu maddenin birinci ve ikinci fıkraları nasıl ayrılır?\nKonu: TCK m.179",
+        evidence,
+    )
+    assert "usul kuralı" not in answer.lower()
+    assert "(1)" in answer or "birinci fıkra" in answer.lower()
+    assert "(2)" in answer or "ikinci fıkra" in answer.lower()
+
+
+def test_taksir_question_prefers_180_over_unrelated_60() -> None:
+    from retrieval.research import _answer_items
+
+    items = [
+        _item(
+            n=1,
+            chunk_id="law:5237:article:60:v1",
+            article_no="60",
+            title="Tüzel kişiler hakkında güvenlik tedbirleri",
+            content="Madde 60- (1) Bir kamu kurumunun verdiği izne dayalı olarak",
+        ),
+        _item(
+            n=2,
+            chunk_id="law:5237:article:179:v1",
+            article_no="179",
+            title="Trafik güvenliğini tehlikeye sokma",
+            content="Madde 179- (1) Kara, deniz, hava veya demiryolu",
+        ),
+        _item(
+            n=3,
+            chunk_id="law:5237:article:180:v1",
+            article_no="180",
+            title="Trafik güvenliğini taksirle tehlikeye sokma",
+            content="Madde 180- (1) Taksirle, Trafik güvenliğini tehlikeye sokma",
+        ),
+    ]
+    picked = _answer_items(
+        "Taksirle işlenmesi TCK m.180’de mi, yoksa 179 kapsamında mı kalır?",
+        items,
+    )
+    assert picked[0].article_no == "180"
+    answer = _build_extractive_answer(
+        "Taksirle işlenmesi TCK m.180’de mi, yoksa 179 kapsamında mı kalır?",
+        items,
+    )
+    assert "TCK m.180" in answer
+    assert "usul kuralı" not in answer.lower()
+    assert "tüzel" not in answer.lower()
 
 
 def test_mentions_foreign_article() -> None:
@@ -366,11 +503,18 @@ def test_garbage_placeholder_is_not_usable() -> None:
 
 def _long_draft(article: str = "158") -> str:
     return (
+        "Sonuç\n\n"
         f"Evet: sorulan olgu TCK m.{article} kapsamında nitelikli dolandırıcılık olarak değerlendirilir [1]. "
-        "Madde, banka veya kredi kurumlarının araç olarak kullanılması suretiyle işlenen hâli nitelikli şekil sayar [1]. "
-        "Bu seçimlik hareket gerçekleştiğinde fiil, temel dolandırıcılıktan ayrı bir ağırlaştırılmış hâlde kalır [1]. "
-        "Temel şekil TCK m.157’de düzenlenir; nitelikli seçenekler 158’de toplanır [3]. "
-        "Somut olay unsurlarının dosyadan ayrıca incelenmesi gerekir [1]."
+        "Madde, banka veya kredi kurumunun araç olarak kullanıldığı hâlleri temel şekilden ayırır [1]. "
+        "Uygulama, bu seçeneğin somut olayda gerçekleşmesine bağlıdır [1].\n\n"
+        "Hukuki dayanak\n\n"
+        "1. TCK m.158, dolandırıcılığın bilişim sistemleri ile banka veya kredi kurumları kullanılarak işlenmesini nitelikli hâl sayar [1]. Lafız, bu seçeneği ağırlaştırıcı bir yol olarak kurar [1].\n"
+        "2. Bu seçimlik hareket gerçekleştiğinde fiil, temel dolandırıcılıktan ayrı bir ağırlaştırılmış hâlde kalır [1]. Kanun koyucu bu yolu nitelikli şekil saymıştır [1].\n"
+        "3. Temel şekil TCK m.157’de düzenlenir; nitelikli seçenekler 158’de toplanır [3]. 157 hile ve zarar unsurlarını, 158 ise belirli araçları ekler [3].\n"
+        "4. Hesabın araç olarak kullanılması, hileli temin veya zararın gerçekleşmesinde vasıta işlevi görmeyi gerektirir [1]. Salt hesap sahibi olmak bu seçeneği doldurmaz [1].\n"
+        "5. Nitelikli hâlin yanında temel suçun diğer unsurları da dosyadan aranır [1]. Arşiv maddesi ispatı varsaymaz [1].\n\n"
+        "Değerlendirme\n\n"
+        "Somut olay unsurlarının dosyadan ayrıca incelenmesi gerekir [1]. Bu metin çerçeve verir; hüküm kurmaz [1]."
     )
 
 
@@ -403,6 +547,10 @@ def test_draft_research_falls_back_to_ollama(monkeypatch) -> None:
             raise RuntimeError("LLM API 404: model decommissioned")
         return _long_draft()
 
+    class _Cfg:
+        research_allow_ollama = True
+
+    monkeypatch.setattr("hakim_config.get_models", lambda: _Cfg())
     monkeypatch.setattr("llm.api_client.api_configured", lambda: True)
     monkeypatch.setattr("llm.client.ping", lambda timeout=0.8: True)
     monkeypatch.setattr("llm.writer.write_module", fake_write)

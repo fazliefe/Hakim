@@ -23,7 +23,6 @@ const NAV_MAX = 420;
 const NAV_DEFAULT = 232;
 
 const CHECK_LABELS: Array<[keyof SystemStatus["checks"], string]> = [
-  ["api", "API"],
   ["elasticsearch", "Arama"],
   ["neo4j", "Graf"],
   ["postgres", "Arşiv"],
