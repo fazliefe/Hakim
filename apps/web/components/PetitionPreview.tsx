@@ -16,7 +16,7 @@ export function PetitionPreview({
     <article className={`petition-sheet ${layout}`} data-layout={layout} data-family={family}>
       <header>
         <span>{headerLabel(layout, petition?.title)}</span>
-        <span className="badge">{badge || petition?.title}</span>
+        <span className="badge">{petition?.title || badge}</span>
       </header>
       {layout === "resmi" || !petition ? (
         <pre className="draft-pre">{draft}</pre>

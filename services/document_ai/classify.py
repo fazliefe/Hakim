@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +142,39 @@ def classify_document(text: str) -> Classification:
         if looks_like_resmi_yazi(raw):
             document_type = "ust_yazi"
             type_span = type_span or "Sayı / Konu"
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=type_span,
+        type_score=type_score,
+        nature_score=nature_score,
+    )
+
+
+# Kural motoru belirsiz/düşük güvenli kaldığında LLM'in seçebileceği kapalı liste.
+_NATURE_CHOICES = ("ceza", "idare", "anayasa", "kamu", "belirsiz")
+
+
+def _finalize(
+    raw: str,
+    blob: str,
+    document_type: str,
+    legal_nature: str,
+    *,
+    type_span: str = "",
+    type_score: int = 0,
+    nature_score: int = 0,
+    confidence_override: float | None = None,
+) -> Classification:
+    """document_type/legal_nature'dan stage, remedies, unit, confidence türetir.
+
+    Hem kural motoru hem LLM yedeği (classify_document_llm_assist) bu tek fonksiyonu
+    kullanır: LLM sadece hangi kategori olduğuna karar verir, gerisi (birim, aşama,
+    kanun yolu, süre) her zaman aynı deterministik tablolardan gelir — LLM'e madde
+    veya süre uydurma yetkisi verilmez.
+    """
     if document_type in KAMU_TYPES and legal_nature == "belirsiz":
         legal_nature = "kamu"
 
@@ -164,14 +198,20 @@ def classify_document(text: str) -> Classification:
     if legal_nature == "ceza" and document_type in {"mahkeme_karari", "tebligat"}:
         remedies.extend(["itiraz", "istinaf", "temyiz"])
     if document_type not in KAMU_TYPES:
-        if "istinaf" in blob:
-            remedies.append("istinaf")
-        if "temyiz" in blob:
-            remedies.append("temyiz")
+        if legal_nature == "ceza":
+            # Nature'a bağlı: "istinaf"/"temyiz" idare metninde geçerse CMK süresine sızmasın.
+            if "istinaf" in blob:
+                remedies.append("istinaf")
+            if "temyiz" in blob:
+                remedies.append("temyiz")
+        if legal_nature == "idare":
+            remedies.append("idari_dava")
+            if "istinaf" in blob:
+                remedies.append("istinaf_idari")
+            if "temyiz" in blob or "danıştay" in blob or "danistay" in blob:
+                remedies.append("temyiz_idari")
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
-        if legal_nature == "idare":
-            remedies.append("istinaf_idari")
         if "şikayet" in blob or "sikayet" in blob:
             remedies.append("sikayet")
     unique = tuple(dict.fromkeys(remedies))
@@ -192,13 +232,86 @@ def classify_document(text: str) -> Classification:
             nature_score >= 5 or document_type in KAMU_TYPES,
         ]
     )
+    if confidence_override is None:
+        confidence = round(min(0.99, 0.32 + 0.11 * hits), 2)
+    else:
+        confidence = round(min(0.99, max(0.0, confidence_override)), 2)
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,
         unit=unit,
         stage=stage,
         remedies=unique,
-        confidence=round(min(0.99, 0.32 + 0.11 * hits), 2),
+        confidence=confidence,
         evidence_span=type_span or raw[:180],
         label=TYPE_LABELS.get(document_type, document_type),
+    )
+
+
+def _llm_prompt(raw: str) -> list[dict[str, str]]:
+    types = ", ".join(key for key in TYPE_LABELS if key != "belirsiz")
+    natures = ", ".join(_NATURE_CHOICES)
+    system = (
+        "Sen bir evrak türü sınıflandırıcısısın. Kural motoru bu metnin türünü kesin "
+        "olarak belirleyemedi; sana yalnızca kapalı bir liste içinden seçim yapman için "
+        "danışılıyor.\n"
+        f"document_type YALNIZCA şu listeden seçilir: {types}, belirsiz\n"
+        f"legal_nature YALNIZCA şu listeden seçilir: {natures}\n"
+        "Listede olmayan bir değer, yeni bir tür veya madde numarası UYDURMA. Emin "
+        'değilsen ilgili alan için "belirsiz" döndür.\n'
+        "evidence alanı metinden BİREBİR alıntı olmalı (en fazla 160 karakter); metinde "
+        "yoksa boş bırak.\n"
+        "Yalnızca şu JSON şemasıyla cevap ver: "
+        '{"document_type": "...", "legal_nature": "...", "evidence": "..."}'
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": raw[:1500]},
+    ]
+
+
+def classify_document_llm_assist(
+    text: str,
+    base: Classification,
+    *,
+    chat_fn: Callable[[list[dict[str, str]]], str],
+) -> Classification | None:
+    """Kural motoru "belirsiz" veya düşük güvenle kaldığında tek seferlik LLM yedeği.
+
+    LLM yalnızca document_type/legal_nature için kapalı listeden seçim yapar; stage,
+    remedies, unit, süre kuralları her zaman _finalize() üzerinden aynı deterministik
+    tablolardan türetilir — LLM'e yeni madde veya süre uydurma yetkisi verilmez.
+    JSON bozuksa, liste dışı bir değer dönerse veya kural motorundan farklı bir sonuç
+    çıkmazsa None döner; çağıran taraf kural motorunun sonucunu aynen korur.
+    """
+    raw = text.strip()
+    if not raw:
+        return None
+    try:
+        from llm.client import parse_json_content
+
+        payload = parse_json_content(chat_fn(_llm_prompt(raw)))
+    except Exception:
+        return None
+
+    llm_type = str(payload.get("document_type") or "").strip().lower()
+    llm_nature = str(payload.get("legal_nature") or "").strip().lower()
+    if llm_type not in TYPE_LABELS or llm_nature not in _NATURE_CHOICES:
+        return None
+
+    document_type = llm_type if llm_type != "belirsiz" else base.document_type
+    legal_nature = llm_nature if llm_nature != "belirsiz" else base.legal_nature
+    if document_type == base.document_type and legal_nature == base.legal_nature:
+        return None  # LLM de kural motorundan farklı bir şey söylemedi
+
+    evidence = str(payload.get("evidence") or "").strip()
+    span = evidence if evidence and evidence.lower() in raw.lower() else ""
+    blob = _norm(raw)
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=span,
+        confidence_override=0.6,
     )

@@ -188,6 +188,9 @@ def extractive_surec(engine: dict[str, Any]) -> dict[str, Any]:
         "temyiz": "Temyiz",
         "bireysel_basvuru": "Bireysel başvuru",
         "sikayet": "Şikayet",
+        "idari_dava": "İdari dava",
+        "istinaf_idari": "İdari istinaf",
+        "temyiz_idari": "İdari temyiz",
     }
     kanun = [
         {"id": rem, "cumle": f"{labels.get(rem, rem)} bu hüküm için işletilebilir."}

@@ -146,8 +146,15 @@ export async function runResearch(query: string, lawNo = "5237"): Promise<Resear
     body: JSON.stringify({ query, law_no: lawNo }),
   });
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || "Araştırma isteği başarısız");
+    const raw = await response.text();
+    let detail = raw || "Araştırma isteği başarısız";
+    try {
+      const parsed = JSON.parse(raw) as { detail?: unknown };
+      if (typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      /* keep raw body */
+    }
+    throw new Error(detail);
   }
   return response.json();
 }

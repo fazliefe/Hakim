@@ -34,7 +34,8 @@ def compute_last_day(
     else:
         raise ValueError(f"unsupported unit: {unit}")
 
-    if calendar is CalendarType.CRIMINAL:
+    if calendar in (CalendarType.CRIMINAL, CalendarType.ADMINISTRATIVE):
+        # Son gün resmi tatile denk gelirse ertesi iş gününe sarkar (CMK ve İYUK usulünde ortak kural).
         last = _next_business_day(last)
     return last
 

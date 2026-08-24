@@ -31,6 +31,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 testpaths = [
     "packages/legal-schema/tests",
     "apps/api/tests",
@@ -41,7 +42,6 @@ testpaths = [
     "services/retrieval/tests",
     "services/graph/tests",
     "services/deadline/tests",
-    "services/document-ai/tests",
     "services/document_ai/tests",
     "services/llm/tests",
 ]

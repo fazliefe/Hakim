@@ -130,3 +130,23 @@ export const STAGE_LABEL: Record<string, string> = {
   bireysel_basvuru: "Bireysel başvuru",
   belirsiz: "Belirsiz",
 };
+
+// backend: services/llm/answers.py::BELGE_TITLE — belge/action id'sini arayüzde
+// ham (snake_case) göstermemek için.
+export const BELGE_LABEL: Record<string, string> = {
+  istinaf: "İstinaf dilekçesi",
+  temyiz: "Temyiz dilekçesi",
+  itiraz: "İtiraz dilekçesi",
+  cevap: "Cevap dilekçesi",
+  sikayet: "Şikayet dilekçesi",
+  suc_duyurusu: "Suç duyurusu",
+  katilma: "Davaya katılma talebi",
+  bireysel_basvuru: "Bireysel başvuru dilekçesi",
+  idari_dava: "İdari dava dilekçesi",
+  tahliye: "Tahliye talebi",
+  adli_kontrol_itiraz: "Adli kontrol / tutuklama itirazı",
+  ust_yazi: "Üst yazı",
+  bilgi_yazisi: "Bilgi yazısı",
+  olur: "Olur yazısı",
+  cevap_yazisi: "Cevap yazısı",
+};

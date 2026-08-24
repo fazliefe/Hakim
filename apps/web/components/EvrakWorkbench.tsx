@@ -8,7 +8,7 @@ import { PetitionPreview } from "@/components/PetitionPreview";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { EVRAK_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
 import { writerLabel } from "@/lib/api";
-import { NATURE_LABEL, STAGE_LABEL, FIELD_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { BELGE_LABEL, NATURE_LABEL, STAGE_LABEL, FIELD_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const SIDE = [
   { id: "gelen", label: "Gelen kamu evrakı" },
@@ -256,7 +256,7 @@ export function EvrakWorkbench() {
               <h2>Cevap taslağı</h2>
               <p className="muted" style={{ fontSize: 12 }}>
                 Yazıcı: {writerLabel(result.writer)}
-                {result.belge ? ` · kalıp: ${result.belge}` : ""}
+                {result.belge ? ` · kalıp: ${BELGE_LABEL[result.belge] ?? result.belge}` : ""}
                 {result.writer_error ? ` · ${result.writer_error}` : ""}
               </p>
               {result.havale ? <p className="muted">Havale: {result.havale.unit}. {result.havale.note}</p> : null}

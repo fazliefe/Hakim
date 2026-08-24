@@ -50,11 +50,23 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def _cors_origins() -> list[str]:
+    """Demo günü farklı bir host/IP gerekirse kod değişmeden HAKIM_CORS_ORIGINS ile açılsın."""
+    raw = os.environ.get("HAKIM_CORS_ORIGINS", "").strip()
+    if not raw:
+        return DEFAULT_CORS_ORIGINS
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or DEFAULT_CORS_ORIGINS
+
+
 app = FastAPI(title="HAKİM API", version=SCHEMA_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,  # frontend credentials/çerez göndermiyor; wildcard/çoklu origin ile de uyumlu kalsın
     allow_methods=["*"],
     allow_headers=["*"],
 )
