@@ -4,6 +4,7 @@
   "family": "idare",
   "makam": "Görevli idare mahkemesi",
   "legal_basis": ["2577 s.K. m.3", "2577 s.K. m.7"],
+  "deadline_rule_id": "deadline:idari_dava:iyuk7",
   "when": "İdari işleme karşı iptal veya tam yargı. Ceza şikayeti değildir.",
   "sections": [
     { "id": "ust_yazi", "label": "İdare mahkemesi" },
@@ -28,7 +29,7 @@
   },
   "writing": {
     "tone": "İYUK dilekçesi. TCK şikayet dili kullanma.",
-    "must": ["Davacı-davalı idare", "Süre uydurma"],
+    "must": ["Davacı-davalı idare", "Süre uydurma", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
     "must_not": ["Cumhuriyet savcılığına hitap", "Mahkûmiyet talebi"]
   },
   "example": {

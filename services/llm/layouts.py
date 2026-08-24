@@ -206,6 +206,29 @@ def _get(parsed: dict[str, Any], key: str) -> Any:
     return None
 
 
+def _cited_evidence_ns(parsed: dict[str, Any]) -> list[int]:
+    """`hukuki_nitelendirme` satırlarında gerçekten hangi kaynak (`related`/
+    `evidence` listesindeki `n`) kullanıldığını döndürür. Sanitizer (bkz.
+    writer.py:_finalize_belge_facts) kaynaksız/uydurma maddeleri düşürüp
+    yerine `n` taşımayan bir yer tutucu (`_usul_nitelendirme`/`NO_MADDE_CUMLE`)
+    koyabilir — o durumda hiçbir kaynak "kullanıldı" sayılmaz. `Kaynak
+    grafiği`nin `used_in_answer` alanı bu listeye göre dolduruluyor."""
+    rows = parsed.get("hukuki_nitelendirme")
+    if not isinstance(rows, list):
+        return []
+    out: list[int] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        n = row.get("n")
+        try:
+            if n not in (None, "") and int(n) not in out:
+                out.append(int(n))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _cite_line(item: dict[str, Any]) -> str:
     cumle = str(item.get("cumle") or item.get("metin") or "").strip()
     madde = str(item.get("madde") or "").strip()
@@ -508,6 +531,7 @@ def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any
             "closing": "",
             "signature": None,
             "onay_notu": onay,
+            "cited_ns": _cited_evidence_ns(parsed),
         }
 
     cfg = LAYOUTS.get(str(spec.get("id") or ""), {})
@@ -538,6 +562,7 @@ def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any
         "closing": CLASSIC_CLOSING,
         "signature": {"role": "(imza)", "name": name},
         "onay_notu": onay,
+        "cited_ns": _cited_evidence_ns(parsed),
     }
 
 

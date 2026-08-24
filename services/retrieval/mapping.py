@@ -1,10 +1,40 @@
 from __future__ import annotations
 
 import copy
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 INDEX_NAME = "hakim-legal-chunks"
+
+# mevzuat.gov.tr, mülga (yürürlükten kalkmış) fıkra/bendi metin içinde
+# "(Mülga: 2/7/2012-6352/105 md.)" gibi işaretler — kolon/boşluk varyasyonu
+# değişebiliyor (bkz. "(Mülga:2/3/2024-7499/19 md.)"), o yüzden geniş eşleşme.
+MULGA_RE = re.compile(r"\(\s*Mülga\b[^)]*\)", re.IGNORECASE)
+
+
+def detect_mulga_warning(content: str) -> str | None:
+    """Madde 2 (zamansal geçerlilik): arşivdeki her maddenin tek versiyonu
+    olduğu için valid_from/valid_until filtresi bugün ayırt edici değil —
+    ama mevzuat.gov.tr metninin kendisi zaten hangi fıkranın mülga olduğunu
+    işaretliyor. Bunu kaçırmamak, güncel-olmayan bir hükmün taslakta dayanak
+    gösterilmesini önler. Kesin hukuki tespit değildir; kullanıcıyı uyarır."""
+    text = (content or "").strip()
+    if not text:
+        return None
+    matches = list(MULGA_RE.finditer(text))
+    if not matches:
+        return None
+    covered = sum(m.end() - m.start() for m in matches)
+    if covered >= len(text) * 0.6:
+        return (
+            "Bu madde tamamen mülga (yürürlükten kalkmış) olabilir; "
+            "taslakta dayanak olarak kullanmadan önce güncel metni doğrulayın."
+        )
+    return (
+        f"Bu maddenin bir kısmı mülga: {matches[0].group(0)} — "
+        "ilgili fıkra güncel değil, dikkatli kullanın."
+    )
 
 
 def embedding_dims() -> int:

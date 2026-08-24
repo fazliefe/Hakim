@@ -19,7 +19,7 @@
     "properties": {
       "makam": "string",
       "itiraz_olunan": "string — tarih/sayı varsa engine’den",
-      "sure_cumlesi": "string — 7 gün, last_day veya eksik",
+      "sure_cumlesi": "string — 14 gün (iki hafta), last_day veya eksik",
       "sebepler": ["string"],
       "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
       "talep": "string — itirazın kabulü ve kararın kaldırılması"
@@ -27,13 +27,13 @@
   },
   "writing": {
     "tone": "Kanun yolu dilekçesi. İstinaf ile karıştırma: itiraz CMK m.268.",
-    "must": ["Süre cümlesinde CMK m.268", "last_day yoksa tarih uydurma"],
+    "must": ["Süre cümlesinde CMK m.268", "last_day yoksa tarih uydurma", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
     "must_not": ["İstinaf / temyiz dili"]
   },
   "example": {
     "makam": "Kararı veren merci",
     "itiraz_olunan": "Tebliğ edilen karar",
-    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca yedi gündür.",
+    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca iki hafta (14 gün) içindedir.",
     "sebepler": ["Kararın usul ve yasaya aykırılığı"],
     "hukuki_nitelendirme": [],
     "talep": "İtirazın kabulü ile kararın kaldırılması talep olunur."

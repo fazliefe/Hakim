@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgentRail } from "@/components/AgentRail";
@@ -14,11 +15,17 @@ import { calendarLabel, durationUnitLabel, formatTurkishDate } from "@/lib/label
 import { KAMU_FALLBACK } from "@/lib/kamuSamples";
 import { FIELD_LABEL, NATURE_LABEL, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
+const DocumentTraceGraphView = dynamic(
+  () => import("@/components/graph/DocumentTraceGraphView").then((mod) => mod.DocumentTraceGraphView),
+  { ssr: false },
+);
+
 const SIDE = [
   { id: "goruntuleme", label: "Evrak görüntüleme" },
   { id: "sinif", label: "Sınıflandırma" },
   { id: "akil", label: "Akıl yürütme" },
   { id: "usul", label: "Kanun yolu ve süreler" },
+  { id: "kaynak", label: "Kaynak grafiği" },
   { id: "taslaklar", label: "Taslaklar" },
 ];
 
@@ -44,6 +51,7 @@ export function EvrakWorkbench() {
   const [kalip, setKalip] = useState(params.get("kalip") ?? "");
   const [picked, setPicked] = useState(0);
   const [surecLoading, setSurecLoading] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<number | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const c = result?.classification;
   const deadlines = result?.deadlines ?? [];
@@ -116,7 +124,9 @@ export function EvrakWorkbench() {
                   ? "Akıl yürütme"
                   : side === "usul"
                     ? "Kanun yolu ve süreler"
-                    : "Taslaklar"}
+                    : side === "kaynak"
+                      ? "Kaynak grafiği"
+                      : "Taslaklar"}
           </h1>
           <p>
             {side === "goruntuleme"
@@ -127,7 +137,9 @@ export function EvrakWorkbench() {
                   ? "Çözümlemeden sonra adımlar burada durur."
                   : side === "usul"
                     ? "Aşama, kanun yolu ve son gün — süre motoru."
-                    : "Kaynaklı taslak. Word veya PDF indirin."}
+                    : side === "kaynak"
+                      ? "Taslağın hangi maddeye dayandığı — okuyucudan havaleye zincir + atıf edilen mevzuat."
+                      : "Kaynaklı taslak. Word veya PDF indirin."}
           </p>
         </div>
         {error ? <p className="error" style={{ padding: "0 0.9rem" }}>{error}</p> : null}
@@ -318,6 +330,66 @@ export function EvrakWorkbench() {
               </>
             )}
           </div>
+        ) : null}
+
+        {side === "kaynak" ? (
+          result?.trace_nodes?.length ? (
+            <div style={{ padding: "0 0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ height: "380px" }}>
+                <DocumentTraceGraphView
+                  nodes={result.trace_nodes}
+                  edges={result.trace_edges ?? []}
+                  evidence={result.related}
+                  selected={selectedEvidence}
+                  onSelect={setSelectedEvidence}
+                />
+              </div>
+              {result.related.length ? (
+                <div className="source-stack">
+                  {result.related.map((item) => (
+                    <button
+                      key={item.chunk_id}
+                      type="button"
+                      className={`source-row ${selectedEvidence === item.n ? "selected" : ""}`}
+                      onClick={() => setSelectedEvidence(item.n)}
+                    >
+                      {item.mulga_warning ? "⚠ " : ""}[{item.n}] {item.law_no ? `K.${item.law_no} m.${item.article_no}` : item.title}
+                    </button>
+                  ))}
+                  {(() => {
+                    const selectedItem = result.related.find((item) => item.n === selectedEvidence);
+                    if (!selectedItem) return null;
+                    return (
+                      <article className="source-detail">
+                        <div className="source-meta">
+                          <span>
+                            {selectedItem.law_no ? `K.${selectedItem.law_no} m.${selectedItem.article_no}` : selectedItem.title}
+                          </span>
+                          <span className="badge">{selectedItem.authority || "resmi"}</span>
+                        </div>
+                        <div className="source-title">{selectedItem.title || "Başlıksız madde"}</div>
+                        <p className="source-content">{selectedItem.content}</p>
+                        {selectedItem.mulga_warning ? <p className="error">⚠ {selectedItem.mulga_warning}</p> : null}
+                        {selectedItem.graph_neighbors?.length ? (
+                          <p className="muted">
+                            Komşu madde:{" "}
+                            {selectedItem.graph_neighbors
+                              .slice(0, 3)
+                              .map((n) => (n.article_no ? `m.${n.article_no}` : n.title))
+                              .join(", ")}
+                          </p>
+                        ) : null}
+                      </article>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <p className="muted evrak-hint">Bu evrak için eşleşen mevzuat bulunamadı.</p>
+              )}
+            </div>
+          ) : (
+            <p className="muted evrak-hint">Önce evrak görüntülemeden dosya yükleyin veya çözün.</p>
+          )
         ) : null}
 
         {side === "taslaklar" ? (

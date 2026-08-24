@@ -113,6 +113,30 @@ def take_usage() -> LlmUsage:
     return current
 
 
+def usage_totals(usage: LlmUsage) -> dict[str, Any]:
+    """API yanıtlarına eklenecek toplam kullanım/maliyet özeti — research_graph
+    dışındaki yüzeylerde (evrak/işlem/senaryo) de aynı gözlemlenebilirlik."""
+    cost = estimate_cost(usage.prompt_tokens, usage.completion_tokens) if usage.total_tokens else 0.0
+    provider = model = label = ""
+    try:
+        from hakim_config import get_models, model_label
+
+        cfg = get_models()
+        provider = cfg.profile
+        model = cfg.llm_model
+        label = model_label(cfg)
+    except Exception:
+        pass
+    return {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "cost_usd": round(cost, 8),
+        "provider": provider,
+        "model": model,
+        "model_label": label,
+    }
+
+
 def record_usage_from_response(body: dict[str, Any], *, model: str = "") -> LlmUsage:
     usage = parse_usage(body, model=model)
     if usage.total_tokens or usage.model:

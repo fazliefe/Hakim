@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable
 
 from deadline.catalog import DEFAULT_RULES
@@ -61,6 +61,8 @@ class Analysis:
     reasoning: dict[str, Any] = field(default_factory=dict)
     petition: dict[str, Any] = field(default_factory=dict)
     observability: dict[str, Any] = field(default_factory=dict)
+    trace_nodes: list[dict[str, Any]] = field(default_factory=list)
+    trace_edges: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _deadlines_for(classification: Classification, dates: dict[str, date]) -> list[DeadlineComputation]:
@@ -196,10 +198,106 @@ def build_draft(analysis: Analysis, user_text: str = "") -> str:
     return text
 
 
-Retriever = Callable[[str], list[dict[str, Any]]]
+Retriever = Callable[[str, "datetime | None"], list[dict[str, Any]]]
 
 GRAPH_NODES = ("okuyucu", "sinif", "mevzuat", "sure", "taslak", "havale")
-GRAPH_EDGES = tuple(zip(GRAPH_NODES, GRAPH_NODES[1:]))
+GRAPH_EDGES = (
+    ("okuyucu", "sinif"),
+    ("sinif", "mevzuat"),
+    ("mevzuat", "mevzuat"),  # ilk sorgu boş dönerse geniş sorguyla bir kez tekrar dener
+    ("mevzuat", "sure"),
+    ("sure", "taslak"),
+    ("taslak", "havale"),
+)
+MEVZUAT_RETRY_ELIGIBLE = frozenset({"ceza", "idare", "anayasa"})
+
+_TRACE_KIND = {
+    "okuyucu": "query",
+    "sinif": "retriever",
+    "mevzuat": "retriever",
+    "sure": "fusion",
+    "taslak": "answer",
+    "havale": "route",
+}
+_TRACE_EDGE_LABELS = {("mevzuat", "mevzuat"): "retry"}
+
+
+def _chunk_label(item: dict[str, Any]) -> str:
+    from llm.prompt import LAW_SHORT
+
+    document_id = str(item.get("document_id") or "")
+    if document_id.startswith("decision:"):
+        return str(item.get("title") or document_id or "Karar")
+    law_no = str(item.get("law_no") or "")
+    article_no = item.get("article_no")
+    short = LAW_SHORT.get(law_no, f"K.{law_no}" if law_no else "Kanun")
+    if article_no:
+        return f"{short} {article_no}"
+    return str(item.get("title") or item.get("chunk_id") or "Kaynak")
+
+
+def build_document_trace(
+    agents: list[dict[str, Any]],
+    related: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Ajan zincirini (okuyucu→…→havale) + kullanılan mevzuat maddelerini tek
+    bir izlenebilirlik grafına çevirir: hangi karar/yönlendirme hangi madde/
+    karara dayanıyor, TraceGraphView'daki gibi node/edge listesi olarak."""
+    nodes: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in agents:
+        node_id = str(item.get("id") or "")
+        if not node_id or node_id in seen:
+            continue
+        seen.add(node_id)
+        nodes.append(
+            {
+                "id": node_id,
+                "label": str(item.get("title") or node_id).upper(),
+                "kind": _TRACE_KIND.get(node_id, "retriever"),
+                "meta": {
+                    "state": item.get("state"),
+                    "ms": item.get("ms"),
+                    "summary": item.get("summary"),
+                    "note": item.get("note"),
+                },
+            }
+        )
+    mevzuat_note = next((str(item.get("note") or "") for item in agents if item.get("id") == "mevzuat"), "")
+    mevzuat_retried = "geniş sorgu" in mevzuat_note.lower()
+    edges: list[dict[str, Any]] = [
+        {"source": a, "target": b, "label": _TRACE_EDGE_LABELS.get((a, b), "")}
+        for a, b in GRAPH_EDGES
+        if (a, b) != ("mevzuat", "mevzuat") or mevzuat_retried
+    ]
+    if "mevzuat" in seen:
+        for item in related:
+            chunk_id = str(item.get("chunk_id") or "")
+            if not chunk_id or chunk_id in seen:
+                continue
+            seen.add(chunk_id)
+            rank = item.get("n") or item.get("rrf_rank") or len(nodes)
+            nodes.append(
+                {
+                    "id": chunk_id,
+                    "label": _chunk_label(item),
+                    "kind": "chunk",
+                    "meta": {
+                        "law_no": item.get("law_no"),
+                        "article_no": item.get("article_no"),
+                        "title": item.get("title"),
+                        "rrf_rank": item.get("rrf_rank"),
+                        "retrievers": item.get("retrievers") or [],
+                        "graph_neighbors": item.get("graph_neighbors") or [],
+                        "used_in_answer": bool(item.get("used_in_answer", True)),
+                        "mulga_warning": item.get("mulga_warning"),
+                    },
+                }
+            )
+            edges.append({"source": "mevzuat", "target": chunk_id, "label": f"#{rank}"})
+            if "taslak" in seen:
+                edges.append({"source": chunk_id, "target": "taslak", "label": "cite"})
+    return nodes, edges
 
 
 def step_okuyucu(work: dict[str, Any]) -> dict[str, Any]:
@@ -281,6 +379,26 @@ def mevzuat_search_query(
     return (classification.evidence_span or "").strip()
 
 
+def _broadened_mevzuat_query(quoted: str, classification: Classification) -> str:
+    """İlk (konu + 500 kr) sorgu boş dönerse dener: kırpma sınırını kaldırıp
+    evrak gövdesinden daha geniş bir bağlam kullan."""
+    body = " ".join((quoted or "").split())
+    if body:
+        return body[:1500]
+    return (classification.evidence_span or "").strip()
+
+
+def _mevzuat_at(dates: dict[str, date]) -> datetime | None:
+    """Madde 2 (zamansal geçerlilik): mevzuat araması, evrakın kendi tarihine
+    göre yürürlükte olan metni getirmeli — bugünün tarihine göre değil.
+    Tebliğ tarihi yoksa karar tarihi kullanılır (süre motorunun tetikleyici
+    önceliğiyle aynı sıra, bkz. `_deadlines_for`)."""
+    picked = dates.get("teblig") or dates.get("karar")
+    if picked is None:
+        return None
+    return datetime(picked.year, picked.month, picked.day)
+
+
 def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
     started = now()
     classification: Classification = work["classification"]
@@ -288,18 +406,33 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
     retrieve: Retriever | None = work.get("retrieve")
     findings: list[Finding] = work["findings"]
     related: list[dict[str, Any]] = []
-    query = mevzuat_search_query(quoted, classification, work.get("fields") or {})
+    attempt = int(work.get("mevzuat_attempt") or 0)
+    is_retry = attempt >= 1
+    query = (
+        _broadened_mevzuat_query(quoted, classification)
+        if is_retry
+        else mevzuat_search_query(quoted, classification, work.get("fields") or {})
+    )
     use_retrieve = (
         retrieve
         and query.strip()
         and classification.document_type not in KAMU_TYPES
-        and classification.legal_nature in {"ceza", "idare", "anayasa"}
+        and classification.legal_nature in MEVZUAT_RETRY_ELIGIBLE
     )
+    work["mevzuat_retry"] = False
     if use_retrieve:
+        at = _mevzuat_at(work.get("dates") or {})
         try:
-            related = retrieve(query)[:3]  # type: ignore[misc]
+            related = retrieve(query, at)[:3]  # type: ignore[misc]
         except Exception:
             related = []
+        if not related and not is_retry:
+            # Bilgi tabanı ilk (dar) sorguda boş döndü; graf bu node'a bir kez
+            # daha (geniş sorguyla) döner — bu turda agents'a henüz yazma.
+            work["related"] = related
+            work["mevzuat_attempt"] = 1
+            work["mevzuat_retry"] = True
+            return work
         for hit in related[:3]:
             findings.append(
                 Finding(
@@ -311,6 +444,14 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
                 )
             )
         summary, answer = format_mevzuat_hits(related)
+        if is_retry:
+            note = (
+                "İlk sorguda bulunamadı; geniş sorguyla tekrar denendi ve kaynak bulundu."
+                if related
+                else "İlk ve geniş sorguda da eşleşen mevzuat bulunamadı; üretim gerçek madde yerine geçmez."
+            )
+        else:
+            note = None if related else "Bilgi tabanı eksik; üretim gerçek madde yerine geçmez."
         work["agents"].append(
             step(
                 "mevzuat",
@@ -319,7 +460,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
                 ms=elapsed_ms(started),
                 summary=summary,
                 answer=answer,
-                note=None if related else "Bilgi tabanı eksik; üretim gerçek madde yerine geçmez.",
+                note=note,
             )
         )
     elif classification.document_type in KAMU_TYPES:
@@ -391,6 +532,21 @@ def step_sure(work: dict[str, Any]) -> dict[str, Any]:
     return work
 
 
+def _apply_citation_usage(analysis: Analysis) -> None:
+    """`related`'teki `used_in_answer`'ı gerçek taslağa göre düzeltir. Sanitizer
+    (writer.py:_finalize_belge_facts) kaynaksız/alakasız bir maddeyi
+    `hukuki_nitelendirme`'den düşürüp yerine `n` taşımayan bir yer tutucu
+    koyabilir — o durumda o kaynak yalnızca aday havuzunda kalmıştır, taslakta
+    gerçekten kullanılmamıştır ve Kaynak grafiğinde öyle görünmemelidir."""
+    petition = analysis.petition
+    if not isinstance(petition, dict) or "cited_ns" not in petition:
+        return
+    cited = set(petition.get("cited_ns") or [])
+    for item in analysis.related:
+        if isinstance(item, dict) and "n" in item:
+            item["used_in_answer"] = item["n"] in cited
+
+
 def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
     started = now()
     classification: Classification = work["classification"]
@@ -411,6 +567,7 @@ def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
     )
     analysis.verdict = build_verdict(analysis)
     analysis.draft = build_draft(analysis, quoted)
+    _apply_citation_usage(analysis)
     taslak_summary, taslak_answer = format_taslak(action or "ust_yazi", reason)
     work["analysis"] = analysis
     work["agents"].append(
@@ -440,6 +597,7 @@ def step_havale(work: dict[str, Any]) -> dict[str, Any]:
         verdict=analysis.verdict,
         route_reason=analysis.route_reason,
     )
+    analysis.trace_nodes, analysis.trace_edges = build_document_trace(analysis.agents, analysis.related)
     work["analysis"] = analysis
     return work
 
@@ -449,6 +607,8 @@ def analyze_document_core(text: str, *, retrieve: Retriever | None = None) -> An
     work = step_okuyucu(work)
     work = step_sinif(work)
     work = step_mevzuat(work)
+    if work.get("mevzuat_retry"):
+        work = step_mevzuat(work)
     work = step_sure(work)
     work = step_taslak(work)
     work = step_havale(work)
@@ -503,6 +663,8 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
         "chain_status": analysis.chain_status,
         "reasoning": analysis.reasoning,
         "petition": analysis.petition,
+        "trace_nodes": analysis.trace_nodes,
+        "trace_edges": analysis.trace_edges,
         "action": analysis.suggested_action,
         "belge": analysis.suggested_action,
         "observability": analysis.observability or {

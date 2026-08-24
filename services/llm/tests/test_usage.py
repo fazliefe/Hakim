@@ -6,6 +6,7 @@ from llm.usage import (
     peek_usage,
     reset_usage,
     take_usage,
+    usage_totals,
 )
 
 
@@ -93,3 +94,18 @@ def test_parse_usage_from_ollama_eval_counts() -> None:
     assert usage.prompt_tokens == 30
     assert usage.completion_tokens == 9
     assert usage.model == "llama3.2:3b"
+
+
+def test_usage_totals_shape_matches_research_observability() -> None:
+    """Madde B: /v1/evrak, /v1/işlem, /v1/senaryo da /v1/arastirma ile aynı
+    observability.totals şeklini üretmeli — frontend Observability tipi tek."""
+    totals = usage_totals(LlmUsage(prompt_tokens=100, completion_tokens=50))
+    assert set(totals) == {"prompt_tokens", "completion_tokens", "cost_usd", "provider", "model", "model_label"}
+    assert totals["prompt_tokens"] == 100
+    assert totals["completion_tokens"] == 50
+
+
+def test_usage_totals_zero_when_no_llm_call_happened() -> None:
+    totals = usage_totals(LlmUsage())
+    assert totals["cost_usd"] == 0.0
+    assert totals["prompt_tokens"] == 0

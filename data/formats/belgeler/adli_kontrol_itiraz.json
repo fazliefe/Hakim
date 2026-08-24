@@ -25,13 +25,13 @@
   },
   "writing": {
     "tone": "Koruma tedbiri itirazı. Hükme istinaf değil.",
-    "must": ["CMK m.268", "Tutuklama ile adli kontrolü ayır"],
+    "must": ["CMK m.268", "Tutuklama ile adli kontrolü ayır", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
     "must_not": ["BAM’a istinaf dilekçesi"]
   },
   "example": {
     "makam": "İtiraz mercii",
     "karar": "Tutuklama / adli kontrol kararı",
-    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca yedi gündür.",
+    "sure_cumlesi": "İtiraz süresi CMK m.268 uyarınca iki hafta (14 gün) içindedir.",
     "sebepler": ["Tedbirin ölçüsüz olduğu"],
     "talep": "Kararın kaldırılması talep olunur."
   }

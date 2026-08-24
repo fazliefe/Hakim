@@ -115,6 +115,7 @@ def test_json_validate_retry_drops_json_mode(monkeypatch) -> None:
             llm_temperature=0.2,
             llm_max_tokens=900,
             llm_timeout=25,
+            llm_disable_reasoning=False,
         ),
     )
     text = api_chat([{"role": "user", "content": "hi"}], json_mode=True)
@@ -124,6 +125,49 @@ def test_json_validate_retry_drops_json_mode(monkeypatch) -> None:
     usage = peek_usage()
     assert usage.prompt_tokens == 12
     assert usage.completion_tokens == 4
+
+
+def test_disable_reasoning_sends_chat_template_kwargs(monkeypatch) -> None:
+    """evren (vLLM/Qwen3) thinking modu açık geldiği için karmaşık promptlarda
+    reasoning izi max_tokens'ı tüketip boş içerik döndürüyordu — canlıda
+    doğrulandı. `disable_reasoning: true` bunu istek gövdesinde kapatmalı."""
+    import io
+    import json
+    from types import SimpleNamespace
+
+    from llm.api_client import _api_chat_body
+
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    payloads: list[dict] = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "{}"}}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        payloads.append(json.loads(request.data.decode("utf-8")))
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "llm.api_client.get_models",
+        lambda: SimpleNamespace(
+            llm_url="https://evren-llmapi.ssyz.org.tr/v1",
+            llm_model="llm-fast",
+            llm_temperature=0.2,
+            llm_max_tokens=3072,
+            llm_timeout=120,
+            llm_disable_reasoning=True,
+        ),
+    )
+    _api_chat_body([{"role": "user", "content": "hi"}], json_mode=True)
+    assert payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_api_payload_url() -> None:

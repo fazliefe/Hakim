@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -91,6 +92,7 @@ class EvidenceOut(BaseModel):
     retrievers: list[str]
     graph_neighbors: list[dict[str, Any]] = []
     used_in_answer: bool = False
+    mulga_warning: str | None = None
 
 
 class TraceNodeOut(BaseModel):
@@ -141,33 +143,46 @@ def _engine():
     return ResearchEngine(es, embedder=embedder, neo4j_driver=neo4j)
 
 
-def _retrieve_related(query: str) -> list[dict[str, Any]]:
+def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, Any]]:
+    """Evrak analizi için mevzuat kaynağı: hybrid arama → rerank → Neo4j
+    komşuluğu. Araştırma yüzeyinin (research.py) aynı bileşenlerini kullanır,
+    böylece evrak/işlem taslağı da rank/skor/atıf metadatasıyla izlenebilir.
+
+    `at` verildiğinde (evrakın tebliğ/karar tarihi), arama o tarihte yürürlükte
+    olan madde versiyonlarıyla sınırlanır — bkz. `retrieval.mapping.corpus_filters`.
+    """
+    from retrieval.hybrid import fused_to_dict
+    from retrieval.mapping import detect_mulga_warning
+    from retrieval.rerank import rerank_fused
+    from retrieval.research import collect_neighbors
+
     try:
-        fused = _engine().hybrid.search(query, law_no=None, limit=4)
+        fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
     except Exception:
         return []
+    ranked = rerank_fused(query, fused, limit=4)
+    neighbors = collect_neighbors(_engine(), ranked)
     rows: list[dict[str, Any]] = []
-    for hit in fused:
-        rows.append(
-            {
-                "n": hit.rank,
-                "chunk_id": hit.chunk_id,
-                "document_id": hit.hit.document_id,
-                "law_no": hit.hit.law_no,
-                "article_no": hit.hit.article_no,
-                "title": hit.hit.title,
-                "content": (hit.hit.content or "")[:220],
-                "authority": hit.hit.authority,
-            }
-        )
+    for hit in ranked:
+        row = fused_to_dict(hit)
+        row["n"] = hit.rank
+        # Mülga taraması kırpılmamış tam metinden — uyarı 400 karakterden
+        # sonra da olabilir (bkz. CMK m.291 fıkra 2).
+        row["mulga_warning"] = detect_mulga_warning(hit.hit.content or "")
+        row["content"] = (hit.hit.content or "")[:400]
+        row["used_in_answer"] = True
+        row["graph_neighbors"] = neighbors.get(hit.chunk_id) or []
+        rows.append(row)
     return rows
 
 
 def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) -> dict[str, Any]:
     from document_ai.agents import elapsed_ms, mark_writer, now
     from document_ai.pipeline import analysis_to_dict, analyze_document
+    from llm.usage import reset_usage, take_usage, usage_totals
     from llm.writer import ACTION_TO_BELGE, compose_islem, write_module, writer_name
 
+    reset_usage()  # önceki istekten kalmış kullanım verisiyle karışmasın
     retrieve = _retrieve_related if _check_elasticsearch() == "ok" else None
     payload = analysis_to_dict(analyze_document(text, retrieve=retrieve))
     payload["writer"] = "extractive"
@@ -208,6 +223,9 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
         payload["writer"] = "extractive"
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    usage = take_usage()
+    if isinstance(payload.get("observability"), dict):
+        payload["observability"]["totals"] = usage_totals(usage)
     return payload
 
 
@@ -615,8 +633,10 @@ def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any
     from document_ai.agents import build_reasoning, elapsed_ms, mark_writer, now
     from document_ai.answers import format_havale
     from document_ai.pipeline import analysis_to_dict, analyze_document
+    from llm.usage import reset_usage, take_usage, usage_totals
     from llm.writer import ACTION_TO_BELGE, compose_islem, writer_name
 
+    reset_usage()
     retrieve = _retrieve_related if _check_elasticsearch() == "ok" else None
     analysis = analyze_document(body.text, retrieve=retrieve)
     explicit = (body.action or "").strip().lower()
@@ -660,6 +680,9 @@ def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any
         route_reason=reason,
     )
     payload["chain_status"] = payload["reasoning"]["status"]
+    usage = take_usage()
+    if isinstance(payload.get("observability"), dict):
+        payload["observability"]["totals"] = usage_totals(usage)
     payload["uyap_note"] = (
         "UYAP entegrasyonu yok. Taslağı indirip vatandas.uyap.gov.tr üzerinden yetkili kullanıcı gönderir."
     )

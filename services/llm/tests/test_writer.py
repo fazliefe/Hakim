@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from llm.render import render_arastirma, render_belge
+from llm.render import petition_view, render_arastirma, render_belge
 from llm.writer import write_belge, write_module
 from llm.formats import load_belge
 
@@ -117,7 +117,7 @@ def test_render_belge_maps_sure_cumlesi_into_sure_section() -> None:
         {
             "makam": "Bölge Adliye Mahkemesi ilgili ceza dairesi",
             "hukum": "Mahkûmiyet hükmü",
-            "sure_cumlesi": "İstinaf süresi CMK m.273 uyarınca tebliğden itibaren yedi gündür.",
+            "sure_cumlesi": "İstinaf süresi CMK m.273 uyarınca tebliğden itibaren iki hafta içindedir.",
             "sebepler": ["Hükmün hukuka aykırılığı"],
             "talep": "Hükmün kaldırılması talep olunur.",
         },
@@ -428,3 +428,24 @@ def test_cite_line_keeps_cmk_not_tck() -> None:
     tck = _cite_line({"madde": "158", "kanun": "TCK", "cumle": "Nitelikli hâl.", "n": 1})
     assert tck.startswith("TCK m.158")
     assert "[1]" in tck
+
+
+def test_petition_view_reports_which_related_n_was_actually_cited() -> None:
+    """Madde 1/Kaynak grafiği: sanitizer kaynaksız maddeyi düşürüp yerine `n`
+    taşımayan bir yer tutucu koyarsa, o kaynak taslakta gerçekten
+    kullanılmamıştır — `cited_ns` bunu yansıtmalı (KISMEN VAR → VAR)."""
+    spec = load_belge("istinaf")
+    used = petition_view(
+        spec,
+        {
+            **spec["example"],
+            "hukuki_nitelendirme": [{"n": 2, "madde": "273", "kanun": "CMK", "cumle": "İstinaf usulü."}],
+        },
+    )
+    assert used["cited_ns"] == [2]
+
+    fallback = petition_view(
+        spec,
+        {**spec["example"], "hukuki_nitelendirme": [{"cumle": "Mevzuat aramasında eşleşen madde yok."}]},
+    )
+    assert fallback["cited_ns"] == []

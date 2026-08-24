@@ -5,17 +5,21 @@ from pathlib import Path
 from hakim_config import get_models, reload_models
 
 
-def test_default_profile_is_groq() -> None:
+def test_default_profile_is_evren() -> None:
+    """HAKİM'in varsayılan profili TEKNOFEST'in kotasız/ücretsiz H200
+    servisidir (bkz. config/models.yaml: active)."""
     reload_models()
     cfg = get_models()
-    assert cfg.profile == "groq"
+    assert cfg.profile == "evren"
     assert cfg.writer == "api"
-    assert "groq.com" in cfg.llm_url
+    assert "evren-llmapi" in cfg.llm_url
+    assert cfg.llm_model == "llm-fast"
     assert cfg.embedding_model == "newmindai/Mursit-Base-TR-Retrieval"
     assert cfg.embedding_dims == 768
     assert cfg.research_allow_ollama is False
-    assert cfg.llm_input_per_million == 0.075
-    assert cfg.llm_output_per_million == 0.30
+    # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
+    assert cfg.llm_input_per_million == 0.0
+    assert cfg.llm_output_per_million == 0.0
 
 
 def test_profile_env_switches_to_ollama(monkeypatch) -> None:

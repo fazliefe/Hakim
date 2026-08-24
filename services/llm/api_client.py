@@ -78,6 +78,10 @@ def _api_chat_body(
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
+    if cfg.llm_disable_reasoning:
+        # vLLM/Qwen3 thinking modu varsayılan açık; karmaşık promptlarda
+        # reasoning izi max_tokens'ı tüketip boş içerik döndürebiliyor.
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         f"{base}/chat/completions",

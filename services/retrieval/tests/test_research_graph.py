@@ -46,8 +46,8 @@ def test_build_observability_sums_hops() -> None:
     assert abs(obs["totals"]["cost_usd"] - 0.000135) < 1e-9
     assert obs["langfuse_trace_id"] == "abc"
     assert "langfuse.com" in (obs["langfuse_url"] or "")
-    assert obs["totals"]["provider"] == "groq"
-    assert obs["totals"]["model_label"] == "Groq · gpt-oss-20b"
+    assert obs["totals"]["provider"] == "evren"
+    assert obs["totals"]["model_label"] == "Evren · llm-fast"
     assert not str(obs["totals"]["model_label"]).lower().startswith("openai")
 
 

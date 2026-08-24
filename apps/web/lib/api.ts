@@ -20,6 +20,7 @@ export type Evidence = {
     kind?: string;
   }>;
   used_in_answer: boolean;
+  mulga_warning?: string | null;
 };
 
 export type TraceNode = {
@@ -579,14 +580,9 @@ export type DocumentAnalysis = {
   findings: Finding[];
   deadlines: DeadlineOut[];
   stages: Array<{ id: string; title: string; state: string }>;
-  related: Array<{
-    n: number;
-    title?: string | null;
-    article_no?: string | null;
-    document_id?: string | null;
-    law_no?: string | null;
-    content?: string;
-  }>;
+  related: Evidence[];
+  trace_nodes?: TraceNode[];
+  trace_edges?: TraceEdge[];
   draft: string;
   official_targets: Array<{ name: string; url: string }>;
   action?: string;
