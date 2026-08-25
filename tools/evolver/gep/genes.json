@@ -1,0 +1,69 @@
+{
+  "protocol": "GEP",
+  "note": "HÂKİM sidecar genes. @evomap/evolver apps/api içine girmez. Prompt değişikliği insan onayı ister.",
+  "genes": [
+    {
+      "type": "Gene",
+      "id": "gene_no_bu_yonde",
+      "mode": "repair",
+      "signals_match": ["lie_bu_yonde", "bu yönde değerlendirme", "aynı emsale dayanır"],
+      "when": "Taslak, künye gerçek olsa bile «bu yönde değerlendirme» der.",
+      "strategy": [
+        "USER_EMSAL_RULE ve pick_emsal uyum süzgecini koru.",
+        "prompt.py / writer.py otomatik değiştirme; insan onayı."
+      ],
+      "constraints": ["Esas/karar uydurma", "@evomap/evolver paketini apps/api ye ekleme"],
+      "validation": ["python -m pytest tools/evolver/tests services/llm/tests/test_emsal.py -q"]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_no_invented_kunye",
+      "mode": "repair",
+      "signals_match": ["invented_kunye"],
+      "when": "Dilekçede related/emsal listesinde olmayan YYYY/n künye var.",
+      "strategy": ["emsal_atif_or_drop; gold künyeyi dilekçeye yapıştırma."],
+      "constraints": ["11M HuggingFace dump yok"],
+      "validation": ["python -m pytest services/llm/tests/test_emsal.py -q"]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_cmk_not_iyuk",
+      "mode": "repair",
+      "signals_match": ["iyuk_on_ceza_yol"],
+      "when": "Temyiz/istinaf/itiraz taslağında İYUK geçiyor.",
+      "strategy": ["USUL_BELGE katalog CMK maddelerini kullan."],
+      "constraints": [],
+      "validation": ["python -m pytest services/llm/tests/test_writer.py -q"]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_iyuk_not_cmk",
+      "mode": "repair",
+      "signals_match": ["cmk_on_idari"],
+      "when": "İdari dava taslağında CMK geçiyor.",
+      "strategy": ["idari_dava legal_basis İYUK."],
+      "constraints": [],
+      "validation": ["python -m pytest services/llm/tests/test_writer.py -q"]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_no_ticaret_emsal",
+      "mode": "repair",
+      "signals_match": ["ticaret_emsal"],
+      "when": "Ceza/idare dilekçesine ticaret veya rekabet ilamı basılmış.",
+      "strategy": ["emsal.bench_ok ticaret/hukuk düşürür."],
+      "constraints": [],
+      "validation": ["python -m pytest services/llm/tests/test_emsal.py -q"]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_topic_emsal_or_empty",
+      "mode": "optimize",
+      "signals_match": ["unrelated_emsal"],
+      "when": "Konu ile kesişmeyen Yargıtay künyesi emsal diye yazılıyor.",
+      "strategy": ["pick_emsal konu kesişmesi yoksa boş bırak."],
+      "constraints": ["Rastgele gerçek ilam emsal değildir"],
+      "validation": ["python -m pytest services/llm/tests/test_emsal.py -q"]
+    }
+  ]
+}

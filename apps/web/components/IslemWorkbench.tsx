@@ -10,17 +10,21 @@ import { useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 import { titleCaseLabel } from "@/lib/labels";
 
 const FALLBACK: BelgeKalip[] = [
-  { id: "sikayet", title: "Şikayet Dilekçesi", when: "Savcılığa Şikayet", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
-  { id: "suc_duyurusu", title: "Suç Duyurusu", when: "İhbar", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
-  { id: "cevap", title: "Cevap Dilekçesi", when: "İddiaya Cevap", makam: "Görevli Ceza Mahkemesi", legal_basis: [], sections: [] },
-  { id: "itiraz", title: "İtiraz Dilekçesi", when: "CMK m.268", makam: "İtiraz Mercii", legal_basis: [], sections: [] },
-  { id: "istinaf", title: "İstinaf Dilekçesi", when: "CMK m.273", makam: "Bölge Adliye Mahkemesi", legal_basis: [], sections: [] },
-  { id: "temyiz", title: "Temyiz Dilekçesi", when: "CMK m.291", makam: "Yargıtay", legal_basis: [], sections: [] },
-  { id: "katilma", title: "Davaya Katılma", when: "CMK m.237", makam: "Ceza Mahkemesi", legal_basis: [], sections: [] },
-  { id: "bireysel_basvuru", title: "Bireysel Başvuru", when: "AYM", makam: "Anayasa Mahkemesi", legal_basis: [], sections: [] },
-  { id: "idari_dava", title: "İdari Dava Dilekçesi", when: "İYUK", makam: "İdare Mahkemesi", legal_basis: [], sections: [] },
-  { id: "tahliye", title: "Tahliye Talebi", when: "Tutukluluk", makam: "Mahkeme / Hakimlik", legal_basis: [], sections: [] },
-  { id: "adli_kontrol_itiraz", title: "Adli Kontrol İtirazı", when: "Koruma Tedbiri", makam: "İtiraz Mercii", legal_basis: [], sections: [] },
+  { id: "sikayet", title: "Şikayet dilekçesi", when: "Savcılığa şikayet", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
+  { id: "suc_duyurusu", title: "Suç duyurusu", when: "İhbar", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
+  { id: "cevap", title: "Cevap dilekçesi", when: "İddiaya cevap", makam: "Görevli ceza mahkemesi", legal_basis: [], sections: [] },
+  { id: "itiraz", title: "İtiraz dilekçesi", when: "CMK m.268", makam: "İtiraz mercii", legal_basis: [], sections: [] },
+  { id: "istinaf", title: "İstinaf dilekçesi", when: "CMK m.273", makam: "Bölge Adliye Mahkemesi", legal_basis: [], sections: [] },
+  { id: "temyiz", title: "Temyiz dilekçesi", when: "CMK m.291", makam: "Yargıtay", legal_basis: [], sections: [] },
+  { id: "temyiz_cevap", title: "Temyize cevap", when: "Hukuk temyiz cevabı", makam: "Yargıtay Başkanlığı", legal_basis: [], sections: [] },
+  { id: "katilma", title: "Davaya katılma", when: "CMK m.237", makam: "Ceza mahkemesi", legal_basis: [], sections: [] },
+  { id: "bireysel_basvuru", title: "Bireysel başvuru", when: "AYM", makam: "Anayasa Mahkemesi", legal_basis: [], sections: [] },
+  { id: "idari_dava", title: "İdari dava dilekçesi", when: "İYUK", makam: "İdare mahkemesi", legal_basis: [], sections: [] },
+  { id: "tahliye", title: "Tahliye talebi", when: "Tutukluluk", makam: "Mahkeme / hakimlik", legal_basis: [], sections: [] },
+  { id: "ihtiyac_tahliye", title: "İhtiyaç tahliyesi", when: "Kira / sulh hukuk", makam: "Sulh hukuk mahkemesi", legal_basis: [], sections: [] },
+  { id: "sure_uzatim", title: "Süre uzatım talebi", when: "Hukuk cevap süresi", makam: "Hukuk mahkemesi", legal_basis: [], sections: [] },
+  { id: "icra_borca_itiraz", title: "Borca itiraz", when: "İlamsız icra / ödeme emri", makam: "İcra müdürlüğü", legal_basis: [], sections: [] },
+  { id: "adli_kontrol_itiraz", title: "Adli kontrol itirazı", when: "Koruma tedbiri", makam: "İtiraz mercii", legal_basis: [], sections: [] },
 ];
 
 const SIDE = [{ id: "yazim", label: "Yazım" }];
@@ -119,6 +123,11 @@ const AUTO_EXAMPLES: Array<{ label: string; expect: string; text: string }> = [
     text: "BAM kararı tebliğ edildi. Yargıtay’a temyiz etmek istiyorum.",
   },
   {
+    label: "Temyize cevap",
+    expect: "temyiz_cevap",
+    text: "Karşı tarafın temyizine cevap dilekçesi yazmak istiyorum.",
+  },
+  {
     label: "Katılma",
     expect: "katilma",
     text: "Açılan ceza davasında katılan sıfatıyla davaya katılma talebinde bulunmak istiyorum.",
@@ -137,6 +146,21 @@ const AUTO_EXAMPLES: Array<{ label: string; expect: string; text: string }> = [
     label: "Tahliye",
     expect: "tahliye",
     text: "Tutukluyum. Tahliye talebinde bulunmak istiyorum.",
+  },
+  {
+    label: "İhtiyaç tahliyesi",
+    expect: "ihtiyac_tahliye",
+    text: "Kiracıyı ihtiyaç sebebiyle tahliye etmek istiyorum, sulh hukuk mahkemesine.",
+  },
+  {
+    label: "Süre uzatımı",
+    expect: "sure_uzatim",
+    text: "Hukuk mahkemesinde cevap süresi uzatım talebi dilekçesi yazmak istiyorum.",
+  },
+  {
+    label: "Borca itiraz",
+    expect: "icra_borca_itiraz",
+    text: "İlamsız icra takibine borca itiraz dilekçesi vermek istiyorum, icra müdürlüğüne.",
   },
   {
     label: "Adli kontrol",

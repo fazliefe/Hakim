@@ -236,3 +236,57 @@ def test_senaryo_runs_judgment_to_istinaf() -> None:
     assert body["agents"][-1]["id"] == "havale"
     assert len(body["reasoning"]["hops"]) == 6
     assert body["reasoning"]["hops"][0]["question"]
+
+
+def test_islem_temyiz_omits_emsal_when_archive_empty(monkeypatch) -> None:
+    monkeypatch.setattr("hakim_api.main._check_elasticsearch", lambda: "kapalı")
+    client = TestClient(app)
+    response = client.post(
+        "/v1/islem",
+        json={
+            "action": "temyiz",
+            "text": "Bölge adliye mahkemesi kararını temyiz etmek istiyorum. Tebliğ tarihi: 14.08.2026",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "temyiz"
+    assert "1997/186" not in body["draft"]
+    assert "2024/999" not in body["draft"]
+    assert not any(section.get("id") == "emsal_atif" for section in (body.get("petition") or {}).get("sections") or [])
+
+
+def test_senaryo_cites_retrieved_court_hit(monkeypatch) -> None:
+    def fake_retrieve(query, at=None):
+        return [
+            {
+                "n": 1,
+                "document_type": "court_decision",
+                "court": "Yargıtay 11. Ceza Dairesi",
+                "esas_no": "2018/334",
+                "karar_no": "2018/891",
+                "title": "Yargıtay 11. Ceza Dairesi",
+                "content": "Nitelikli dolandırıcılık suçundan hükmün bozulmasına karar verilmiştir.",
+                "used_in_answer": True,
+            }
+        ]
+
+    monkeypatch.setattr("hakim_api.main._check_elasticsearch", lambda: "ok")
+    monkeypatch.setattr("hakim_api.main._retrieve_related", fake_retrieve)
+    client = TestClient(app)
+    response = client.post(
+        "/v1/senaryo",
+        json={
+            "text": (
+                "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR "
+                "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+                "Tebliğ tarihi: 14.08.2026"
+            )
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "istinaf"
+    assert "2018/334" in body["draft"]
+    assert "2024/999" not in body["draft"]
+    assert any(section.get("id") == "emsal_atif" for section in (body.get("petition") or {}).get("sections") or [])

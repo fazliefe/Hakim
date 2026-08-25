@@ -3691,10 +3691,41 @@ a.source-row {
 }
 
 .petition-city {
-  margin: 0.12rem 0 2.2rem;
+  margin: 0.12rem 0 1.4rem;
   text-align: center;
   letter-spacing: 0;
   font-weight: 400;
+}
+
+.petition-meta {
+  margin: 0 0 1.1rem;
+}
+
+.petition-meta-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 34%) 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 0.28rem;
+  align-items: start;
+}
+
+.petition-meta-row dt {
+  margin: 0;
+  font-weight: 700;
+}
+
+.petition-meta-row dd {
+  margin: 0;
+}
+
+.petition-block {
+  margin: 0 0 0.95rem;
+}
+
+.petition-heading {
+  margin: 0 0 0.28rem;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .petition-prose {

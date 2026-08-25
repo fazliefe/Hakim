@@ -13,6 +13,7 @@
     { "id": "islem", "label": "Dava konusu işlem" },
     { "id": "sure", "label": "Dava açma süresi (İYUK m.7)" },
     { "id": "hukuki_sebepler", "label": "Hukuka aykırılık sebepleri" },
+    { "id": "emsal_atif", "label": "Dayanılan emsal" },
     { "id": "talep", "label": "İptal / tazminat talebi" }
   ],
   "parsed": {
@@ -24,6 +25,7 @@
       "islem": "string",
       "sure_cumlesi": "string — 60 gün kuralı; somut last_day yoksa uydurma",
       "sebepler": ["string"],
+      "emsal_atif": "string — yalnızca listedeki künye, esas/karar uydurma",
       "talep": "string"
     }
   },

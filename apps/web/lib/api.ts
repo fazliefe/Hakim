@@ -597,8 +597,16 @@ export type PetitionView = {
   meta?: PetitionMeta[];
   sections?: PetitionSection[];
   closing?: string;
-  signature?: { role?: string; name?: string } | null;
   onay_notu?: string;
+  signature?: { role?: string; name?: string } | null;
+  cited_ns?: number[];
+  evolver?: {
+    ok: boolean;
+    score: number;
+    signals: string[];
+    genes_held?: string[];
+    suggestions: string[];
+  };
 };
 
 export type DocumentAnalysis = {

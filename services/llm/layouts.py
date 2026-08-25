@@ -6,145 +6,241 @@ from typing import Any
 TASLAK_NOTU = "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
 
 # Her kalıbın kendi evrak düzeni: hitap, kimlik satırları, gövde, kapanış.
+# Etiketler örnek dilekçe düzenine yakındır; madde/kimlik uydurulmaz.
 LAYOUTS: dict[str, dict[str, Any]] = {
     "sikayet": {
         "layout": "savcilik",
-        "subtitle": "ŞİKAYET DİLEKÇESİDİR",
-        "meta": (("Şikayetçi", "sikayetci"), ("Şikayet edilen", "sikayet_edilen"), ("Konu", "konu")),
+        "meta": (
+            ("Müşteki (mağdur)", "sikayetci"),
+            ("Vekili", "vekil"),
+            ("Konu", "konu"),
+            ("Şüpheli", "sikayet_edilen"),
+            ("Suç", "suc"),
+            ("Suç tarihi", "suc_tarihi"),
+        ),
         "body": (
             ("olay", "Açıklamalar", "prose"),
-            ("hukuki_nitelendirme", "Hukuki nitelendirme", "cite"),
-            ("deliller", "Deliller", "list"),
-            ("talep", "Sonuç ve istem", "prose"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
+            ("deliller", "Hukuki deliller", "list"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("talep", "Netice-i talep", "prose"),
         ),
-        "closing": "Arz olunur.",
         "signature": "Şikayetçi",
     },
     "suc_duyurusu": {
         "layout": "ihbar",
-        "subtitle": "SUÇ DUYURUSUDUR",
         "meta": (("Duyuran", "duyuran"), ("Konu", "konu")),
         "body": (
-            ("olay", "Öğrenilen olay", "prose"),
-            ("hukuki_nitelendirme", "Olası hukuki nitelik", "cite"),
-            ("deliller", "Bilinen deliller", "list"),
-            ("talep", "Talep", "prose"),
+            ("olay", "Açıklamalar", "prose"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("deliller", "Hukuki deliller", "list"),
+            ("talep", "Netice-i talep", "prose"),
         ),
-        "closing": "Gereğinin yapılması arz olunur.",
         "signature": "Duyuran",
     },
     "cevap": {
         "layout": "cevap",
-        "subtitle": "CEVAP DİLEKÇESİDİR",
-        "meta": (("Esas no", "esas_no"), ("Cevap veren", "cevap_veren"), ("Konu", "konu")),
+        "meta": (("Dosya esas no", "esas_no"), ("Cevap veren", "cevap_veren"), ("Konu", "konu")),
         "body": (
             ("usul", "Usule ilişkin beyanlar", "prose"),
-            ("esasa_cevap", "Esasa cevap", "prose"),
-            ("hukuki_nitelendirme", "Hukuki değerlendirme", "cite"),
-            ("deliller", "Delil bildirimi", "list"),
-            ("talep", "Sonuç ve talep", "prose"),
+            ("esasa_cevap", "Açıklamalar", "prose"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("deliller", "Hukuki deliller", "list"),
+            ("talep", "Netice ve talep", "prose"),
         ),
-        "closing": "Arz ederim.",
         "signature": "Cevap veren",
     },
     "itiraz": {
         "layout": "itiraz",
-        "subtitle": "İTİRAZ DİLEKÇESİDİR",
-        "meta": (("İtiraz olunan karar", "itiraz_olunan"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.268)", "sure_cumlesi")),
-        "body": (
-            ("sebepler", "İtiraz sebepleri", "numbered"),
-            ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
-            ("talep", "Sonuç ve talep", "prose"),
+        "via": "İtiraz merciine gönderilmek üzere",
+        "meta": (
+            ("İtiraz olunan karar", "itiraz_olunan"),
+            ("Dosya esas no", "esas_no"),
+            ("Süre", "sure_cumlesi"),
         ),
-        "closing": "Arz ederim.",
+        "body": (
+            ("sebepler", "İtiraz nedenleri", "numbered"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
+            ("hukuki_nitelendirme", "Hukuki nedenler", "cite"),
+            ("talep", "Sonuç ve istem", "prose"),
+        ),
         "signature": "İtiraz eden",
     },
     "adli_kontrol_itiraz": {
-        "layout": "itiraz",
-        "subtitle": "ADLİ KONTROL / TUTUKLAMA İTİRAZIDIR",
-        "meta": (("İtiraz olunan karar", "karar"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.268)", "sure_cumlesi")),
-        "body": (
-            ("sebepler", "İtiraz sebepleri", "numbered"),
-            ("talep", "Sonuç ve talep", "prose"),
+        "layout": "adli_kontrol",
+        "via": "İtiraz merciine gönderilmek üzere",
+        "meta": (
+            ("Sorgu no", "sorgu_no"),
+            ("Soruşturma no", "sorusturma_no"),
+            ("İtiraz eden sanık", "itiraz_eden"),
+            ("Suç", "suc"),
+            ("Talep konusu", "talep_konusu"),
+            ("Süre", "sure_cumlesi"),
         ),
-        "closing": "Arz ederim.",
+        "body": (
+            ("sebepler", "İtiraz nedenleri", "numbered"),
+            ("hukuki_nitelendirme", "Hukuki nedenler", "cite"),
+            ("talep", "Sonuç ve istem", "prose"),
+        ),
         "signature": "İtiraz eden",
     },
     "istinaf": {
         "layout": "istinaf",
-        "via": "İlgili ilk derece mahkemesi aracılığıyla",
-        "subtitle": "İSTİNAF DİLEKÇESİDİR",
-        "meta": (("İstinaf olunan hüküm", "hukum"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.273)", "sure_cumlesi")),
-        "body": (
-            ("sebepler", "İstinaf sebepleri", "numbered"),
-            ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
-            ("talep", "Sonuç", "prose"),
+        "via": "Bölge Adliye Mahkemesi ilgili ceza dairesine sunulmak üzere",
+        "meta": (
+            ("Dosya esas no", "esas_no"),
+            ("İstinaf eden", "istinaf_eden"),
+            ("Karşı taraf", "karsi_taraf"),
+            ("Talebin konusu", "konu"),
+            ("Kararın tebliğ tarihi", "teblig_tarihi"),
+            ("Süre", "sure_cumlesi"),
         ),
-        "closing": "Arz ederim.",
+        "body": (
+            ("hukum", "Kararın özeti", "prose"),
+            ("sebepler", "Başvuru sebepleri ve gerekçesi", "numbered"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
+            ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
+            ("talep", "Netice ve talep", "prose"),
+        ),
         "signature": "İstinaf eden",
     },
     "temyiz": {
         "layout": "temyiz",
-        "via": "Bölge Adliye Mahkemesi aracılığıyla",
-        "subtitle": "TEMYİZ DİLEKÇESİDİR",
-        "meta": (("Temyiz olunan karar", "karar"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.291)", "sure_cumlesi")),
-        "body": (
-            ("sebepler", "Temyiz sebepleri", "numbered"),
-            ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
-            ("talep", "Bozma talebi", "prose"),
+        "via": "Yargıtay ilgili ceza dairesine sunulmak üzere",
+        "meta": (
+            ("Dosya esas no", "esas_no"),
+            ("Dosya karar no", "karar_no"),
+            ("Kararın tebliğ tarihi", "teblig_tarihi"),
+            ("Temyiz eden", "temyiz_eden"),
+            ("Süre", "sure_cumlesi"),
         ),
-        "closing": "Arz ederim.",
+        "body": (
+            ("karar", "Temyiz olunan karar", "prose"),
+            ("sebepler", "Açıklamalar", "numbered"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("talep", "Talep sonucu", "prose"),
+        ),
         "signature": "Temyiz eden",
+    },
+    "temyiz_cevap": {
+        "layout": "temyiz_cevap",
+        "meta": (
+            ("Dosya no", "esas_no"),
+            ("Cevap veren", "cevap_veren"),
+            ("Vekili", "vekil"),
+            ("Temyiz eden", "temyiz_eden"),
+            ("Konu", "konu"),
+        ),
+        "body": (
+            ("aciklamalar", "Açıklamalar", "numbered"),
+            ("hukuki_nitelendirme", "Hukuki nedenler", "cite"),
+            ("deliller", "Deliller", "list"),
+            ("talep", "Sonuç ve talep", "prose"),
+        ),
+        "signature": "Cevap veren",
     },
     "katilma": {
         "layout": "katilma",
-        "subtitle": "KATILMA TALEBİDİR",
-        "meta": (("Esas no", "esas_no"), ("Katılma talep eden", "katilan")),
+        "meta": (
+            ("Dosya esas no", "esas_no"),
+            ("Davaya katılma talebinde bulunan", "katilan"),
+            ("Vekili", "vekil"),
+            ("Konu", "konu"),
+        ),
         "body": (
             ("dava", "Katılınan dava", "prose"),
-            ("zarar", "Suçtan zarar görme", "prose"),
-            ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
-            ("talep", "Talep", "prose"),
+            ("zarar", "Açıklamalar", "prose"),
+            ("deliller", "Deliller", "list"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("talep", "Talep sonucu", "prose"),
         ),
-        "closing": "Arz olunur.",
-        "signature": "Katılma talep eden",
+        "signature": "Davaya katılmak isteyen",
     },
     "tahliye": {
         "layout": "tahliye",
-        "subtitle": "TAHLİYE TALEBİDİR",
-        "meta": (("Esas no", "esas_no"), ("Talep eden", "talep_eden"), ("Tutuklama kararı", "tutuklama")),
-        "body": (
-            ("sebepler", "Tahliye sebepleri", "numbered"),
-            ("adli_kontrol", "Adli kontrol teklifi", "prose"),
-            ("talep", "Talep", "prose"),
+        "meta": (
+            ("Dosya esas no", "esas_no"),
+            ("Talep eden", "talep_eden"),
+            ("Tutuklama kararı", "tutuklama"),
         ),
-        "closing": "Arz ederim.",
+        "body": (
+            ("sebepler", "Açıklamalar", "numbered"),
+            ("adli_kontrol", "Adli kontrol teklifi", "prose"),
+            ("talep", "Sonuç ve istem", "prose"),
+        ),
         "signature": "Talep eden",
+    },
+    "sure_uzatim": {
+        "layout": "sure_uzatim",
+        "meta": (
+            ("Dosya no", "esas_no"),
+            ("Süre uzatım talebinde bulunan davalı", "davali"),
+            ("Davacı", "davaci"),
+            ("Konu", "konu"),
+        ),
+        "body": (
+            ("aciklamalar", "Açıklamalar", "prose"),
+            ("talep", "Netice ve talep", "prose"),
+        ),
+        "signature": "Davalı vekili",
+    },
+    "icra_borca_itiraz": {
+        "layout": "icra",
+        "meta": (
+            ("Dosya no", "esas_no"),
+            ("İtiraz eden (borçlu)", "borclu"),
+            ("Vekili", "vekil"),
+            ("Alacaklı", "alacakli"),
+            ("Konu", "konu"),
+        ),
+        "body": (
+            ("sebepler", "Açıklamalar", "numbered"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("talep", "Sonuç ve talep", "prose"),
+        ),
+        "signature": "İtiraz eden (borçlu)",
+    },
+    "ihtiyac_tahliye": {
+        "layout": "kira_tahliye",
+        "meta": (
+            ("Davacı", "davaci"),
+            ("Vekili", "vekil"),
+            ("Davalı", "davali"),
+            ("Konu", "konu"),
+            ("Harca esas değer", "yillik_kira"),
+            ("Arabuluculuk", "arabuluculuk"),
+        ),
+        "body": (
+            ("aciklamalar", "Açıklamalar", "numbered"),
+            ("hukuki_nitelendirme", "Hukuki sebepler", "cite"),
+            ("deliller", "Deliller", "list"),
+            ("talep", "Sonuç ve talep", "prose"),
+        ),
+        "signature": "Davacı",
     },
     "bireysel_basvuru": {
         "layout": "aym",
-        "subtitle": "BİREYSEL BAŞVURU",
         "meta": (("Başvurucu", "basvurucu"),),
         "body": (
             ("tuketilen_yollar", "I. Tüketilen kanun yolları", "list"),
             ("ihlal", "II. İhlal iddiası", "prose"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
             ("olay", "III. Olaylar", "prose"),
             ("sure_cumlesi", "IV. Süre (6216 s.K. m.47)", "prose"),
             ("talep", "V. Talepler", "prose"),
         ),
-        "closing": "Saygılarımla arz olunur.",
         "signature": "Başvurucu",
     },
     "idari_dava": {
         "layout": "idari",
-        "subtitle": "DAVA DİLEKÇESİDİR",
         "meta": (("Davacı", "davaci"), ("Davalı idare", "davali"), ("Dava konusu", "islem")),
         "body": (
             ("sure_cumlesi", "Dava açma süresi (İYUK m.7)", "prose"),
             ("sebepler", "Hukuka aykırılık sebepleri", "numbered"),
+            ("emsal_atif", "Dayanılan emsal", "prose"),
             ("talep", "Sonuç ve istem", "prose"),
         ),
-        "closing": "Arz olunur.",
         "signature": "Davacı",
     },
 }
@@ -155,6 +251,11 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "cevap_veren": ("taraflar",),
     "sebepler": ("hukuki_sebepler",),
     "hukum": ("karar",),
+    "aciklamalar": ("olay", "esasa_cevap"),
+    "itiraz_eden": ("talep_eden", "ad_soyad"),
+    "istinaf_eden": ("ad_soyad",),
+    "davali": ("davalı",),
+    "teblig_tarihi": ("teblig",),
 }
 
 
@@ -239,7 +340,7 @@ def _cite_line(item: dict[str, Any]) -> str:
     if madde and not already:
         if kanun:
             parts.append(f"{kanun} m.{madde}")
-        elif re.search(r"\b(CMK|İYUK|IYUK|TCK|TMK|TBK|Anayasa)\b", cumle):
+        elif re.search(r"\b(CMK|İYUK|IYUK|TCK|TMK|TBK|İİK|IIK|HMK|Anayasa)\b", cumle):
             pass
         else:
             parts.append(f"TCK m.{madde}")
@@ -307,6 +408,10 @@ _SIGNER_KEYS = (
     "talep_eden",
     "davaci",
     "basvurucu",
+    "istinaf_eden",
+    "temyiz_eden",
+    "itiraz_eden",
+    "borclu",
 )
 _GENERIC_NAMES = {
     "şikayetçi",
@@ -324,15 +429,25 @@ _GENERIC_NAMES = {
 _DEFAULT_EKLER = {
     "istinaf": ["Gerekçeli karar fotokopisi"],
     "temyiz": ["Bölge adliye mahkemesi kararı fotokopisi"],
+    "temyiz_cevap": ["Temyiz dilekçesi fotokopisi"],
     "itiraz": ["İtiraz olunan karar fotokopisi"],
     "adli_kontrol_itiraz": ["Tedbir kararı fotokopisi"],
     "tahliye": ["Tutuklama müzekkeresi fotokopisi"],
+    "ihtiyac_tahliye": [
+        "Tapu kaydı",
+        "Kira sözleşmesi",
+        "İhtiyacı gösteren belgeler",
+        "Arabuluculuk son tutanağı",
+        "Tanık",
+    ],
     "idari_dava": ["Dava konusu işlemin örneği"],
     "bireysel_basvuru": ["Nihai karar örneği"],
     "katilma": ["İddianame / esas belgesi fotokopisi"],
     "cevap": ["İddianame fotokopisi"],
+    "sure_uzatim": ["Vekâletname fotokopisi"],
+    "icra_borca_itiraz": ["Ödeme emri fotokopisi"],
 }
-_EKLER_SKIP_KEYS = {"deliller"}
+_EKLER_SKIP_KEYS: set[str] = set()
 
 
 def _sheet_date(parsed: dict[str, Any]) -> str:
@@ -411,59 +526,21 @@ def _collect_ekler(belge_id: str, parsed: dict[str, Any]) -> list[str]:
             return items
     if isinstance(raw, str) and raw.strip() and raw.strip() not in {"—", "-"}:
         return [raw.strip()]
-    deliller = parsed.get("deliller")
-    if isinstance(deliller, list):
-        items = [str(item).strip() for item in deliller if str(item).strip()]
-        if items:
-            return items
     return list(_DEFAULT_EKLER.get(belge_id) or ["—"])
 
 
-def _lead_paragraph(belge_id: str, parsed: dict[str, Any]) -> str:
-    esas = str(_get(parsed, "esas_no") or "").strip()
-    esas_bit = f" ({esas})" if esas and esas not in {"—", "-"} else ""
-    sure = str(_get(parsed, "sure_cumlesi") or "").strip()
-    if belge_id == "istinaf":
-        hukum = str(_get(parsed, "hukum") or "").strip()
-        head = f"{hukum}{esas_bit} aleyhine istinaf yoluna başvurulmaktadır." if hukum else ""
-        return " ".join(part for part in (head, sure) if part)
-    if belge_id in {"itiraz", "adli_kontrol_itiraz"}:
-        karar = str(_get(parsed, "itiraz_olunan") or _get(parsed, "karar") or "").strip()
-        head = f"{karar}{esas_bit} aleyhine itiraz yoluna başvurulmaktadır." if karar else ""
-        return " ".join(part for part in (head, sure) if part)
-    if belge_id == "temyiz":
-        karar = str(_get(parsed, "karar") or "").strip()
-        head = f"{karar}{esas_bit} aleyhine temyiz yoluna başvurulmaktadır." if karar else ""
-        return " ".join(part for part in (head, sure) if part)
-    if belge_id == "tahliye":
-        tutuklama = str(_get(parsed, "tutuklama") or "").strip()
-        head = f"{tutuklama}{esas_bit} hakkında tahliye talebinde bulunulmaktadır." if tutuklama else ""
-        return head
-    if belge_id == "idari_dava":
-        islem = str(_get(parsed, "islem") or "").strip()
-        head = f"{islem} aleyhine iptal davası açılmaktadır." if islem else ""
-        return " ".join(part for part in (head, sure) if part)
-    if belge_id == "sikayet":
-        kim = str(parsed.get("sikayet_edilen") or "").strip()
-        if kim and kim.lower() not in {"kimliği belirsiz şüpheli"}:
-            return f"{kim} hakkında şikayette bulunulmaktadır."
-    return ""
-
-
-def _body_paragraphs(cfg: dict[str, Any], parsed: dict[str, Any], belge_id: str) -> list[str]:
+def _body_paragraphs(cfg: dict[str, Any], spec: dict[str, Any], parsed: dict[str, Any]) -> list[str]:
+    """Etiketli dilekçe gövdesi: Müşteki / Açıklamalar / Netice-i talep düzeni."""
     paragraphs: list[str] = []
-    lead = _lead_paragraph(belge_id, parsed)
-    if lead:
-        paragraphs.append(lead)
-    for key, _label, kind in cfg.get("body") or ():
+    for row in _meta_rows(cfg, spec, parsed):
+        paragraphs.append(f"{row['label']} : {row['value']}")
+    for key, label, kind in cfg.get("body") or ():
         if key in _EKLER_SKIP_KEYS:
             continue
         text = _format_value(_get(parsed, key), kind)
         if not text:
             continue
-        if lead and _fold_simple(text) in _fold_simple(lead):
-            continue
-        paragraphs.append(text)
+        paragraphs.append(f"{label} :\n{text}")
     return paragraphs
 
 
@@ -502,13 +579,6 @@ def _body_sections(cfg: dict[str, Any], parsed: dict[str, Any]) -> list[dict[str
             continue
         sections.append({"id": key, "label": label, "text": text, "kind": kind})
     return sections
-    sections: list[dict[str, str]] = []
-    for key, label, kind in cfg.get("body") or ():
-        text = _format_value(_get(parsed, key), kind)
-        if not text:
-            continue
-        sections.append({"id": key, "label": label, "text": text, "kind": kind})
-    return sections
 
 
 def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any]:
@@ -537,7 +607,7 @@ def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any
     cfg = LAYOUTS.get(str(spec.get("id") or ""), {})
     belge_id = str(spec.get("id") or "")
     sections = [section for section in _body_sections(cfg, parsed) if section.get("kind") != "eksik"]
-    paragraphs = _body_paragraphs(cfg, parsed, belge_id)
+    paragraphs = _body_paragraphs(cfg, spec, parsed)
     name = _signer_name(parsed)
     adres = _sheet_adres(parsed)
     ekler = _collect_ekler(belge_id, parsed)
@@ -560,7 +630,7 @@ def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any
         "meta": _meta_rows(cfg, spec, parsed),
         "sections": sections,
         "closing": CLASSIC_CLOSING,
-        "signature": {"role": "(imza)", "name": name},
+        "signature": {"role": cfg.get("signature") or "(imza)", "name": name},
         "onay_notu": onay,
         "cited_ns": _cited_evidence_ns(parsed),
     }
@@ -584,12 +654,22 @@ def render_petition_text(view: dict[str, Any]) -> str:
     if sehir:
         lines.append(_center(sehir))
     lines.append("")
-    lines.append("")
+    for row in view.get("meta") or []:
+        label = str(row.get("label") or "").strip()
+        value = str(row.get("value") or "").strip()
+        if not label or not value:
+            continue
+        lines.append(f"{label} : {value}")
+    if view.get("meta"):
+        lines.append("")
     first = True
-    for paragraph in view.get("paragraphs") or []:
-        text = str(paragraph or "").strip()
+    for section in view.get("sections") or []:
+        label = str(section.get("label") or "").strip()
+        text = str(section.get("text") or "").strip()
         if not text:
             continue
+        if label:
+            lines.append(f"{label} :")
         lines.append(("     " + text) if first else text)
         first = False
         lines.append("")
@@ -600,8 +680,12 @@ def render_petition_text(view: dict[str, Any]) -> str:
     tarih = str(view.get("tarih") or _sheet_date({}))
     signature = view.get("signature") or {}
     name = str(signature.get("name") or NAME_PLACEHOLDER).strip()
+    role = str(signature.get("role") or "").strip()
     left = _adres_lines(str(view.get("adres") or ADRES_PLACEHOLDER))
-    right = [tarih, "(imza)", name]
+    right = [tarih, "(imza)"]
+    if role and role not in {"(imza)"}:
+        right.append(role)
+    right.append(name)
     rows = max(len(left), len(right))
     for idx in range(rows):
         lft = left[idx] if idx < len(left) else ""

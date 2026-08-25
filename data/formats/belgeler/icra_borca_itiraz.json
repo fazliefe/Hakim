@@ -1,0 +1,46 @@
+{
+  "id": "icra_borca_itiraz",
+  "title": "İcra takibine (ödeme emrine) itiraz dilekçesi",
+  "family": "hukuk",
+  "makam": "İlgili icra müdürlüğü",
+  "legal_basis": ["İİK m.62", "İİK m.19", "İİK m.66"],
+  "when": "İlamsız icra takibinde ödeme emrine; borca, imzaya, faiz/ferîlere ve yetkiye itiraz. İcra müdürlüğüne dilekçe yeter.",
+  "sections": [
+    { "id": "ust_yazi", "label": "İcra müdürlüğü" },
+    { "id": "borclu", "label": "İtiraz eden (borçlu)" },
+    { "id": "alacakli", "label": "Alacaklı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "sebepler", "label": "Açıklamalar" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki sebepler" },
+    { "id": "talep", "label": "Sonuç ve talep" }
+  ],
+  "parsed": {
+    "required": ["makam", "konu", "sebepler", "talep"],
+    "properties": {
+      "makam": "string — icra dairesi no uydurma",
+      "esas_no": "string — yoksa boş",
+      "borclu": "string",
+      "alacakli": "string",
+      "konu": "string",
+      "sebepler": ["string — borç, imza, faiz, yetki; tebliğ tarihi yoksa uydurma"],
+      "talep": "string — itirazın kabulü ve takibin durdurulması"
+    }
+  },
+  "writing": {
+    "tone": "İcra müdürlüğüne ödeme emrine itiraz. Mahkeme dava dilekçesi gibi yazma.",
+    "must": ["Borca itiraz açıkça yazılsın", "Dosya no ve tebliğ tarihi yoksa uydurma", "Takibin durdurulması talep edilsin"],
+    "must_not": ["Cumhuriyet savcılığına hitap", "İlamlı takip / şikayet karıştırmak", "T.C. kimlik uydurmak", "Kullanıcı imzadan bahsetmediyse imzanın sahte olduğunu iddia etmek"]
+  },
+  "example": {
+    "makam": "İlgili icra müdürlüğü",
+    "alacakli": "Alacaklı",
+    "konu": "Tebliğ edilen ödeme emrine; borca, faize ve yetkiye itirazların sunulmasıdır.",
+    "sebepler": [
+      "Ödeme emrinin tebliğinden itibaren İİK m.62 uyarınca yedi günlük süre içinde itiraz edilmektedir. Tebliğ tarihi yoksa uydurulmaz.",
+      "Takibe konu borcun mevcut olmadığı, borcun tamamına ve fer’ilerine itiraz edildiği beyan olunur.",
+      "Faiz oranına, faiz başlangıcına ve takip giderlerine itiraz edilir.",
+      "Yetkili dairenin borçlunun yerleşim yeri icra dairesi olduğu, bu müdürlüğün yetkisine itiraz edildiği beyan olunur."
+    ],
+    "talep": "İtirazların kabulü ile takibin durdurulmasına karar verilmesi saygılarımla arz ve talep olunur."
+  }
+}

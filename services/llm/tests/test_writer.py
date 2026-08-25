@@ -101,7 +101,7 @@ def test_write_belge_istinaf_section_order(monkeypatch) -> None:
     assert "CMK m.273" in text
     rendered = render_belge(spec, example)
     assert rendered.lstrip().startswith("T.C.")
-    assert "aracılığıyla" in rendered.lower()
+    assert "sunulmak üzere" in rendered.lower()
     assert "CMK m.273" in rendered
     assert "Gereğini arz ederim." in rendered
     assert "(imza)" in rendered
@@ -326,6 +326,10 @@ def test_each_belge_has_its_own_layout() -> None:
         "bireysel_basvuru": "Anayasa Mahkemesi",
         "idari_dava": "idare mahkemesi",
         "adli_kontrol_itiraz": "İtiraz mercii",
+        "temyiz_cevap": "Yargıtay Başkanlığı",
+        "sure_uzatim": "hukuk mahkemesi",
+        "icra_borca_itiraz": "icra müdürlüğü",
+        "ihtiyac_tahliye": "sulh hukuk mahkemesi",
     }
     seen_layouts: set[str] = set()
     for belge_id, marker in markers.items():
@@ -352,6 +356,19 @@ def test_each_belge_has_its_own_layout() -> None:
     assert "istinaf" in seen_layouts
     assert "aym" in seen_layouts
     assert "idari" in seen_layouts
+    assert "icra" in seen_layouts
+    assert "kira_tahliye" in seen_layouts
+    assert "temyiz_cevap" in seen_layouts
+
+
+def test_sikayet_classic_labels_match_sample() -> None:
+    spec = load_belge("sikayet")
+    text = render_belge(spec, spec["example"])
+    assert "Müşteki (mağdur)" in text
+    assert "Açıklamalar" in text
+    assert "Hukuki deliller" in text
+    assert "Netice-i talep" in text
+    assert "Kamu davası açılması" in text
 
 
 def test_incomplete_sikayet_rewrites_with_placeholders() -> None:
@@ -522,3 +539,226 @@ def test_petition_view_reports_which_related_n_was_actually_cited() -> None:
         {**spec["example"], "hukuki_nitelendirme": [{"cumle": "Mevzuat aramasında eşleşen madde yok."}]},
     )
     assert fallback["cited_ns"] == []
+
+
+def test_compose_belge_attaches_evolver_score() -> None:
+    from llm.writer import compose_belge
+
+    _, view = compose_belge(
+        "temyiz",
+        {
+            "action": "temyiz",
+            "user_text": "BAM onama kararını temyiz ediyorum. Tebliğ tarihi: 14.08.2026",
+            "related": [],
+            "evidence": [],
+            "fields": {},
+            "dates": {},
+            "deadlines": [],
+        },
+        chat_fn=None,
+        allow_ollama=False,
+    )
+    ev = view.get("evolver") or {}
+    assert ev.get("source") == "hakim_evolver"
+    assert ev.get("ok") is True
+    assert ev.get("prompt_edit") == "human_approval_required"
+
+
+def test_ceza_kalip_tour_no_fake_emsal_or_iyuk_on_appeal() -> None:
+    """YARIN.md madde 3: her ceza kalıbında uydurma künye / «bu yönde» / kanun karışması yok."""
+    from llm.writer import compose_belge
+
+    samples = {
+        "sikayet": "Paramı aldılar, şikayet etmek istiyorum.",
+        "suc_duyurusu": "Dolandırıcılık şüphesini savcılığa duyuruyorum.",
+        "cevap": "İddianame tebliğ edildi. Cevap dilekçesi vermek istiyorum.",
+        "itiraz": "Sulh ceza hâkimliği kararına itiraz ediyorum.",
+        "istinaf": "Mahkûmiyet hükmüne istinaf etmek istiyorum.",
+        "temyiz": "BAM onama kararını temyiz etmek istiyorum. Tebliğ tarihi: 14.08.2026",
+        "katilma": "Açılan kamu davasına katılma talep ediyorum.",
+        "tahliye": "Tutukluyum, tahliye talep ediyorum.",
+        "adli_kontrol_itiraz": "Adli kontrol kararına itiraz ediyorum.",
+        "bireysel_basvuru": "Kanun yolları tükendi, AYM'ye bireysel başvuru yapmak istiyorum.",
+        "idari_dava": "İdari işlemin iptali için dava açmak istiyorum.",
+    }
+    for belge_id, user in samples.items():
+        text, _ = compose_belge(
+            belge_id,
+            {
+                "action": belge_id,
+                "user_text": user,
+                "related": [],
+                "evidence": [],
+                "fields": {},
+                "dates": {},
+                "deadlines": [],
+            },
+            chat_fn=None,
+            allow_ollama=False,
+        )
+        assert "bu yönde" not in text, belge_id
+        assert "aynı emsale dayanır" not in text, belge_id
+        assert "1997/186" not in text, belge_id
+        assert "Ticaret Mahkemesi" not in text, belge_id
+        if belge_id in {"temyiz", "istinaf", "itiraz", "adli_kontrol_itiraz"}:
+            assert "İYUK" not in text, belge_id
+        if belge_id == "idari_dava":
+            assert "CMK" not in text, belge_id
+        if belge_id == "temyiz":
+            assert "14.08.2026" in text
+            assert "Yargıtay" in text
+        if belge_id == "sikayet":
+            assert "Cumhuriyet Başsavcılığı" in text
+            assert "mahkûmiyet" not in text.lower()
+        if belge_id == "suc_duyurusu":
+            assert "Cumhuriyet Başsavcılığı" in text
+        if belge_id == "itiraz":
+            assert "CMK m.268" in text
+        if belge_id == "istinaf":
+            assert "CMK m.273" in text
+        if belge_id == "katilma":
+            assert "CMK m.237" in text
+        if belge_id == "tahliye":
+            assert "CMK m.100" in text or "tahliye" in text.lower()
+        if belge_id == "bireysel_basvuru":
+            assert "Anayasa Mahkemesi" in text
+            assert "6216" in text
+        if belge_id == "idari_dava":
+            assert "İYUK" in text
+
+
+def test_temyiz_sure_uses_motor_last_day() -> None:
+    from llm.writer import extractive_parsed
+
+    spec = load_belge("temyiz")
+    parsed = extractive_parsed(
+        spec,
+        {
+            "action": "temyiz",
+            "user_text": "BAM onama kararını temyiz ediyorum. Tebliğ tarihi: 14.08.2026",
+            "related": [],
+            "evidence": [],
+            "fields": {},
+            "dates": {"teblig": "2026-08-14"},
+            "deadlines": [
+                {
+                    "name": "Temyiz",
+                    "last_day": "2026-08-28",
+                    "legal_basis": ["CMK m.291"],
+                }
+            ],
+        },
+    )
+    sure = str(parsed.get("sure_cumlesi") or "")
+    assert "28.08.2026" in sure
+    assert "CMK m.291" in sure
+    assert "14.08.2026" in sure
+
+
+def test_katilma_does_not_use_chat_as_case_caption() -> None:
+    from llm.writer import extractive_parsed
+
+    spec = load_belge("katilma")
+    user = "Açılan kamu davasına katılma talep ediyorum."
+    parsed = extractive_parsed(
+        spec,
+        {
+            "action": "katilma",
+            "user_text": user,
+            "related": [],
+            "evidence": [],
+            "fields": {},
+            "dates": {},
+            "deadlines": [],
+        },
+    )
+    assert user not in str(parsed.get("dava") or "")
+    assert "kamu davası" in str(parsed.get("dava") or "").lower() or str(parsed.get("zarar") or "")
+
+
+def test_kamu_kalip_is_resmi_not_petition() -> None:
+    from llm.writer import compose_belge
+
+    for belge_id in ("ust_yazi", "bilgi_yazisi", "olur", "cevap_yazisi"):
+        text, view = compose_belge(
+            belge_id,
+            {
+                "action": belge_id,
+                "user_text": "Gelen yazı havale edilsin.",
+                "related": [],
+                "evidence": [],
+                "fields": {},
+                "dates": {},
+                "deadlines": [],
+                "classification": {"unit": "Evrak kayıt"},
+            },
+            chat_fn=None,
+            allow_ollama=False,
+        )
+        assert "DİLEKÇESİDİR" not in text, belge_id
+        assert "TCK m." not in text, belge_id
+        assert "Yargıtay 1997" not in text, belge_id
+        assert view.get("layout") == "resmi" or view.get("form") == "resmi", belge_id
+
+
+def test_hukuk_kalips_stay_off_cmk_and_keep_own_hitap() -> None:
+    from llm.writer import compose_belge
+
+    cases = {
+        "sure_uzatim": ("Hukuk mahkemesinde cevap süresi uzatım talebi yazmak istiyorum.", "Hukuk mahkemesi"),
+        "icra_borca_itiraz": ("İlamsız icra takibine borca itiraz ediyorum.", "icra müdürlüğü"),
+        "ihtiyac_tahliye": ("Kiracıyı ihtiyaç sebebiyle tahliye etmek istiyorum.", "sulh hukuk"),
+        "temyiz_cevap": ("Karşı tarafın temyizine cevap yazmak istiyorum.", "Yargıtay"),
+    }
+    for belge_id, (user, marker) in cases.items():
+        text, view = compose_belge(
+            belge_id,
+            {
+                "action": belge_id,
+                "user_text": user,
+                "related": [],
+                "evidence": [],
+                "fields": {},
+                "dates": {},
+                "deadlines": [],
+            },
+            chat_fn=None,
+            allow_ollama=False,
+        )
+        assert marker.casefold() in text.casefold(), belge_id
+        assert "CMK" not in text, belge_id
+        assert "mahkûmiyet" not in text.lower(), belge_id
+        assert view.get("id") == belge_id
+        assert "Açıklamalar" in text or "Talep sonucu" in text or "Netice ve talep" in text or "Sonuç ve talep" in text
+        if belge_id == "icra_borca_itiraz":
+            assert "takibin durdurulmasına" in text.casefold()
+            assert "İtiraz eden (borçlu)" in text
+            assert "İİK m.62" in text
+            assert "imzanın" not in text.casefold()
+        if belge_id == "temyiz_cevap":
+            assert "onanmasına" in text.casefold()
+            assert "karşı temyiz" not in text.casefold()
+            assert "Sonuç ve talep" in text
+            assert "Gökhan" not in text
+        if belge_id == "ihtiyac_tahliye":
+            assert "Harca esas değer" in text
+            assert "Arabuluculuk" in text
+            assert "TBK m.350" in text
+            assert "tutuk" not in text.casefold()
+
+
+def test_temyiz_cevap_karsi_temyiz_only_when_asked() -> None:
+    from llm.writer import compose_belge
+
+    engine = {
+        "action": "temyiz_cevap",
+        "user_text": "Karşı tarafın temyizine cevap ve karşı temyiz yazmak istiyorum.",
+        "related": [],
+        "evidence": [],
+        "fields": {},
+        "dates": {},
+        "deadlines": [],
+    }
+    text, _ = compose_belge("temyiz_cevap", engine, chat_fn=None, allow_ollama=False)
+    assert "karşı temyiz" in text.casefold()
+    assert "CMK" not in text

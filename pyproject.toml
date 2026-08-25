@@ -46,10 +46,12 @@ testpaths = [
     "services/deadline/tests",
     "services/document_ai/tests",
     "services/llm/tests",
+    "tools/evolver/tests",
 ]
 pythonpath = [
     "packages/legal-schema/src",
     "apps/api/src",
     "connectors",
     "services",
+    "tools/evolver",
 ]

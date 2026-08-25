@@ -531,6 +531,17 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
                 note="Bilgi tabanı eksik; üretim gerçek madde yerine geçmez.",
             )
         )
+    if retrieve and classification.legal_nature in MEVZUAT_RETRY_ELIGIBLE:
+        from llm.emsal import attach_emsal_hits
+
+        emsal_action = "idari_dava" if classification.legal_nature == "idare" else ""
+        related = attach_emsal_hits(
+            related,
+            retrieve,
+            quoted,
+            at=_mevzuat_at(work.get("dates") or {}),
+            action=emsal_action,
+        )
     work["related"] = related
     work["findings"] = findings
     return work
