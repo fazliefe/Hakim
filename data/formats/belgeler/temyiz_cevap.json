@@ -1,0 +1,47 @@
+{
+  "id": "temyiz_cevap",
+  "title": "Temyize cevap dilekçesi",
+  "family": "hukuk",
+  "makam": "Yargıtay Başkanlığı",
+  "legal_basis": ["HMK"],
+  "when": "Karşı tarafın temyizine cevap. Ceza temyiz dilekçesi (CMK m.291) değildir. Karşı temyiz ayrıca belirtilmedikçe onama istenir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Yargıtay Başkanlığı / kararı veren mahkeme" },
+    { "id": "cevap_veren", "label": "Cevap veren" },
+    { "id": "temyiz_eden", "label": "Temyiz eden" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "aciklamalar", "label": "Açıklamalar" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki nedenler" },
+    { "id": "deliller", "label": "Deliller" },
+    { "id": "talep", "label": "Sonuç ve talep" }
+  ],
+  "parsed": {
+    "required": ["makam", "konu", "aciklamalar", "talep"],
+    "properties": {
+      "makam": "string — daire no uydurma",
+      "esas_no": "string",
+      "cevap_veren": "string",
+      "temyiz_eden": "string",
+      "konu": "string",
+      "aciklamalar": ["string"],
+      "deliller": ["string"],
+      "talep": "string — temyizin reddi ve kararın onanması"
+    }
+  },
+  "writing": {
+    "tone": "Temyize cevap. Avukat adı, baro, adres uydurma. HUMK madde numarası ezbere yazma.",
+    "must": ["Esas/karar no yoksa uydurma", "Kaynak yoksa HMK madde numarası yazma", "Karşı temyiz istenmedikçe onama talep et"],
+    "must_not": ["Ceza dairesine CMK m.291 temyiz dilekçesi", "T.C. kimlik, tel, faks, baro no uydurmak", "Gerçek avukat künyesi yapıştırmak"]
+  },
+  "example": {
+    "makam": "Yargıtay Başkanlığı",
+    "konu": "Temyiz başvurusuna karşı cevap dilekçesidir.",
+    "aciklamalar": [
+      "Temyiz başvurusuna ilişkin olarak mahkeme kararının yerinde ve hukuka uygun olduğu beyan olunur.",
+      "Temyiz dilekçesinde ileri sürülen iddiaların reddi ile kararın onanması talep olunur."
+    ],
+    "hukuki_nitelendirme": [],
+    "deliller": ["İlk derece ve istinaf mahkemesi kararları", "Dava dosyası"],
+    "talep": "Temyiz başvurusunun reddine, mahkeme kararının onanmasına, yargılama giderleri ve vekâlet ücretinin temyiz edene yüklenmesine karar verilmesi saygıyla talep olunur."
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "id": "ihtiyac_tahliye",
+  "title": "İhtiyaç sebebiyle tahliye davası dilekçesi",
+  "family": "hukuk",
+  "makam": "Kiralananın bulunduğu yer sulh hukuk mahkemesi",
+  "legal_basis": ["TBK m.350", "TBK m.353", "TBK m.354", "TBK m.355", "HMK", "6325 sayılı Kanun"],
+  "when": "Konut veya işyeri kirasında malikin ihtiyacı nedeniyle tahliye. Tutuklunun tahliyesi (CMK m.100) değildir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Sulh hukuk mahkemesi" },
+    { "id": "davaci", "label": "Davacı" },
+    { "id": "davali", "label": "Davalı" },
+    { "id": "konu", "label": "Konu" },
+    { "id": "aciklamalar", "label": "Açıklamalar" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki sebepler" },
+    { "id": "deliller", "label": "Deliller" },
+    { "id": "talep", "label": "Sonuç ve talep" }
+  ],
+  "parsed": {
+    "required": ["makam", "konu", "aciklamalar", "talep"],
+    "properties": {
+      "makam": "string",
+      "davaci": "string",
+      "davali": "string",
+      "konu": "string",
+      "yillik_kira": "string — yoksa uydurma",
+      "arabuluculuk": "string — tarih yoksa yer tutucu",
+      "aciklamalar": ["string"],
+      "deliller": ["string"],
+      "talep": "string — tahliye ve yargılama gideri"
+    }
+  },
+  "writing": {
+    "tone": "Sulh hukuk tahliye davası. Tutuklama / CMK tahliye dili kullanma.",
+    "must": ["İhtiyaç sebebini olaydan yaz", "Tapu, kira tutarı, arabuluculuk tarihi yoksa uydurma"],
+    "must_not": ["Sulh ceza / tutuklama tahliyesi", "T.C. kimlik uydurmak", "Yıllık kira rakamı uydurmak", "Kullanıcı söylemeden evlilik/sağlık/atama uydurmak"]
+  },
+  "example": {
+    "makam": "Kiralananın bulunduğu yer sulh hukuk mahkemesi",
+    "konu": "Konut/iş yeri ihtiyacı nedeniyle kiralananın tahliyesi talebidir.",
+    "yillik_kira": "«[yıllık kira / harca esas değer]»",
+    "arabuluculuk": "«[arabuluculuk anlaşamama son tutanağı tarihi]»",
+    "aciklamalar": [
+      "Davacı, kiralanan taşınmazın maliki olup taşınmaz davalıya kira sözleşmesi ile kiraya verilmiştir. Tapu ve sözleşme tarihi yoksa uydurulmaz.",
+      "Davacının kiralananı konut veya iş yeri olarak kullanma ihtiyacı bulunduğu; ihtiyacın gerçek, samimi ve zorunlu olduğu, başka elverişli taşınmaz bulunmadığı beyan olunur.",
+      "Dava, TBK m.353’te öngörülen bir aylık süre içinde açılmaktadır. Sözleşme bitiş veya fesih tarihi yoksa uydurulmaz."
+    ],
+    "deliller": [
+      "Tapu kaydı",
+      "Kira sözleşmesi",
+      "İhtiyacı gösteren belgeler",
+      "Arabuluculuk son tutanağı",
+      "Tanık"
+    ],
+    "talep": "Davanın kabulü ile davalının taşınmazdan tahliyesine, yargılama giderleri ve vekâlet ücretinin davalıya yükletilmesine karar verilmesi talep olunur."
+  }
+}

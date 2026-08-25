@@ -45,7 +45,10 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function zipStore(files: Array<{ name: string; data: Uint8Array }>): Blob {
+function zipStore(
+  files: Array<{ name: string; data: Uint8Array }>,
+  mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+): Blob {
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
   let offset = 0;
@@ -92,9 +95,70 @@ function zipStore(files: Array<{ name: string; data: Uint8Array }>): Blob {
     u16(0),
   ]);
   const packed = concat([...locals, central, end]);
-  return new Blob([packed as unknown as BlobPart], {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  return new Blob([packed as unknown as BlobPart], { type: mime });
+}
+
+/** UYAP UDF denemesi. Editör açmazsa `false` yapın; buton kaybolur. */
+export const UDF_EXPORT_TRIAL = true;
+
+const UDF_ZWSP = "\u200B";
+
+function udfAlign(align?: ExportBlock["align"]): string {
+  if (align === "center") return "1";
+  if (align === "right") return "2";
+  return "0";
+}
+
+function runeCount(text: string): number {
+  return [...text].length;
+}
+
+function udfSafeLine(text: string): string {
+  return (text || "").replace(/]]>/g, "]] >");
+}
+
+function udfBlob(blocks: ExportBlock[]): Blob {
+  const encoder = new TextEncoder();
+  let cdata = "";
+  const paragraphs: Array<{ offset: number; length: number; align: string; bold: boolean }> = [];
+  blocks.forEach((block, index) => {
+    if (index > 0) cdata += "\n";
+    const line = udfSafeLine(block.text) || UDF_ZWSP;
+    const offset = runeCount(cdata);
+    cdata += line;
+    paragraphs.push({
+      offset,
+      length: runeCount(line),
+      align: udfAlign(block.align),
+      bold: Boolean(block.bold),
+    });
   });
+  if (!paragraphs.length) {
+    cdata = UDF_ZWSP;
+    paragraphs.push({ offset: 0, length: 1, align: "0", bold: false });
+  }
+  const elements = paragraphs
+    .map(
+      (row) =>
+        `    <paragraph Alignment="${row.align}" resolver="hvl-default">\n` +
+        `      <content Alignment="${row.align}" resolver="hvl-default"${row.bold ? ' bold="true"' : ""} size="12" family="Times New Roman" foreground="-16777216" background="-1" startOffset="${row.offset}" length="${row.length}" />\n` +
+        "    </paragraph>",
+    )
+    .join("\n");
+  const xml =
+    `<?xml version="1.0" encoding="UTF-8" ?>\n` +
+    `<template format_id="1.8">\n` +
+    `  <content><![CDATA[${cdata}]]></content>\n` +
+    "  <properties>\n" +
+    `    <pageFormat mediaSizeName="1" leftMargin="56.7" rightMargin="56.7" topMargin="56.7" bottomMargin="56.7" paperOrientation="1" headerFOffset="20.0" footerFOffset="20.0" />\n` +
+    "  </properties>\n" +
+    "  <styles>\n" +
+    `    <style name="default" description="Geçerli" italic="false" bold="false" size="12" family="Times New Roman" />\n` +
+    `    <style name="hvl-default" description="Gövde" size="12" family="Times New Roman" />\n` +
+    "  </styles>\n" +
+    `  <elements resolver="hvl-default">\n${elements}\n  </elements>\n` +
+    "</template>\n";
+  return zipStore([{ name: "content.xml", data: encoder.encode(xml) }], "application/octet-stream");
 }
 
 function xmlEscape(text: string): string {
@@ -111,16 +175,32 @@ export function petitionToBlocks(petition: PetitionView): ExportBlock[] {
   if (petition.hitap) blocks.push({ text: petition.hitap, align: "center" });
   if (petition.sehir) blocks.push({ text: petition.sehir, align: "center" });
   blocks.push({ text: "" });
-  const paragraphs =
-    petition.paragraphs?.length
-      ? petition.paragraphs
-      : (petition.sections || [])
-          .filter((section) => section.kind !== "eksik" && section.text?.trim())
-          .map((section) => section.text);
-  paragraphs.forEach((paragraph, idx) => {
-    blocks.push({ text: idx === 0 ? `     ${paragraph}` : paragraph });
-    blocks.push({ text: "" });
-  });
+  for (const row of petition.meta || []) {
+    if (!row.label || !row.value) continue;
+    blocks.push({ text: `${row.label} : ${row.value}` });
+  }
+  if ((petition.meta || []).length) blocks.push({ text: "" });
+  const sections = (petition.sections || []).filter(
+    (section) => section.kind !== "eksik" && section.text?.trim(),
+  );
+  if (sections.length) {
+    sections.forEach((section, idx) => {
+      if (section.label) blocks.push({ text: `${section.label} :` });
+      blocks.push({ text: idx === 0 ? `     ${section.text}` : section.text });
+      blocks.push({ text: "" });
+    });
+  } else {
+    const paragraphs =
+      petition.paragraphs?.length
+        ? petition.paragraphs
+        : (petition.sections || [])
+            .filter((section) => section.kind !== "eksik" && section.text?.trim())
+            .map((section) => section.text);
+    paragraphs.forEach((paragraph, idx) => {
+      blocks.push({ text: idx === 0 ? `     ${paragraph}` : paragraph });
+      blocks.push({ text: "" });
+    });
+  }
   if (petition.closing) {
     blocks.push({ text: `     ${petition.closing}` });
     blocks.push({ text: "" });
@@ -294,11 +374,19 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadDocument(basename: string, content: string | ExportBlock[], format: "docx" | "pdf") {
+export function downloadDocument(
+  basename: string,
+  content: string | ExportBlock[],
+  format: "docx" | "pdf" | "udf",
+) {
   const stem = basename.replace(/\.[^.]+$/, "") || "hakim-evrak";
   const blocks = asBlocks(content);
   if (format === "docx") {
     triggerDownload(docxBlob(blocks), `${stem}.docx`);
+    return;
+  }
+  if (format === "udf") {
+    triggerDownload(udfBlob(blocks), `${stem}.udf`);
     return;
   }
   triggerDownload(pdfBlob(blocks), `${stem}.pdf`);

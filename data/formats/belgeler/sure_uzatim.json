@@ -1,0 +1,38 @@
+{
+  "id": "sure_uzatim",
+  "title": "Süre uzatım talebi",
+  "family": "hukuk",
+  "makam": "Görevli hukuk mahkemesi",
+  "legal_basis": ["HMK"],
+  "when": "Hukuk davasında cevap veya benzeri süre için ek süre. Ceza kanun yolu değildir.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Hukuk mahkemesi hâkimliği" },
+    { "id": "davali", "label": "Süre uzatım talebinde bulunan davalı" },
+    { "id": "davaci", "label": "Davacı" },
+    { "id": "aciklamalar", "label": "Açıklamalar" },
+    { "id": "talep", "label": "Netice ve talep" }
+  ],
+  "parsed": {
+    "required": ["makam", "konu", "aciklamalar", "talep"],
+    "properties": {
+      "makam": "string — mahkeme adı yoksa görevli hukuk mahkemesi; daire no uydurma",
+      "esas_no": "string — yoksa boş bırak",
+      "davali": "string",
+      "davaci": "string",
+      "konu": "string",
+      "aciklamalar": "string",
+      "talep": "string — ek süre; gün sayısı uydurma"
+    }
+  },
+  "writing": {
+    "tone": "Hukuk mahkemesine süre uzatım dilekçesi. CMK istinaf/temyiz dili kullanma.",
+    "must": ["Konu süre uzatımı olsun", "Esas no yoksa uydurma"],
+    "must_not": ["Ceza mahkemesine hitap", "Harç yatırıldı / tebliğ edildi gibi olmamış işlem", "T.C. kimlik veya baro no uydurmak"]
+  },
+  "example": {
+    "makam": "Görevli hukuk mahkemesi",
+    "konu": "Süre uzatım talebimizdir.",
+    "aciklamalar": "Dava dilekçesi tebliğ edilmiş olup dosyanın incelenmesi ve hakların korunması için cevap süresinin uzatılması talep olunur.",
+    "talep": "Cevap süresine ek süre tanınması ve kararın tebliğini saygılarımla arz ve talep ederim."
+  }
+}

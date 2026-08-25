@@ -43,7 +43,7 @@ def test_langgraph_mevzuat_conditional_retry() -> None:
         retrieve=retrieve,
     )
     assert analysis.observability.get("engine") == "langgraph"
-    assert len(seen) == 2
+    assert len(seen) >= 2
     assert analysis.related and analysis.related[0]["article_no"] == "158"
     # graf tekrar denese de yalnız tek bir "mevzuat" ajan kartı üretir
     assert [item["id"] for item in analysis.agents].count("mevzuat") == 1

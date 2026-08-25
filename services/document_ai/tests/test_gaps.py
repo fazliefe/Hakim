@@ -65,6 +65,15 @@ def test_merge_placeholders_adds_visible_sheet_gaps() -> None:
     assert ids >= {"adres", "il", "ad_soyad"}
 
 
+def test_apply_placeholders_copies_known_teblig() -> None:
+    parsed = apply_gap_placeholders(
+        {"sure_cumlesi": "Temyiz süresi CMK m.291 uyarınca tebliğden itibaren iki haftadır."},
+        [],
+        "Tebliğ tarihi: 14.08.2026",
+    )
+    assert "14.08.2026" in parsed["sure_cumlesi"]
+
+
 def test_apply_placeholders_marks_missing_name() -> None:
     parsed = apply_gap_placeholders(
         {"sikayetci": "Şikayetçi", "olay": "paramı aldılar"},

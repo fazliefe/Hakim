@@ -8,12 +8,13 @@
   "when": "Suçtan zarar gören, fail hakkında soruşturma açılmasını ister. Ceza davasını vatandaş açmaz; savcı kamu davası açar. Bu kalıp TCK nitelendirmeli şikayet dilekçesidir.",
   "sections": [
     { "id": "ust_yazi", "label": "T.C. / Cumhuriyet Başsavcılığı" },
-    { "id": "sikayetci", "label": "Şikayetçi kimliği" },
-    { "id": "sikayet_edilen", "label": "Şikayet edilen" },
-    { "id": "olay", "label": "Olay ve tarih" },
-    { "id": "hukuki_nitelendirme", "label": "Hukuki nitelendirme (TCK)" },
-    { "id": "deliller", "label": "Deliller" },
-    { "id": "talep", "label": "Talep sonucu" },
+    { "id": "sikayetci", "label": "Müşteki (mağdur)" },
+    { "id": "sikayet_edilen", "label": "Şüpheli" },
+    { "id": "olay", "label": "Açıklamalar" },
+    { "id": "emsal_atif", "label": "Dayanılan emsal" },
+    { "id": "deliller", "label": "Hukuki deliller" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki sebepler" },
+    { "id": "talep", "label": "Netice-i talep" },
     { "id": "imza", "label": "Tarih ve imza yeri" }
   ],
   "parsed": {
@@ -23,6 +24,7 @@
       "sikayetci": "string — ad soyad yoksa «şikayetçi» yaz, kimlik uydurma",
       "sikayet_edilen": "string — bilinmiyorsa «kimliği belirsiz şüpheli»",
       "olay": "string — kullanıcı anlatısı; tarih varsa engine.dates",
+      "emsal_atif": "string — yalnızca listedeki künye, esas/karar uydurma",
       "hukuki_nitelendirme": [
         {
           "n": "evidence atıf no",
@@ -56,6 +58,7 @@
     "makam": "Cumhuriyet Başsavcılığı",
     "sikayetci": "Şikayetçi",
     "sikayet_edilen": "Kimliği belirsiz şüpheli",
+    "konu": "Kamu davası açılması talebidir.",
     "olay": "Banka hesabı kullanılarak dolandırıcılık niteliğinde işlem yapıldığı beyan edilmektedir.",
     "hukuki_nitelendirme": [],
     "deliller": ["Banka dekontları", "Yazışmalar"],

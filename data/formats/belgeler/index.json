@@ -52,6 +52,12 @@
       "makam": "Yargıtay ilgili hukuk dairesi"
     },
     {
+      "id": "temyiz_cevap",
+      "title": "Temyize cevap dilekçesi",
+      "when": "Karşı tarafın hukuk temyizine cevap. Karşı temyiz ayrıca istenmedikçe onama.",
+      "makam": "Yargıtay Başkanlığı"
+    },
+    {
       "id": "katilma",
       "title": "Davaya katılma talebi",
       "when": "Kamu davasına katılma (CMK m.237).",
@@ -74,6 +80,24 @@
       "title": "Tahliye talebi",
       "when": "Tutuklu sanık tahliye ister.",
       "makam": "Tutuklamaya karar veren mahkeme"
+    },
+    {
+      "id": "ihtiyac_tahliye",
+      "title": "İhtiyaç sebebiyle tahliye davası",
+      "when": "Kira: malikin konut/işyeri ihtiyacı (sulh hukuk).",
+      "makam": "Kiralananın bulunduğu yer sulh hukuk mahkemesi"
+    },
+    {
+      "id": "sure_uzatim",
+      "title": "Süre uzatım talebi",
+      "when": "Hukuk davasında cevap süresi için ek süre.",
+      "makam": "Görevli hukuk mahkemesi"
+    },
+    {
+      "id": "icra_borca_itiraz",
+      "title": "İcra takibine (ödeme emrine) itiraz",
+      "when": "İlamsız icrada ödeme emrine borca / faiz / yetki (ve varsa imza) itirazı.",
+      "makam": "İlgili icra müdürlüğü"
     },
     {
       "id": "adli_kontrol_itiraz",

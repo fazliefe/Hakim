@@ -11,6 +11,7 @@
     { "id": "basvurucu", "label": "Başvurucu" },
     { "id": "tuketilen_yollar", "label": "Tüketilen kanun yolları" },
     { "id": "ihlal", "label": "İhlal iddiası" },
+    { "id": "emsal_atif", "label": "Dayanılan emsal" },
     { "id": "olay", "label": "Olay özeti" },
     { "id": "sure", "label": "30 günlük süre" },
     { "id": "talep", "label": "İhlal tespiti / giderim" }
@@ -22,6 +23,7 @@
       "basvurucu": "string",
       "tuketilen_yollar": ["string"],
       "ihlal": "string — hangi hak; Anayasa madde no uydurma, kullanıcı/kanıt varsa yaz",
+      "emsal_atif": "string — yalnızca listedeki künye, esas/karar uydurma",
       "olay": "string",
       "sure_cumlesi": "string — 30 gün, 6216 s.K. m.47",
       "talep": "string"
