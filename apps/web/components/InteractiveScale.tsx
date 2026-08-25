@@ -14,15 +14,17 @@ const JusticeScaleCanvas = dynamic(
 type Props = {
   onBiasChange?: (bias: number) => void;
   size?: "hero" | "compact";
+  scrollProgress?: number;
 };
 
-export const InteractiveScale = memo(function InteractiveScale({ onBiasChange, size = "hero" }: Props) {
+export const InteractiveScale = memo(function InteractiveScale({
+  onBiasChange,
+  size = "hero",
+  scrollProgress = 0,
+}: Props) {
   return (
     <div className={`scale-theater ${size}`}>
-      <JusticeScaleCanvas size={size} onBiasChange={onBiasChange} />
-      {size === "hero" ? (
-        <p className="scale-hint">Fareyi gezdirin · kefeleri tutup çekin</p>
-      ) : null}
+      <JusticeScaleCanvas size={size} onBiasChange={onBiasChange} scrollProgress={scrollProgress} />
     </div>
   );
 });

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from auth.mail import smtp_configured
+from auth.passwords import MIN_PASSWORD_LENGTH
 from auth.store import AuthError, UserRecord, get_store
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -21,14 +23,14 @@ class LoginBody(BaseModel):
 class RegisterBody(BaseModel):
     username: str = Field(min_length=3)
     email: str = Field(min_length=5)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
     display_name: str = ""
 
 
 class CreateUserBody(BaseModel):
     username: str = Field(min_length=3)
     email: str = Field(min_length=5)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
     display_name: str = ""
     role: str = "user"
 
@@ -49,12 +51,17 @@ class ForgotBody(BaseModel):
 class ResetBody(BaseModel):
     identifier: str = Field(min_length=3)
     code: str = Field(min_length=4)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 class PasswordBody(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+
+
+class FileUpdateBody(BaseModel):
+    filename: str = ""
+    text: str = ""
 
 
 class EmailChangeBody(BaseModel):
@@ -173,21 +180,15 @@ def resend(body: ResendBody) -> dict[str, Any]:
 @router.post("/forgot")
 def forgot(body: ForgotBody) -> dict[str, Any]:
     store = get_store()
-    try:
-        code, mailed = store.request_password_reset(body.identifier)
-    except AuthError as exc:
-        raise _auth_error(exc) from exc
+    code, _sent = store.request_password_reset(body.identifier)
+    smtp = smtp_configured()
     payload: dict[str, Any] = {
-        "mailed": mailed,
-        "smtp": smtp_configured(),
-        "message": (
-            "Sıfırlama kodu e-postanıza gönderildi."
-            if mailed
-            else "E-posta sunucusu bağlı değil. Kodu aşağıya yazın."
-        ),
+        "mailed": smtp,
+        "smtp": smtp,
+        "message": "Hesap kayıtlıysa sıfırlama kodu ilgili e-posta adresine iletilir.",
     }
-    if not mailed:
-        payload["preview_code"] = code
+    if not smtp:
+        payload["preview_code"] = code or f"{secrets.randbelow(1_000_000):06d}"
     return payload
 
 
@@ -399,6 +400,57 @@ def revoke_sessions(
     keep = authorization if user_id == admin.id else None
     deleted = store.revoke_sessions(user_id, except_token=keep, actor=admin)
     return {"status": "ok", "revoked": deleted}
+
+
+@router.get("/files")
+def list_files(user: UserRecord = Depends(current_user)) -> dict[str, Any]:
+    return {"files": get_store().list_files(user.id)}
+
+
+@router.get("/files/{file_id}")
+def get_file(file_id: str, user: UserRecord = Depends(current_user)) -> dict[str, Any]:
+    row = get_store().get_file(user.id, file_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı.")
+    return {"file": row}
+
+
+@router.post("/files")
+async def upload_file(
+    file: UploadFile = File(...),
+    user: UserRecord = Depends(current_user),
+) -> dict[str, Any]:
+    from document_ai.ingest import UploadError, extract_upload
+
+    data = await file.read()
+    try:
+        extracted = extract_upload(file.filename or "evrak", data)
+    except UploadError as exc:
+        raise _auth_error(AuthError(str(exc), 422)) from exc
+    saved = get_store().save_file(
+        user.id,
+        filename=extracted.filename,
+        mime=file.content_type or "",
+        kind=extracted.kind,
+        text=extracted.text,
+        byte_size=len(data),
+    )
+    return {"file": saved}
+
+
+@router.put("/files/{file_id}")
+def update_file(file_id: str, body: FileUpdateBody, user: UserRecord = Depends(current_user)) -> dict[str, Any]:
+    row = get_store().update_file(user.id, file_id, filename=body.filename, text=body.text)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı.")
+    return {"file": row}
+
+
+@router.delete("/files/{file_id}")
+def delete_file(file_id: str, user: UserRecord = Depends(current_user)) -> dict[str, str]:
+    if not get_store().delete_file(user.id, file_id):
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı.")
+    return {"status": "ok"}
 
 
 @router.get("/activity")

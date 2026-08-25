@@ -24,7 +24,7 @@ type ChatTurn = { id: string; query: string; answer: string; result: ResearchRes
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
   { id: "gecmis", label: "Geçmiş" },
-  { id: "kaydedilen", label: "Kaydedilen maddeler" },
+  { id: "kaydedilen", label: "Kaydedilen Maddeler" },
 ];
 
 const HISTORY_KEY = "hakim-research-history";
@@ -310,12 +310,12 @@ export function ResearchWorkspace() {
             <span className="badge">{selectedEvidence.authority || "resmi"}</span>
           </div>
           <div className="source-title">
-            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
+            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız Karar" : "Başlıksız Madde")}
           </div>
           <p className="source-content">{selectedEvidence.content}</p>
           {selectedEvidence.mulga_warning ? <p className="error">⚠ {selectedEvidence.mulga_warning}</p> : null}
           <button type="button" className="side-action" onClick={toggleSave}>
-            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
+            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan Çıkar" : "Maddeyi Kaydet"}
           </button>
         </article>
       ) : null}
@@ -325,7 +325,7 @@ export function ResearchWorkspace() {
   return (
     <AppShell
       module="arastirma"
-      sidebarTitle="Hukuki araştırma"
+      sidebarTitle="Hukuki Araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
       onSidebarSelect={(id) => setSide(id as SideView)}
@@ -339,7 +339,7 @@ export function ResearchWorkspace() {
         <div className={`research-scroll${tab === "graf" || tab === "iz" ? " graph-fill" : ""}`}>
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
-              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
+              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen Maddeler"}</h1>
               <p>
                 {side === "gecmis"
                   ? "Önceki araştırmalar. Tıklayınca yeni sohbet başlar."
@@ -348,7 +348,7 @@ export function ResearchWorkspace() {
             </div>
           ) : tab !== "graf" && tab !== "iz" && turns.length === 0 ? (
             <div className="pane-hero">
-              <h1>Hukuki araştırma</h1>
+              <h1>Hukuki Araştırma</h1>
               <p>Sorunuzu yazın. Cevaptan sonra aynı sohbette devam edebilirsiniz.</p>
             </div>
           ) : null}
@@ -464,14 +464,14 @@ export function ResearchWorkspace() {
                           className="text-btn"
                           onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
                         >
-                          Kayıttan çıkar
+                          Kayıttan Çıkar
                         </button>
                       </div>
                       <p>{item.content}</p>
                     </article>
                   ))
                 ) : (
-                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
+                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi Kaydet» deyin.</p>
                 )
               ) : null}
             </div>
@@ -490,10 +490,10 @@ export function ResearchWorkspace() {
               placeholder={
                 turns.length ? "Devam sorunuzu yazın…" : "Hukuki sorunuzu yazın… örn. Madde 158"
               }
-              aria-label={turns.length ? "Devam sorusu" : "Hukuki soru"}
+              aria-label={turns.length ? "Devam Sorusu" : "Hukuki Soru"}
             />
             <button type="submit" disabled={loading || query.trim().length < 2}>
-              {loading ? "Aranıyor…" : turns.length ? "Devam et" : "Araştır"}
+              {loading ? "Kaynaklar Tartılıyor…" : turns.length ? "Devam Et" : "Araştır"}
             </button>
           </form>
         ) : null}
@@ -504,8 +504,8 @@ export function ResearchWorkspace() {
                 ["metin", "Metin"],
                 ["kaynaklar", "Kaynaklar"],
                 ["emsal", decisions.length ? `Emsal Karar (${decisions.length})` : "Emsal Karar"],
-                ["graf", "Bilgi grafı"],
-                ["iz", "Arama izi"],
+                ["graf", "Bilgi Grafı"],
+                ["iz", "Arama İzi"],
               ] as const
             ).map(([id, label]) => (
               <button

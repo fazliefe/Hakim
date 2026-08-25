@@ -98,9 +98,9 @@ export type SystemStatus = {
 };
 
 export function writerLabel(writer?: string | null): string {
-  if (writer === "refuse") return "Cevap yok";
-  if (writer === "api" || writer === "ollama") return "Kaynaklı gerekçe";
-  return "Kaynaklı gerekçe";
+  if (writer === "refuse") return "Cevap Yok";
+  if (writer === "api" || writer === "ollama") return "Kaynaklı Gerekçe";
+  return "Kaynaklı Gerekçe";
 }
 
 export function writerIsLlm(writer?: string | null): boolean {

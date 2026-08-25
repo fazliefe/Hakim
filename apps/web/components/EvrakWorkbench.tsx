@@ -21,11 +21,11 @@ const DocumentTraceGraphView = dynamic(
 );
 
 const SIDE = [
-  { id: "goruntuleme", label: "Evrak görüntüleme" },
+  { id: "goruntuleme", label: "Evrak Görüntüleme" },
   { id: "sinif", label: "Sınıflandırma" },
-  { id: "akil", label: "Akıl yürütme" },
-  { id: "usul", label: "Kanun yolu ve süreler" },
-  { id: "kaynak", label: "Kaynak grafiği" },
+  { id: "akil", label: "Akıl Yürütme" },
+  { id: "usul", label: "Kanun Yolu ve Süreler" },
+  { id: "kaynak", label: "Kaynak Grafiği" },
   { id: "taslaklar", label: "Taslaklar" },
 ];
 
@@ -36,8 +36,14 @@ const REMEDY_LABEL: Record<string, string> = {
   itiraz: "İtiraz",
   istinaf: "İstinaf",
   temyiz: "Temyiz",
-  bireysel_basvuru: "Bireysel başvuru",
-  istinaf_idari: "İdari istinaf",
+  istinaf_ceza: "İstinaf",
+  temyiz_ceza: "Temyiz",
+  istinaf_hukuk: "İstinaf (Hukuk)",
+  temyiz_hukuk: "Temyiz (Hukuk)",
+  bireysel_basvuru: "Bireysel Başvuru",
+  idari_dava: "İdari Dava",
+  istinaf_idari: "İdari İstinaf",
+  temyiz_idari: "İdari Temyiz",
   sikayet: "Şikayet",
 };
 
@@ -107,25 +113,25 @@ export function EvrakWorkbench() {
       inspectorMode="hidden"
       footer={
         loading || surecLoading
-          ? "Evrak okunuyor…"
+          ? "Evrak Okunuyor…"
           : result
             ? `${result.classification.label} · ${result.deadlines.length} süre`
-            : "Evrak bekleniyor"
+            : "Evrak Bekleniyor"
       }
     >
       <section className="main-pane evrak-pane">
         <div className="pane-hero">
           <h1>
             {side === "goruntuleme"
-              ? "Evrak görüntüleme"
+              ? "Evrak Görüntüleme"
               : side === "sinif"
                 ? "Sınıflandırma"
                 : side === "akil"
-                  ? "Akıl yürütme"
+                  ? "Akıl Yürütme"
                   : side === "usul"
-                    ? "Kanun yolu ve süreler"
+                    ? "Kanun Yolu ve Süreler"
                     : side === "kaynak"
-                      ? "Kaynak grafiği"
+                      ? "Kaynak Grafiği"
                       : "Taslaklar"}
           </h1>
           <p>
@@ -150,15 +156,15 @@ export function EvrakWorkbench() {
             <div className="evrak-desk single">
               <form className="doc-sheet" onSubmit={submit}>
                 <header className="sheet-head">
-                  <span>{fileName ? fileName : "Asıl metin"}</span>
+                  <span>{fileName ? fileName : "Asıl Metin"}</span>
                   <div className="sheet-actions">
                     <select
                       className="kalip-select"
-                      aria-label="Resmi yazışma kalıbı"
+                      aria-label="Resmi Yazışma Kalıbı"
                       value={kalip}
                       onChange={(event) => setKalip(event.target.value)}
                     >
-                      <option value="">Kalıp seçilmedi</option>
+                      <option value="">Kalıp Seçilmedi</option>
                       {kalipList.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.title}
@@ -187,7 +193,7 @@ export function EvrakWorkbench() {
                         });
                       }}
                     >
-                      Taslak üret
+                      Taslak Üret
                     </button>
                     <button
                       type="button"
@@ -195,7 +201,7 @@ export function EvrakWorkbench() {
                       disabled={loading}
                       onClick={() => setText(SAMPLE_EVRAK)}
                     >
-                      Örnek metni yükle
+                      Örnek Metni Yükle
                     </button>
                     <DownloadActions content={downloadBody} basename={downloadName} />
                   </div>
@@ -203,8 +209,8 @@ export function EvrakWorkbench() {
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  aria-label="Evrak metni"
-                  placeholder="Evrak metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
+                  aria-label="Evrak Metni"
+                  placeholder="PDF veya Word yükleyin, ya da metni buraya yapıştırın (tebliğ/karar tarihi dahil)…"
                   spellCheck={false}
                 />
               </form>
@@ -224,7 +230,7 @@ export function EvrakWorkbench() {
             <div className="class-grid" style={{ padding: "0 0.9rem 1rem" }}>
               {result?.verdict ? (
                 <div className="class-card wide">
-                  <span>Ne olduğu</span>
+                  <span>Ne Olduğu</span>
                   <strong>{result.verdict}</strong>
                 </div>
               ) : null}
@@ -255,7 +261,7 @@ export function EvrakWorkbench() {
               ))}
               {result?.missing?.length ? (
                 <div className="class-card wide">
-                  <span>Eksik alan</span>
+                  <span>Eksik Alan</span>
                   <strong>{result.missing.join(" · ")}</strong>
                 </div>
               ) : null}
@@ -282,7 +288,7 @@ export function EvrakWorkbench() {
                   disabled={surecLoading || text.trim().length < 8}
                   onClick={() => void loadUsul()}
                 >
-                  {surecLoading ? "Hesaplanıyor…" : "Süreleri hesapla"}
+                  {surecLoading ? "Hesaplanıyor…" : "Süreleri Hesapla"}
                 </button>
               </>
             ) : (
@@ -300,7 +306,7 @@ export function EvrakWorkbench() {
                 <div className="deadline-board">
                   {(c?.remedies?.length ? c.remedies : []).map((remedy) => (
                     <div key={remedy} className="deadline-tile">
-                      <span>Kanun yolu</span>
+                      <span>Kanun Yolu</span>
                       <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
                       <em>{c?.label}</em>
                     </div>
@@ -432,7 +438,7 @@ export function EvrakWorkbench() {
                 />
               ) : (
                 <article className="evrak-draft">
-                  <h2>Cevap taslağı</h2>
+                  <h2>Cevap Taslağı</h2>
                   {result.havale ? (
                     <p className="muted">Havale: {result.havale.unit}. {result.havale.note}</p>
                   ) : null}
@@ -441,7 +447,7 @@ export function EvrakWorkbench() {
               )}
             </div>
           ) : (
-            <p className="muted evrak-hint">Henüz taslak yok. Görüntülemede «Taslak üret» deyin.</p>
+            <p className="muted evrak-hint">Henüz taslak yok. Görüntülemede «Taslak Üret» deyin.</p>
           )
         ) : null}
       </section>
