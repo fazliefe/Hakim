@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from deadline.engine import CalendarType, DurationUnit, compute_last_day
+from deadline.engine import (
+    CalendarType,
+    DurationUnit,
+    LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR,
+    compute_last_day,
+    religious_holiday_table_status,
+)
 
 
 def test_criminal_deadline_moves_off_weekend() -> None:
@@ -131,3 +137,23 @@ def test_deadline_before_adli_tatil_window_is_unaffected() -> None:
         calendar=CalendarType.CIVIL,
     )
     assert last == date(2026, 6, 11)
+
+
+def test_religious_holiday_table_ok_with_one_year_runway() -> None:
+    # Kapsanan son tam yıldan bir yıl önce hâlâ "ok" olmalı (bkz. 1 yıllık
+    # ufuk — bireysel başvuru gibi uzun süreler yıl sınırını aşabilir).
+    status = religious_holiday_table_status(
+        today=date(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR - 1, 1, 1)
+    )
+    assert status["ok"] is True
+    assert status["last_fully_covered_year"] == LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR
+
+
+def test_religious_holiday_table_warns_once_runway_runs_out() -> None:
+    # Kapsanan son tam yılın kendisinde artık bir sonraki yıl için ufuk
+    # kalmadığından uyarı vermeli — tablo tükenmeden ÖNCE fark edilsin diye.
+    status = religious_holiday_table_status(
+        today=date(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR, 1, 1)
+    )
+    assert status["ok"] is False
+    assert str(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR) in status["detail"]

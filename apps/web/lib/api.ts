@@ -92,6 +92,7 @@ export type SystemStatus = {
     ollama?: string;
     langfuse?: string;
     langgraph?: string;
+    takvim?: string;
   };
   etiketler?: Record<string, string>;
 };

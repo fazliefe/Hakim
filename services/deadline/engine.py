@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Any
 
 from hakim_legal_schema.enums import CalendarType, DurationUnit
 
@@ -67,6 +68,46 @@ _RELIGIOUS_HOLIDAYS: dict[int, tuple[date, ...]] = {
         # Kurban Bayramı 2028: tarihleri henüz doğrulanamadı, tabloya eklenmedi.
     ),
 }
+
+# Bu tablo YIL BAŞINA elle güncellenir (hicri kayma nedeniyle sabit bir
+# (ay, gün) kuralı yok, bkz. dosya başındaki not). Kapsam geride kalırsa
+# `_next_business_day`/`compute_last_day` SESSİZCE "tatil değil" varsayımına
+# düşer — motor çökmez ama bir bayram gününü normal iş günü sayarak son gün
+# hesabı ±birkaç gün kayabilir. 2028, Kurban Bayramı doğrulanamadığı için
+# tabloda var ama EKSİK — bu yüzden `max(_RELIGIOUS_HOLIDAYS)` yerine son
+# TAM kapsanan yıl burada elle belirtiliyor.
+LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR = 2027
+# Süre hesapları tetikleyici tarihten aylar/bir yıl ileriye gidebilir (ör.
+# bireysel başvuru süresi 1 yıl); tablo yıl sınırında güvenli kalsın diye en
+# az bir sonraki yılı da kapsamalı.
+_RELIGIOUS_HOLIDAY_COVERAGE_HORIZON_YEARS = 1
+
+
+def religious_holiday_table_status(*, today: date | None = None) -> dict[str, Any]:
+    """Dini bayram tablosu hâlâ güncel mi? main.py'deki `_check_*`
+    fonksiyonlarıyla aynı "canlı kontrol" ilkesi — tablonun var olması
+    yetmez, ileriye dönük yeterince GÜNCEL olması gerekir (bkz.
+    `/v1/durum` topbar pilleri)."""
+    as_of = today or date.today()
+    required_through = as_of.year + _RELIGIOUS_HOLIDAY_COVERAGE_HORIZON_YEARS
+    ok = LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR >= required_through
+    detail = (
+        "Dini tatil takvimi güncel."
+        if ok
+        else (
+            f"Dini tatil takvimi {LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR} sonrasını tam "
+            f"kapsamıyor; {required_through} ve sonrasına düşen süre hesapları bayram "
+            "günlerini atlamayabilir. services/deadline/engine.py::_RELIGIOUS_HOLIDAYS "
+            "güncellenmeli."
+        )
+    )
+    return {
+        "ok": ok,
+        "last_fully_covered_year": LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR,
+        "required_through_year": required_through,
+        "detail": detail,
+    }
+
 
 # Adli tatil / çalışmaya ara verme dönemi — CMK m.331, HMK m.102, İYUK m.61:
 # üçü de aynı takvim aralığını kullanır: 20 Temmuz - 31 Ağustos (dahil).

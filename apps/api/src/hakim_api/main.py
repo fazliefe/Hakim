@@ -354,6 +354,21 @@ def _check_langgraph() -> str:
     return _check_neo4j()
 
 
+def _check_deadline_calendar() -> str:
+    """Sürekli-güncel VERİ kontrolü — Docker gibi çalışan bir servis değil,
+    services/deadline/engine.py::_RELIGIOUS_HOLIDAYS tablosunun ileriye
+    dönük yeterince güncel olup olmadığını gösterir (bkz. o dosyadaki not).
+    `required`e eklenmiyor: tablo eskiyince yalnızca bayram günlerine denk
+    gelen süre hesapları ±birkaç gün kayabilir, tüm API'yi "kapalı" saymak
+    orantısız olur — diğer pilller gibi bilgilendirici kalır."""
+    try:
+        from deadline.engine import religious_holiday_table_status
+
+        return LIVE_OK if religious_holiday_table_status()["ok"] else LIVE_DOWN
+    except Exception:
+        return LIVE_DOWN
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     checks = {
@@ -365,6 +380,7 @@ def health() -> dict[str, Any]:
         "ollama": _check_ollama(),
         "langfuse": _check_langfuse(),
         "langgraph": _check_langgraph(),
+        "takvim": _check_deadline_calendar(),
     }
     required = ("api", "elasticsearch", "neo4j", "postgres")
     live = all(checks[key] == LIVE_OK for key in required)
@@ -388,6 +404,7 @@ def durum() -> dict[str, Any]:
         "ollama": "Ollama",
         "langfuse": "Langfuse",
         "langgraph": "LangGraph",
+        "takvim": "Süre takvimi",
     }
     return payload
 

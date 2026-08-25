@@ -11,6 +11,21 @@ def test_health() -> None:
     assert body["checks"]["api"] == "ok"
     assert body["status"] in {"ok", "kapalı"}
     assert {"api", "elasticsearch", "neo4j", "postgres", "yazim"} <= set(body["checks"])
+    # Dini bayram takvimi güncelliği (bkz. deadline/engine.py) — veri
+    # tazeliği kontrolü, "required" değil (bkz. main.py::health), bu yüzden
+    # tüm API'yi "kapalı" yapmadan bilgilendirici kalmalı. Bu assert KASITLI
+    # olarak zamana bağlı: LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR
+    # güncellenmezse bu test bir gün gerçekten kırmızıya döner — bu, tam da
+    # health-check'in amaçladığı erken uyarı.
+    assert body["checks"]["takvim"] == "ok"
+
+
+def test_durum_labels_deadline_calendar_pill() -> None:
+    client = TestClient(app)
+    response = client.get("/v1/durum")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["etiketler"]["takvim"] == "Süre takvimi"
 
 
 def test_schema_version() -> None:
