@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hakim_config import get_models, reload_models
+import pytest
+
+from hakim_config import ModelsConfigError, get_models, reload_models
 
 
 def test_default_profile_is_evren() -> None:
@@ -78,6 +80,73 @@ profiles:
         # rerank bloğu yoksa varsayılana düşmeli (KeyError değil).
         assert cfg.rerank_enabled is True
         assert cfg.rerank_model == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    finally:
+        monkeypatch.delenv("HAKIM_MODELS_CONFIG", raising=False)
+        reload_models()
+
+
+def test_decision_embedding_equal_to_embedding_raises_when_api(monkeypatch, tmp_path: Path) -> None:
+    """`decision_embedding:` yerine yanlışlıkla `embedding:` yazılırsa
+    (canlıda bir kez yaşanan regresyon) config yüklenirken AÇIK bir hatayla
+    patlamalı — SentenceTransformer'ın derinlerde alakasız bir hata
+    fırlatmasını beklemek yerine."""
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        """
+active: broken
+profiles:
+  broken:
+    writer: api
+    llm:
+      url: https://example.test/v1
+      model: demo-llm
+    embedding:
+      model: bge-m3-embed
+      dims: 1024
+    decision_embedding:
+      provider: api
+      model: bge-m3-embed
+      dims: 1024
+      url: https://example.test/v1
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HAKIM_MODELS_CONFIG", str(path))
+    monkeypatch.delenv("HAKIM_PROFILE", raising=False)
+    try:
+        with pytest.raises(ModelsConfigError):
+            reload_models()
+    finally:
+        monkeypatch.delenv("HAKIM_MODELS_CONFIG", raising=False)
+        reload_models()
+
+
+def test_decision_embedding_equal_to_embedding_is_fine_when_local(monkeypatch, tmp_path: Path) -> None:
+    """provider: local (API kullanmayan groq/ollama/colab profilleri) iken
+    iki alanın aynı yerel model adını paylaşması normaldir — o durumda
+    decision index zaten HashingEmbedder fallback'ine düşer (bkz.
+    retrieval/embeddings.py::create_decision_embedder), guard burada
+    tetiklenmemeli."""
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        """
+active: groq
+profiles:
+  groq:
+    writer: api
+    llm:
+      url: https://example.test/v1
+      model: demo-llm
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HAKIM_MODELS_CONFIG", str(path))
+    monkeypatch.delenv("HAKIM_PROFILE", raising=False)
+    try:
+        reload_models()
+        cfg = get_models()
+        assert cfg.decision_embedding_provider == "local"
+        assert cfg.decision_embedding_model == cfg.embedding_model
     finally:
         monkeypatch.delenv("HAKIM_MODELS_CONFIG", raising=False)
         reload_models()

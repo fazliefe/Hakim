@@ -63,6 +63,34 @@ class ModelsConfig:
     research_allow_ollama: bool
 
 
+class ModelsConfigError(ValueError):
+    """models.yaml içindeki bir alan, kod tarafından zorlanan bir tutarlılık
+    kuralını ihlal ediyor — başlangıçta AÇIK bir hatayla patlar. Aksi halde
+    hata SentenceTransformer'ın 'bge-m3-embed bulunamadı' gibi alakasız bir
+    mesajıyla, çağrı zincirinin çok derininde ve gecikmeli ortaya çıkar."""
+
+
+def _validate(cfg: ModelsConfig) -> None:
+    # `embedding` (kanun maddeleri, yerel model) ve `decision_embedding`
+    # (emsal kararlar, genelde API modeli) KASITLI olarak ayrı tutulur —
+    # aynı ES index'te farklı dense_vector boyutları karışamaz (bkz.
+    # retrieval/mapping.py::DECISION_INDEX_NAME). Bu, bir profildeki
+    # `decision_embedding:` anahtarının yanlışlıkla `embedding:` yazılması
+    # gibi bir YAML hatasını (canlıda bir kez yaşandı) burada yakalar —
+    # `decision_embedding.provider: local` (varsayılan, API kullanmayan
+    # profiller) iken iki alanın aynı yerel model adını paylaşması normaldir,
+    # bu yüzden kontrol yalnızca provider "api" olduğunda uygulanır.
+    if cfg.decision_embedding_provider == "api" and cfg.decision_embedding_model == cfg.embedding_model:
+        raise ModelsConfigError(
+            "hakim_config: embedding_model == decision_embedding_model "
+            f"({cfg.embedding_model!r}) ama decision_embedding.provider=api. "
+            "Muhtemelen models.yaml'da bir profilde 'decision_embedding:' yerine "
+            "yanlışlıkla 'embedding:' anahtarı kullanıldı ve _merge() kanun "
+            "index'inin embedder'ını (defaults.embedding) API modeliyle ezdi. "
+            "İki alanı ayrı tutun (bkz. config/models.yaml decision_embedding yorumu)."
+        )
+
+
 def _parse(raw: dict[str, Any]) -> ModelsConfig:
     profile = (os.environ.get("HAKIM_PROFILE") or raw.get("active") or "groq").strip()
     defaults = raw.get("defaults") or {}
@@ -75,7 +103,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     decision_embedding = merged.get("decision_embedding") or {}
     rerank = merged.get("rerank") or {}
     research = merged.get("research") or {}
-    return ModelsConfig(
+    cfg = ModelsConfig(
         profile=profile,
         writer=str(merged.get("writer") or "api"),
         llm_url=str(llm.get("url") or "https://api.groq.com/openai/v1").rstrip("/"),
@@ -110,6 +138,8 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         ollama_keep_alive=str(ollama.get("keep_alive") or "30m"),
         research_allow_ollama=bool(research.get("allow_ollama", False)),
     )
+    _validate(cfg)
+    return cfg
 
 
 @lru_cache(maxsize=1)
