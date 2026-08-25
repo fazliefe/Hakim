@@ -8,6 +8,18 @@ defaults:
   embedding:
     model: newmindai/Mursit-Base-TR-Retrieval
     dims: 768
+  # RRF'den çıkan adayları (kanun maddesi + emsal karar, tipik olarak <=12)
+  # daraltmadan önce yeniden sıralayan cross-encoder. Yerel CPU'da çalışır
+  # (Evren API'sinde ayrı bir rerank ucu yok); bu yüzden küçük/hızlı bir
+  # multilingual model seçildi — bge-reranker-v2-m3 gibi büyük modeller
+  # istek başına saniyeler ekleyebilir. Model indirilemezse/yüklenemezse
+  # (offline, ilk çalıştırmada internet yok) retrieval/rerank.py sessizce
+  # sözcük-örtüşme sezgiseline düşer — enabled: false ile de devre dışı
+  # bırakılabilir.
+  rerank:
+    enabled: true
+    model: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+    batch_size: 16
   research:
     allow_ollama: false
   llm:

@@ -173,7 +173,7 @@ def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, 
         fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
     except Exception:
         return []
-    ranked = rerank_fused(query, fused, limit=4)
+    ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
     neighbors = collect_neighbors(_engine(), ranked)
     rows: list[dict[str, Any]] = []
     for hit in ranked:

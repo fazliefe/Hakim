@@ -26,6 +26,9 @@ def test_default_profile_is_evren() -> None:
     assert cfg.decision_embedding_model == "bge-m3-embed"
     assert cfg.decision_embedding_dims == 1024
     assert cfg.decision_embedding_api_url == "https://evren-llmapi.ssyz.org.tr/v1"
+    assert cfg.rerank_enabled is True
+    assert cfg.rerank_model == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    assert cfg.rerank_batch_size == 16
     assert cfg.research_allow_ollama is False
     # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
     assert cfg.llm_input_per_million == 0.0
@@ -72,6 +75,9 @@ profiles:
         cfg = get_models()
         assert cfg.llm_model == "demo-llm"
         assert cfg.embedding_dims == 32
+        # rerank bloğu yoksa varsayılana düşmeli (KeyError değil).
+        assert cfg.rerank_enabled is True
+        assert cfg.rerank_model == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     finally:
         monkeypatch.delenv("HAKIM_MODELS_CONFIG", raising=False)
         reload_models()

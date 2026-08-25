@@ -53,6 +53,9 @@ class ModelsConfig:
     decision_embedding_dims: int
     decision_embedding_api_url: str | None
     decision_embedding_timeout: float
+    rerank_enabled: bool
+    rerank_model: str
+    rerank_batch_size: int
     ollama_enabled: bool
     ollama_url: str
     ollama_model: str
@@ -70,6 +73,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     ollama = merged.get("ollama") or {}
     embedding = merged.get("embedding") or {}
     decision_embedding = merged.get("decision_embedding") or {}
+    rerank = merged.get("rerank") or {}
     research = merged.get("research") or {}
     return ModelsConfig(
         profile=profile,
@@ -97,6 +101,9 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
             str(decision_embedding["url"]).rstrip("/") if decision_embedding.get("url") else None
         ),
         decision_embedding_timeout=float(decision_embedding.get("timeout") or 30),
+        rerank_enabled=bool(rerank.get("enabled", True)),
+        rerank_model=str(rerank.get("model") or "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"),
+        rerank_batch_size=int(rerank.get("batch_size") or 16),
         ollama_enabled=bool(ollama.get("enabled", False)),
         ollama_url=str(ollama.get("url") or "http://127.0.0.1:11434").rstrip("/"),
         ollama_model=str(ollama.get("model") or "llama3.2:3b"),

@@ -200,9 +200,13 @@ def _node_rrf(state: ResearchState) -> ResearchState:
 
 def _node_rerank(state: ResearchState) -> ResearchState:
     started = time.perf_counter()
-    ranked = rerank_fused(state["query"], list(state.get("fused") or []), limit=12)
+    # getattr: testlerdeki _FakeEngine gibi reranker alanı olmayan motorlarla
+    # da çalışsın — yoksa rerank_fused zaten lexical sezgiseline düşer.
+    scorer = getattr(state.get("engine"), "reranker", None)
+    ranked = rerank_fused(state["query"], list(state.get("fused") or []), limit=12, scorer=scorer)
     hops = list(state.get("hops") or [])
-    _hop(hops, "rerank", "Rerank", started, summary=f"{len(ranked)} kaynak yeniden sıralandı")
+    method = "cross-encoder" if scorer is not None else "lexical"
+    _hop(hops, "rerank", "Rerank", started, summary=f"{len(ranked)} kaynak yeniden sıralandı ({method})")
     return {"fused": ranked, "hops": hops}
 
 
