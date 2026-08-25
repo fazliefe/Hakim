@@ -7,7 +7,7 @@
   "engine": {
     "description": "Kullanıcının seçtiği işlem + sınıflandırma + süreler + arşiv dayanakları. UYAP gönderimi yok.",
     "fields": {
-      "action": "sikayet | suc_duyurusu | cevap | itiraz | istinaf | temyiz | katilma | bireysel_basvuru | idari_dava | tahliye | adli_kontrol_itiraz",
+      "action": "sikayet | suc_duyurusu | cevap | itiraz | istinaf | temyiz | temyiz_cevap | katilma | bireysel_basvuru | idari_dava | tahliye | adli_kontrol_itiraz | sure_uzatim | icra_borca_itiraz | ihtiyac_tahliye",
       "classification": {
         "label": "string",
         "unit": "string",

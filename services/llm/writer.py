@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from llm.api_client import api_chat, api_configured
 from llm.client import OllamaError, chat, ollama_enabled, parse_json_content, ping
+from llm.emsal import emsal_atif_or_drop, is_court_hit, pick_emsal
 from llm.formats import load_belge, load_format, validate_belge, validate_parsed
 from llm.prompt import LAW_SHORT, belge_messages, module_messages
 from llm.render import petition_view, render_arastirma, render_belge, render_evrak, render_islem_module, render_surec
@@ -21,6 +22,10 @@ ACTION_TO_BELGE = {
     "idari_dava": "idari_dava",
     "tahliye": "tahliye",
     "adli_kontrol_itiraz": "adli_kontrol_itiraz",
+    "temyiz_cevap": "temyiz_cevap",
+    "sure_uzatim": "sure_uzatim",
+    "icra_borca_itiraz": "icra_borca_itiraz",
+    "ihtiyac_tahliye": "ihtiyac_tahliye",
     "ust_yazi": "ust_yazi",
     "bilgi_yazisi": "bilgi_yazisi",
     "olur": "olur",
@@ -45,15 +50,18 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
     classification = engine.get("classification") or {}
     related = []
     for hit in (engine.get("related") or [])[:RELATED_HITS]:
-        related.append(
-            {
-                "n": hit.get("n"),
-                "title": hit.get("title"),
-                "article_no": hit.get("article_no"),
-                "law_no": hit.get("law_no"),
-                "span": _span(hit.get("content") or hit.get("span")),
-            }
-        )
+        row = {
+            "n": hit.get("n"),
+            "title": hit.get("title"),
+            "article_no": hit.get("article_no"),
+            "law_no": hit.get("law_no"),
+            "span": _span(hit.get("content") or hit.get("span")),
+        }
+        if hit.get("document_type"):
+            row["document_type"] = hit.get("document_type")
+        if hit.get("court"):
+            row["court"] = hit.get("court")
+        related.append(row)
     evidence = []
     for item in (engine.get("evidence") or [])[:EVIDENCE_HITS]:
         evidence.append(
@@ -93,6 +101,7 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
         "deadlines": deadlines,
         "related": related,
         "evidence": evidence,
+        "emsal": pick_emsal(engine, action=str(engine.get("action") or "")),
         "gaps": engine.get("gaps") or [],
     }
 
@@ -241,11 +250,15 @@ STORY_FIELD = {
     "itiraz": "sebepler",
     "istinaf": "sebepler",
     "temyiz": "sebepler",
-    "katilma": "dava",
+    "katilma": "zarar",
     "bireysel_basvuru": "olay",
     "idari_dava": "sebepler",
     "tahliye": "sebepler",
     "adli_kontrol_itiraz": "sebepler",
+    "temyiz_cevap": "aciklamalar",
+    "sure_uzatim": "aciklamalar",
+    "icra_borca_itiraz": "sebepler",
+    "ihtiyac_tahliye": "aciklamalar",
     "ust_yazi": "metin",
     "bilgi_yazisi": "metin",
     "olur": "metin",
@@ -259,9 +272,12 @@ META_FIELDS = {
     "tahliye": ("tutuklama",),
     "idari_dava": ("islem",),
     "adli_kontrol_itiraz": ("karar",),
+    "katilma": ("dava",),
 }
 
 OFFENCE_BELGE = {"sikayet", "suc_duyurusu"}
+USUL_BELGE = {"temyiz", "istinaf", "itiraz", "adli_kontrol_itiraz"}
+HUKUK_BELGE = {"temyiz_cevap", "sure_uzatim", "icra_borca_itiraz", "ihtiyac_tahliye"}
 _INFORMAL_RE = re.compile(
     r"\b(beni|bana|benim|istiyorum|gitmek|mahkum etti|hapisteyim|"
     r"cezaevindeyim|parami|paramı|aldılar|aldirlar)\b",
@@ -331,14 +347,36 @@ STORY_LINE = {
     "tahliye": "Tutuklama nedenlerinin ortadan kalktığı, tahliyenin ölçülü olacağı beyan olunur.",
     "adli_kontrol_itiraz": "Koruma tedbirinin ölçüsüz olduğu, kararın kaldırılması gerektiği beyan olunur.",
     "idari_dava": "Dava konusu işlemin hukuka aykırı olduğu ileri sürülmektedir.",
+    "ihtiyac_tahliye": "Kiralananın malik ihtiyacı nedeniyle tahliyesinin gerektiği beyan olunur.",
+    "sure_uzatim": "Dosyanın incelenmesi ve hakların korunması için sürenin uzatılması talep olunur.",
+    "icra_borca_itiraz": "Takibe konu borcun mevcut olmadığı, borcun tamamına, faize ve fer’ilerine itiraz edildiği beyan olunur.",
+    "temyiz_cevap": "Temyiz başvurusuna ilişkin olarak mahkeme kararının yerinde ve hukuka uygun olduğu beyan olunur.",
+}
+KARSIT_TEMYIZ_LINE = (
+    "Temyiz dilekçesinde ileri sürülen iddiaların reddi ile birlikte, "
+    "usule aykırı görülen kısımlar yönünden karşı temyiz yoluna başvurulduğu beyan olunur."
+)
+KARSIT_TEMYIZ_TALEP = (
+    "Temyiz başvurusunun reddine; usule aykırı görülen kısımlar yönünden karşı temyiz "
+    "talebinin kabulüne; yargılama giderleri ve vekâlet ücretinin karşı tarafa yüklenmesine "
+    "karar verilmesi talep olunur."
+)
+PARTY_FROM_NAME = {
+    "temyiz": "temyiz_eden",
+    "temyiz_cevap": "cevap_veren",
+    "icra_borca_itiraz": "borclu",
+    "ihtiyac_tahliye": "davaci",
+    "sure_uzatim": "davali",
 }
 
 
 def _sourced_articles(engine: dict[str, Any]) -> set[str]:
     out: set[str] = set()
     for hit in list(engine.get("related") or []) + list(engine.get("evidence") or []):
+        if is_court_hit(hit):
+            continue
         no = str(hit.get("article_no") or "").strip()
-        if not no:
+        if not no or re.fullmatch(r"\d{4}/\d+", no):
             continue
         out.add(no)
         out.add(no.split("/")[0])
@@ -432,6 +470,37 @@ def _informal_meta(value: str) -> bool:
     return bool(_INFORMAL_RE.search(value or ""))
 
 
+def _ascii_tr(text: str) -> str:
+    return (
+        _fold_tr(text)
+        .replace("ş", "s")
+        .replace("ğ", "g")
+        .replace("ö", "o")
+        .replace("ç", "c")
+    )
+
+
+def _wants_karsi_temyiz(user: str) -> bool:
+    return "karsi temyiz" in _ascii_tr(user)
+
+
+def _wants_imza_itiraz(user: str) -> bool:
+    folded = _ascii_tr(user)
+    return "imzaya itiraz" in folded or "imza itiraz" in folded or "imzam degil" in folded
+
+
+def _overlaps_story(item: str, sentence: str) -> bool:
+    if not sentence:
+        return False
+    a, b = _norm_line(item), _norm_line(sentence)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    wa, wb = set(a.split()), set(b.split())
+    return len(wa & wb) / min(len(wa), len(wb)) >= 0.55
+
+
 def _story_sentence(belge_id: str, user: str) -> str:
     folded = _fold_tr(user)
     if belge_id == "istinaf" and ("mahkum" in folded or "hukum" in folded):
@@ -441,6 +510,8 @@ def _story_sentence(belge_id: str, user: str) -> str:
         )
     if belge_id == "tahliye" and ("tutuk" in folded or "cezaev" in folded or "hapis" in folded):
         return "Yürürlükteki tutuklama tedbirinin ölçüsüz kaldığı, tahliyenin yerinde olacağı beyan olunur."
+    if belge_id == "temyiz_cevap" and _wants_karsi_temyiz(user):
+        return KARSIT_TEMYIZ_LINE
     return STORY_LINE.get(belge_id, "")
 
 
@@ -459,7 +530,7 @@ def _formal_sebepler(belge_id: str, user: str, existing: Any) -> list[str]:
     for item in _as_lines(existing):
         if _looks_like_raw_user(item, user) or _informal_meta(item):
             continue
-        if sentence and _norm_line(item) in _norm_line(sentence):
+        if _overlaps_story(item, sentence):
             continue
         out.append(item)
     return out or _as_lines(existing)
@@ -478,14 +549,21 @@ def _usul_nitelendirme(spec: dict[str, Any]) -> list[dict[str, str]]:
 def _related_nitelendirme(engine: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for hit in (engine.get("related") or [])[:3]:
+        if is_court_hit(hit):
+            continue
+        madde = str(hit.get("article_no") or "").strip()
+        if re.fullmatch(r"\d{4}/\d+", madde):
+            continue
+        kanun = LAW_SHORT.get(str(hit.get("law_no") or "").strip())
+        if not kanun:
+            continue
         cumle = hit.get("span") or hit.get("title") or ""
         if not cumle:
             continue
-        kanun = LAW_SHORT.get(str(hit.get("law_no") or "").strip())
         rows.append(
             {
                 "n": hit.get("n"),
-                "madde": hit.get("article_no"),
+                "madde": madde,
                 "kanun": kanun,
                 "cumle": cumle,
             }
@@ -515,8 +593,91 @@ def _sanitize_meta_fields(
         if _looks_like_raw_user(value, user) or _informal_meta(value) or _is_system_note(value):
             parsed[key] = example.get(key) or value
     story_key = STORY_FIELD.get(belge_id)
-    if story_key == "sebepler":
-        parsed["sebepler"] = _formal_sebepler(belge_id, user, parsed.get("sebepler"))
+    if story_key in {"sebepler", "aciklamalar"}:
+        existing = parsed.get(story_key)
+        lines = _formal_sebepler(belge_id, user, existing)
+        parsed[story_key] = lines if isinstance(existing, list) else " ".join(lines)
+    return parsed
+
+
+_EMSAL_LIE_RE = re.compile(r"bu yönde değerlendirme|aynı emsale dayanır", re.I)
+_TEBLIG_STAMP_RE = re.compile(
+    r"tebli[gğ]\s*tarihi\s*:\s*(\d{1,2}[./]\d{1,2}[./]\d{4})",
+    re.I,
+)
+
+
+def _teblig_stamp(engine: dict[str, Any]) -> str:
+    dates = engine.get("dates") or {}
+    fields = engine.get("fields") or {}
+    raw = dates.get("teblig") or fields.get("teblig")
+    if raw is not None and str(raw).strip():
+        return _tr_day(raw)
+    from document_ai.gaps import labeled_facts
+
+    labeled = str(labeled_facts(str(engine.get("user_text") or "")).get("teblig") or "").strip()
+    if labeled:
+        return labeled
+    found = _TEBLIG_STAMP_RE.search(str(engine.get("user_text") or ""))
+    if not found:
+        return ""
+    return found.group(1).replace("/", ".")
+
+
+def _apply_teblig_date(parsed: dict[str, Any], engine: dict[str, Any]) -> dict[str, Any]:
+    stamp = _teblig_stamp(engine)
+    if not stamp:
+        return parsed
+    current = str(parsed.get("sure_cumlesi") or "").strip()
+    extra = f"Tebliğ tarihi: {stamp}."
+    if stamp in current:
+        return parsed
+    if re.search(r"tebliğ tarihi:\s*«\[", current, re.I):
+        parsed["sure_cumlesi"] = re.sub(
+            r"Tebliğ tarihi:\s*«\[[^\]]+\]»\.?", extra, current, count=1, flags=re.I
+        )
+        return parsed
+    parsed["sure_cumlesi"] = f"{current} {extra}".strip() if current else extra
+    return parsed
+
+
+def _apply_last_day(parsed: dict[str, Any], engine: dict[str, Any]) -> dict[str, Any]:
+    """Katalogdaki süre kuralı durur; takvim günü yalnızca motor last_day ise basılır."""
+    last = None
+    for item in engine.get("deadlines") or []:
+        if item.get("last_day"):
+            last = item.get("last_day")
+            break
+    if last is None:
+        return parsed
+    stamp = _tr_day(last)
+    if not stamp:
+        return parsed
+    current = str(parsed.get("sure_cumlesi") or "").strip()
+    extra = f"Son gün: {stamp}."
+    if stamp in current:
+        return parsed
+    parsed["sure_cumlesi"] = f"{current} {extra}".strip() if current else extra
+    return parsed
+
+
+def _apply_emsal(parsed: dict[str, Any], engine: dict[str, Any], belge_id: str = "") -> dict[str, Any]:
+    """Canlı künyeyi yaz; listede olmayan esas/kararı düşür. Uyum yoksa yalan söyleme."""
+    from llm.emsal import honesty_line
+
+    emsal = pick_emsal(engine, action=belge_id or str(engine.get("action") or ""))
+    parsed["emsal_atif"] = emsal_atif_or_drop(parsed.get("emsal_atif"), emsal)
+    atif = str(parsed.get("emsal_atif") or "").strip()
+    sebepler = parsed.get("sebepler")
+    if isinstance(sebepler, list):
+        parsed["sebepler"] = [item for item in sebepler if not _EMSAL_LIE_RE.search(str(item))]
+        sebepler = parsed["sebepler"]
+    if not atif:
+        return parsed
+    matched = next((item for item in emsal if atif in str(item.get("atif") or "")), emsal[0] if emsal else {})
+    line = str(matched.get("cumle") or "").strip() or honesty_line(atif, bool(matched.get("uyum")))
+    if isinstance(sebepler, list) and not any(atif in str(item) for item in sebepler):
+        parsed["sebepler"] = list(sebepler) + [line]
     return parsed
 
 
@@ -544,9 +705,13 @@ def _finalize_belge_facts(
         parsed["hukuki_nitelendirme"] = kept or fallback
     elif rows and _nitelendirme_unsourced(rows, allowed):
         parsed["hukuki_nitelendirme"] = fallback
+    if kind in USUL_BELGE or kind in HUKUK_BELGE:
+        parsed["hukuki_nitelendirme"] = fallback
     if kind in OFFENCE_BELGE and parsed.get("talep"):
         parsed["talep"] = _strip_mahkumiyet(str(parsed.get("talep") or ""))
-    return parsed
+    parsed = _apply_teblig_date(parsed, engine)
+    parsed = _apply_last_day(parsed, engine)
+    return _apply_emsal(parsed, engine, kind)
 
 
 def extractive_parsed(spec: dict[str, Any], engine: dict[str, Any]) -> dict[str, Any]:
@@ -562,14 +727,44 @@ def extractive_parsed(spec: dict[str, Any], engine: dict[str, Any]) -> dict[str,
     facts = labeled_facts(user)
     belge_id = str(spec.get("id") or "")
     story_key = STORY_FIELD.get(belge_id)
-    if user and story_key == "sebepler":
-        parsed["sebepler"] = _formal_sebepler(belge_id, user, parsed.get("sebepler"))
+    if user and belge_id == "temyiz_cevap" and _wants_karsi_temyiz(user):
+        parsed["aciklamalar"] = _formal_sebepler(belge_id, user, [])
+        parsed["talep"] = KARSIT_TEMYIZ_TALEP
+    elif user and story_key in {"sebepler", "aciklamalar"}:
+        existing = parsed.get(story_key)
+        lines = _formal_sebepler(belge_id, user, existing)
+        parsed[story_key] = lines if isinstance(existing, list) else " ".join(lines)
     elif user and story_key:
         parsed[story_key] = user[:1200]
+    if belge_id == "icra_borca_itiraz" and _wants_imza_itiraz(user):
+        lines = _as_lines(parsed.get("sebepler"))
+        if not any("imza" in _ascii_tr(item) for item in lines):
+            lines.append(
+                "Takibe dayanak belgedeki imzanın borçluya ait olmadığı, "
+                "İİK m.62/2 uyarınca imzaya itiraz edildiği beyan olunur."
+            )
+            parsed["sebepler"] = lines
+            parsed["konu"] = (
+                "Tebliğ edilen ödeme emrine; borca, imzaya, faize ve yetkiye "
+                "itirazların sunulmasıdır."
+            )
+    name_key = PARTY_FROM_NAME.get(belge_id)
+    if name_key and (facts.get("ad_soyad") or fields.get("ad_soyad")):
+        parsed[name_key] = facts.get("ad_soyad") or fields["ad_soyad"]
     if fields.get("konu"):
         parsed["konu"] = fields["konu"]
     elif not parsed.get("konu"):
         parsed["konu"] = spec.get("title")
+    dates = engine.get("dates") or {}
+    if dates.get("olay") or dates.get("olay_tarihi"):
+        parsed["suc_tarihi"] = _tr_day(dates.get("olay") or dates.get("olay_tarihi"))
+    if dates.get("teblig"):
+        parsed["teblig_tarihi"] = _tr_day(dates.get("teblig"))
+    if belge_id == "adli_kontrol_itiraz" and not parsed.get("talep_konusu"):
+        karar = str(parsed.get("karar") or "adli kontrol kararı").strip()
+        parsed["talep_konusu"] = f"{karar} aleyhine itiraz."
+    if belge_id == "sikayet" and not parsed.get("konu"):
+        parsed["konu"] = "Kamu davası açılması talebidir."
     if facts.get("adres") or fields.get("adres"):
         parsed["adres"] = facts.get("adres") or fields["adres"]
     elif not parsed.get("adres"):
@@ -594,14 +789,44 @@ def extractive_parsed(spec: dict[str, Any], engine: dict[str, Any]) -> dict[str,
         if found:
             parsed["sehir"] = found.group(1)
     if "hukuki_nitelendirme" in parsed:
-        parsed["hukuki_nitelendirme"] = _related_nitelendirme(engine) or _usul_nitelendirme(spec)
-    deadlines = engine.get("deadlines") or []
-    for item in deadlines:
-        if item.get("last_day") and not parsed.get("sure_cumlesi"):
-            parsed["sure_cumlesi"] = f"{item.get('name')}: son gün {item.get('last_day')}."
-            break
+        sourced = _related_nitelendirme(engine) or _usul_nitelendirme(spec)
+        if sourced:
+            parsed["hukuki_nitelendirme"] = sourced
+        elif belge_id == "sikayet":
+            parsed["hukuki_nitelendirme"] = [
+                {"cumle": "Türk Ceza Kanunu, Ceza Muhakemesi Kanunu ve sair hukuki sebepler."}
+            ]
+        else:
+            parsed["hukuki_nitelendirme"] = []
     parsed["onay_notu"] = "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
     return _finalize_belge_facts(_apply_islem_gaps(parsed, engine), engine, belge_id, spec)
+
+
+def _attach_evolver(
+    view: dict[str, Any],
+    text: str,
+    belge_id: str,
+    parsed: dict[str, Any],
+    engine: dict[str, Any],
+) -> dict[str, Any]:
+    """Sidecar puanı; prompt/writer yerini almaz. Paket apps/api bağımlılığı değil."""
+    import sys
+    from pathlib import Path
+
+    sidecar = Path(__file__).resolve().parents[2] / "tools" / "evolver"
+    if sidecar.is_dir() and str(sidecar) not in sys.path:
+        sys.path.insert(0, str(sidecar))
+    try:
+        from hakim_evolver.score import score_and_record
+    except ImportError:
+        return view
+    view["evolver"] = score_and_record(
+        text,
+        belge_id=belge_id,
+        parsed=parsed,
+        emsal=pick_emsal(engine, action=belge_id),
+    )
+    return view
 
 
 def compose_belge(
@@ -621,7 +846,9 @@ def compose_belge(
         errors = validate_belge(belge_id, parsed)
         if errors:
             raise OllamaError("; ".join(errors))
-    return render_belge(spec, parsed), petition_view(spec, parsed)
+    text = render_belge(spec, parsed)
+    view = _attach_evolver(petition_view(spec, parsed), text, belge_id, parsed, engine)
+    return text, view
 
 
 def write_belge(

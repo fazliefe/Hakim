@@ -171,7 +171,11 @@ def classify_document(text: str) -> Classification:
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
         if legal_nature == "idare":
+            # "istinaf_idari" hiçbir deadline kuralına bağlı değildi (dead tag).
+            # "idari_dava" — route_islem.py/ACTION_TO_BELGE/idari_dava.json'ın
+            # zaten kullandığı isim — İYUK m.7 dava açma süresine bağlanıyor.
             remedies.append("istinaf_idari")
+            remedies.append("idari_dava")
         if "şikayet" in blob or "sikayet" in blob:
             remedies.append("sikayet")
     unique = tuple(dict.fromkeys(remedies))

@@ -10,13 +10,14 @@ import json
 from typing import Any
 
 from llm.formats import load_belge, load_format
+from llm.gold import fewshot_for
 
 LAW_SHORT = {
     "5237": "TCK",
     "5271": "CMK",
     "2577": "İYUK",
     "4721": "TMK",
-    "6098": "TBK",
+    "6100": "HMK",
     "2004": "İİK",
     "7201": "Tebligat K.",
     "2709": "Anayasa",
@@ -145,6 +146,32 @@ USER_NO_SOURCE_RULE = (
     "related/evidence boş: TCK suç maddesi yazma. Usul dayanağını katalogdaki "
     "CMK/İYUK maddeleriyle yaz. Sistem notu («eşleşen madde yok») yazma."
 )
+USER_EMSAL_RULE = (
+    "Emsal listesi varsa yalnızca listedeki künyelere atıf yap. "
+    "Yeni esas veya karar numarası uydurma. emsal_atif alanına listedeki ilk künyeyi yaz. "
+    "«bu yönde değerlendirme» veya «aynı emsale dayanır» yazma. "
+    "Liste boşsa emsal_atif boş bırak; rastgele künye yazma."
+)
+USER_NO_EMSAL_RULE = (
+    "Emsal künyesi yok. Yeni esas veya karar numarası uydurma. emsal_atif boş bırak."
+)
+PETITION_IDS = {
+    "istinaf",
+    "itiraz",
+    "cevap",
+    "sikayet",
+    "suc_duyurusu",
+    "temyiz",
+    "katilma",
+    "bireysel_basvuru",
+    "idari_dava",
+    "tahliye",
+    "adli_kontrol_itiraz",
+    "temyiz_cevap",
+    "sure_uzatim",
+    "icra_borca_itiraz",
+    "ihtiyac_tahliye",
+}
 
 KAYNAK_UYARI = "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır."
 
@@ -269,6 +296,10 @@ def user_prompt(module_id: str, compact: dict[str, Any]) -> str:
         extra.append(USER_GAP_RULE)
     if not (compact.get("related") or compact.get("evidence")):
         extra.append(USER_NO_SOURCE_RULE)
+    if compact.get("emsal"):
+        extra.append(USER_EMSAL_RULE)
+    elif module_id in PETITION_IDS:
+        extra.append(USER_NO_EMSAL_RULE)
     return "\n".join(extra) + "\n\n" + json.dumps(compact, ensure_ascii=False, default=str)
 
 
@@ -280,10 +311,15 @@ def module_messages(module_id: str, compact: dict[str, Any]) -> list[dict[str, s
 
 
 def belge_messages(belge_id: str, compact: dict[str, Any]) -> list[dict[str, str]]:
-    return [
+    messages = [
         {"role": "system", "content": belge_system_prompt(belge_id)},
-        {"role": "user", "content": user_prompt(belge_id, compact)},
     ]
+    shot = fewshot_for(belge_id)
+    if shot:
+        messages.append({"role": "user", "content": shot["user"]})
+        messages.append({"role": "assistant", "content": shot["assistant"]})
+    messages.append({"role": "user", "content": user_prompt(belge_id, compact)})
+    return messages
 
 
 def refuse_answer() -> str:

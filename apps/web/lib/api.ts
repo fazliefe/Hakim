@@ -20,6 +20,7 @@ export type Evidence = {
     kind?: string;
   }>;
   used_in_answer: boolean;
+  mulga_warning?: string | null;
 };
 
 export type TraceNode = {
@@ -559,7 +560,14 @@ export type PetitionView = {
   sections?: PetitionSection[];
   closing?: string;
   signature?: { role?: string; name?: string } | null;
-  onay_notu?: string;
+  cited_ns?: number[];
+  evolver?: {
+    ok: boolean;
+    score: number;
+    signals: string[];
+    genes_held?: string[];
+    suggestions: string[];
+  };
 };
 
 export type DocumentAnalysis = {
@@ -579,14 +587,9 @@ export type DocumentAnalysis = {
   findings: Finding[];
   deadlines: DeadlineOut[];
   stages: Array<{ id: string; title: string; state: string }>;
-  related: Array<{
-    n: number;
-    title?: string | null;
-    article_no?: string | null;
-    document_id?: string | null;
-    law_no?: string | null;
-    content?: string;
-  }>;
+  related: Evidence[];
+  trace_nodes?: TraceNode[];
+  trace_edges?: TraceEdge[];
   draft: string;
   official_targets: Array<{ name: string; url: string }>;
   action?: string;

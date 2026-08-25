@@ -98,7 +98,7 @@ def test_taslak_and_havale_answers() -> None:
 
 
 def test_pipeline_hops_use_stage_answers_not_only_summaries() -> None:
-    def retrieve(query: str):
+    def retrieve(query: str, at=None):
         return [
             {
                 "n": 1,

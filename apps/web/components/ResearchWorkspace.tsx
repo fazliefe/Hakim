@@ -277,7 +277,7 @@ export function ResearchWorkspace() {
             className={`source-row ${selected === item.n ? "selected" : ""}`}
             onClick={() => openSource(item.n)}
           >
-            [{item.n}] {sourceHeading(item)}
+            {item.mulga_warning ? "⚠ " : ""}[{item.n}] {sourceHeading(item)}
           </button>
         ))
       ) : (
@@ -293,6 +293,7 @@ export function ResearchWorkspace() {
             {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
           </div>
           <p className="source-content">{selectedEvidence.content}</p>
+          {selectedEvidence.mulga_warning ? <p className="error">⚠ {selectedEvidence.mulga_warning}</p> : null}
           <button type="button" className="side-action" onClick={toggleSave}>
             {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
           </button>

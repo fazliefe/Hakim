@@ -381,7 +381,13 @@ def apply_gap_placeholders(
                 break
         else:
             parsed["olay"] = extra
-    if "teblig" in ids:
+    teblig = facts.get("teblig")
+    if teblig:
+        extra = f"Tebliğ tarihi: {teblig}."
+        current = str(parsed.get("sure_cumlesi") or "").strip()
+        if teblig not in current:
+            parsed["sure_cumlesi"] = f"{current} {extra}".strip() if current else extra
+    elif "teblig" in ids:
         stamp = PLACEHOLDERS["teblig"]
         current = str(parsed.get("sure_cumlesi") or "").strip()
         if stamp not in current:

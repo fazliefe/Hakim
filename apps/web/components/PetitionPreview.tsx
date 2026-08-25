@@ -35,14 +35,34 @@ export function PetitionPreview({
           {petition.via ? <p className="petition-via">{petition.via}</p> : null}
           <p className="petition-makam">{petition.hitap}</p>
           {petition.sehir ? <p className="petition-city">{petition.sehir}</p> : null}
-          {paragraphs.map((paragraph, idx) => (
-            <p
-              key={`${idx}-${paragraph.slice(0, 24)}`}
-              className={idx === 0 ? "petition-prose indent" : "petition-prose"}
-            >
-              {paragraph}
-            </p>
-          ))}
+          {(petition.meta || []).length ? (
+            <dl className="petition-meta">
+              {petition.meta.map((row) => (
+                <div key={`${row.label}-${row.value.slice(0, 24)}`} className="petition-meta-row">
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {(petition.sections || [])
+            .filter((section) => section.kind !== "eksik" && section.text?.trim())
+            .map((section) => (
+              <section key={section.id || section.label} className="petition-block">
+                {section.label ? <h3 className="petition-heading">{section.label}</h3> : null}
+                <p className="petition-prose">{section.text}</p>
+              </section>
+            ))}
+          {!(petition.meta || []).length && !(petition.sections || []).length
+            ? paragraphs.map((paragraph, idx) => (
+                <p
+                  key={`${idx}-${paragraph.slice(0, 24)}`}
+                  className={idx === 0 ? "petition-prose indent" : "petition-prose"}
+                >
+                  {paragraph}
+                </p>
+              ))
+            : null}
           {petition.closing ? <p className="petition-closing">{petition.closing}</p> : null}
           <div className="petition-footer">
             <div className="petition-adres">
@@ -54,6 +74,9 @@ export function PetitionPreview({
             <div className="petition-sign">
               {petition.tarih ? <span>{petition.tarih}</span> : null}
               <span>(imza)</span>
+              {petition.signature?.role && petition.signature.role !== "(imza)" ? (
+                <span>{petition.signature.role}</span>
+              ) : null}
               <span>{petition.signature?.name || "«[ad soyad]»"}</span>
             </div>
           </div>
@@ -66,6 +89,11 @@ export function PetitionPreview({
             ))}
           </div>
           {petition.onay_notu ? <p className="petition-onay">{petition.onay_notu}</p> : null}
+          {petition.evolver && !petition.evolver.ok ? (
+            <p className="petition-evolver">
+              Taslak kalite: {(petition.evolver.suggestions || []).join(" ")}
+            </p>
+          ) : null}
         </div>
       )}
     </article>

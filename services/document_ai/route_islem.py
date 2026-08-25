@@ -14,18 +14,42 @@ class IslemRoute:
 
 # Kullanıcı derdini anlatır; kalıp buradan seçilir. Eşitlikte daha özgül kazanır.
 _INTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
+    (
+        "ihtiyac_tahliye",
+        (
+            "ihtiyaç sebebiyle tahliye",
+            "ihtiyac sebebiyle tahliye",
+            "kira tahliye",
+            "kiracıyı tahliye",
+            "kiraciyi tahliye",
+            "sulh hukuk tahliye",
+        ),
+    ),
     ("tahliye", ("tahliye", "tutukluyum", "tutukluluk halinin", "cezaevinden çıkmak", "cezaevindeyim", "tutuklu kaldım")),
     (
         "adli_kontrol_itiraz",
         ("adli kontrol", "imza yükümlülüğü", "yurt dışı yasağı", "yurt dışına çıkış yasağı"),
     ),
     ("bireysel_basvuru", ("bireysel başvuru", "anayasa mahkemesi", "temel hak ihlali")),
+    (
+        "temyiz_cevap",
+        ("temyize cevap", "temyizine cevap", "karşı temyiz", "karsi temyiz", "temyize cevap ve karşı"),
+    ),
     ("temyiz", ("temyiz", "yargıtay'a", "yargitaya", "yargıtaya")),
+    (
+        "sure_uzatim",
+        ("süre uzatım", "sure uzatim", "süre uzatımı", "cevap süresi uzat", "cevap suresi uzat"),
+    ),
+    (
+        "icra_borca_itiraz",
+        ("borca itiraz", "ilamsız icra", "ilamsiz icra", "icra müdürlüğü", "icra mudurlugu"),
+    ),
     (
         "istinaf",
         (
-            "istinaf",
-            "bölge adliye",
+            "istinaf etmek",
+            "istinaf dilek",
+            "istinaf yoluna",
             "hükmü istinaf",
             "kanun yoluna",
             "hükme karşı",
@@ -68,12 +92,48 @@ ACTION_TITLES: dict[str, str] = {
     "idari_dava": "İdari dava dilekçesi",
     "tahliye": "Tahliye talebi",
     "adli_kontrol_itiraz": "Adli kontrol itirazı",
+    "temyiz_cevap": "Temyize cevap dilekçesi",
+    "sure_uzatim": "Süre uzatım talebi",
+    "icra_borca_itiraz": "İcra takibine (ödeme emrine) itiraz",
+    "ihtiyac_tahliye": "İhtiyaç sebebiyle tahliye",
 }
 
 
 def _norm(text: str) -> str:
-    folded = text.replace("İ", "i").replace("I", "i").replace("ı", "i")
+    folded = (
+        text.replace("İ", "i")
+        .replace("I", "i")
+        .replace("ı", "i")
+        .replace("ş", "s")
+        .replace("Ş", "s")
+        .replace("ğ", "g")
+        .replace("Ğ", "g")
+        .replace("ü", "u")
+        .replace("Ü", "u")
+        .replace("ö", "o")
+        .replace("Ö", "o")
+        .replace("ç", "c")
+        .replace("Ç", "c")
+        .replace("â", "a")
+        .replace("Â", "a")
+    )
     return " ".join(folded.lower().split())
+
+
+_TEMYIZ_ASK = ("temyiz", "yargitay'a", "yargitaya", "yargıtaya")
+_TEMYIZ_CEVAP_ASK = ("temyize cevap", "temyizine cevap", "karsi temyiz", "karşı temyiz")
+_ISTINAF_ASK = ("istinaf etmek", "istinaf dilek", "istinaf yoluna basvur", "hükmü istinaf")
+
+
+def _prefers_temyiz(blob: str) -> bool:
+    """BAM başlığı / 'istinaf incelemesi onandı' geçmiş anlatıdır; talep temyizse temyiz kazanır."""
+    if any(_norm(token) in blob for token in _TEMYIZ_CEVAP_ASK):
+        return False
+    if not any(_norm(token) in blob for token in _TEMYIZ_ASK):
+        return False
+    if any(_norm(token) in blob for token in _ISTINAF_ASK):
+        return False
+    return True
 
 
 def _span(text: str, needle: str) -> str:
@@ -110,6 +170,14 @@ def route_islem(text: str) -> IslemRoute:
             best = score
             winner = action
             evidence = hit or evidence
+    if any(_norm(token) in blob for token in _TEMYIZ_CEVAP_ASK):
+        winner = "temyiz_cevap"
+        evidence = _span(raw, "temyiz")
+        best = max(best, 8)
+    elif _prefers_temyiz(blob):
+        winner = "temyiz"
+        evidence = _span(raw, "temyiz")
+        best = max(best, 8)
     title = ACTION_TITLES[winner]
     if best == 0:
         reason = (

@@ -101,3 +101,17 @@ def test_gerekceli_karar_not_iddianame_when_body_cites_indictment() -> None:
     assert result.label == "Mahkeme kararı"
     assert result.legal_nature == "ceza"
     assert result.stage == "kovusturma"
+
+
+def test_idare_nature_tags_idari_dava_remedy() -> None:
+    """İYUK m.7 dava açma süresinin (deadline/catalog.py) devreye girmesi için
+    classification.remedies 'idari_dava' taşımalı — route_islem.py/ACTION_TO_BELGE
+    /idari_dava.json'ın zaten kullandığı isimle tutarlı olmalı."""
+    text = (
+        "T.C. ANKARA 3. İDARE MAHKEMESİ\n"
+        "Davacı tarafından idari işlemin iptali istemiyle açılan davada karar verilmiştir.\n"
+        "Tebliğ tarihi: 01.08.2026"
+    )
+    result = classify_document(text)
+    assert result.legal_nature == "idare"
+    assert "idari_dava" in result.remedies

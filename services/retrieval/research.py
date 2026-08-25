@@ -10,6 +10,7 @@ from hakim_legal_schema.ids import article_id
 from graph.projector import neighborhood, neighborhood_decision
 from retrieval.embeddings import Embedder, create_embedder
 from retrieval.hybrid import HybridSearcher
+from retrieval.mapping import detect_mulga_warning
 from retrieval.rrf import FusedHit
 
 
@@ -30,6 +31,7 @@ class EvidenceItem:
     retrievers: list[str]
     graph_neighbors: list[dict[str, Any]] = field(default_factory=list)
     used_in_answer: bool = False
+    mulga_warning: str | None = None
 
 
 @dataclass
@@ -243,11 +245,12 @@ def _is_close_provision(primary: EvidenceItem, item: EvidenceItem, query: str) -
 
 
 def _is_base_offence(primary: EvidenceItem, item: EvidenceItem) -> bool:
+    """Yalnızca başlık içerimi güvenilir bir sinyaldir (örn. "hırsızlık" ⊂
+    "nitelikli hırsızlık"). Salt madde numarası komşuluğu (n-1) hukuki bir
+    temel-suç ilişkisini kanıtlamaz; komşu maddeler çoğu zaman bambaşka
+    suçlardır (örn. TCK m.178 ↔ m.179)."""
     if not _is_close_provision(primary, item, ""):
         return False
-    a, b = _article_int(primary.article_no), _article_int(item.article_no)
-    if a is not None and b is not None and b == a - 1:
-        return True
     pt, it = (primary.title or "").lower(), (item.title or "").lower()
     return bool(it and pt and it != pt and it in pt)
 
@@ -990,6 +993,7 @@ def assemble_research_result(
                 retrievers=list(hit.sources),
                 graph_neighbors=list(neighbor_map.get(hit.chunk_id) or []),
                 used_in_answer=hit.rank <= 5,
+                mulga_warning=detect_mulga_warning(hit.hit.content),
             )
         )
 

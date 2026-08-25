@@ -7,11 +7,11 @@
   "when": "Kamu davası açılmış; suçtan zarar gören davaya katılmak istiyor.",
   "sections": [
     { "id": "ust_yazi", "label": "Mahkeme / esas no" },
-    { "id": "katilan", "label": "Katılma talep eden" },
+    { "id": "katilan", "label": "Davaya katılma talebinde bulunan" },
     { "id": "dava", "label": "Katılınan dava" },
-    { "id": "zarar", "label": "Suçtan zarar görme" },
-    { "id": "hukuki_nitelendirme", "label": "TCK niteliği" },
-    { "id": "talep", "label": "Katılma kararı talebi" }
+    { "id": "zarar", "label": "Açıklamalar" },
+    { "id": "hukuki_nitelendirme", "label": "Hukuki sebepler" },
+    { "id": "talep", "label": "Talep sonucu" }
   ],
   "parsed": {
     "required": ["makam", "katilan", "dava", "zarar", "talep"],
@@ -28,12 +28,13 @@
   "writing": {
     "tone": "Katılma dilekçesi. Yeni kamu davası açtırma; mevcut davaya katıl.",
     "must": ["CMK m.237 an"],
-    "must_not": ["Şikayet dilekçesi gibi savcılığa hitap"]
+    "must_not": ["Şikayet dilekçesi gibi savcılığa hitap", "HMK m.66 ferî müdahale / kira katılması kalıbına çevirmek"]
   },
   "example": {
     "makam": "Davayı gören ceza mahkemesi",
     "esas_no": "—",
     "katilan": "Suçtan zarar gören",
+    "konu": "Davaya katılma talebimizden ibarettir.",
     "dava": "Görülmekte olan kamu davası",
     "zarar": "Suçtan doğrudan zarar görüldüğü beyan olunur.",
     "hukuki_nitelendirme": [],

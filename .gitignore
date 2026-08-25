@@ -22,6 +22,9 @@ out/
 Thumbs.db
 .cursor/
 
+tools/evolver/gep/events.jsonl
+tools/evolver/memory/
+
 data/raw/
 data/minio/
 data/accounts.sqlite

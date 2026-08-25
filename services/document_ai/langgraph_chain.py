@@ -37,6 +37,8 @@ class HakimState(TypedDict, total=False):
     related: Any
     deadlines: Any
     analysis: Any
+    mevzuat_attempt: int
+    mevzuat_retry: bool
 
 
 def _traced(name: str, fn: Callable[[dict[str, Any]], dict[str, Any]]):
@@ -56,6 +58,13 @@ def _traced(name: str, fn: Callable[[dict[str, Any]], dict[str, Any]]):
     return node
 
 
+def _route_after_mevzuat(state: HakimState) -> str:
+    """İlk (dar) sorgu boş dönerse aynı node'a bir kez daha uğra (geniş sorgu);
+    aksi halde zincire devam et. `step_mevzuat` retry bayrağını kendi kararına
+    göre set/reset ediyor, burada yalnız okunuyor."""
+    return "mevzuat" if state.get("mevzuat_retry") else "sure"
+
+
 def compile_hakim_graph():
     graph: StateGraph = StateGraph(HakimState)
     graph.add_node("okuyucu", _traced("okuyucu", step_okuyucu))
@@ -65,8 +74,11 @@ def compile_hakim_graph():
     graph.add_node("taslak", _traced("taslak", step_taslak))
     graph.add_node("havale", _traced("havale", step_havale))
     graph.add_edge(START, "okuyucu")
-    for src, dst in GRAPH_EDGES:
-        graph.add_edge(src, dst)
+    graph.add_edge("okuyucu", "sinif")
+    graph.add_edge("sinif", "mevzuat")
+    graph.add_conditional_edges("mevzuat", _route_after_mevzuat, {"mevzuat": "mevzuat", "sure": "sure"})
+    graph.add_edge("sure", "taslak")
+    graph.add_edge("taslak", "havale")
     graph.add_edge("havale", END)
     return graph.compile()
 

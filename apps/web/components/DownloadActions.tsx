@@ -1,4 +1,4 @@
-import { downloadDocument, ExportBlock } from "@/lib/exportDocument";
+import { downloadDocument, ExportBlock, UDF_EXPORT_TRIAL } from "@/lib/exportDocument";
 
 export function DownloadActions({
   content,
@@ -21,6 +21,16 @@ export function DownloadActions({
       <button type="button" disabled={!ready} onClick={() => downloadDocument(basename, payload, "pdf")}>
         PDF
       </button>
+      {UDF_EXPORT_TRIAL ? (
+        <button
+          type="button"
+          disabled={!ready}
+          title="UYAP Editör denemesi. Açılmazsa exportDocument.ts içinde UDF_EXPORT_TRIAL=false yapın."
+          onClick={() => downloadDocument(basename, payload, "udf")}
+        >
+          UDF (deneme)
+        </button>
+      ) : null}
     </div>
   );
 }

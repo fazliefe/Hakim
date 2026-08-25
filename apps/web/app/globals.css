@@ -2758,6 +2758,14 @@ a.source-row {
   border-top: 4px solid #6f5210;
 }
 
+.petition-sheet[data-layout="temyiz_cevap"],
+.petition-sheet[data-layout="icra"],
+.petition-sheet[data-layout="kira_tahliye"],
+.petition-sheet[data-layout="sure_uzatim"] {
+  background: #f4f1ea;
+  border-top: 4px solid #4a5c3a;
+}
+
 .petition-sheet[data-layout="savcilik"],
 .petition-sheet[data-layout="ihbar"] {
   border-top: 4px solid #1d3557;
@@ -2846,10 +2854,41 @@ a.source-row {
 }
 
 .petition-city {
-  margin: 0.12rem 0 2.2rem;
+  margin: 0.12rem 0 1.4rem;
   text-align: center;
   letter-spacing: 0;
   font-weight: 400;
+}
+
+.petition-meta {
+  margin: 0 0 1.1rem;
+}
+
+.petition-meta-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 34%) 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 0.28rem;
+  align-items: start;
+}
+
+.petition-meta-row dt {
+  margin: 0;
+  font-weight: 700;
+}
+
+.petition-meta-row dd {
+  margin: 0;
+}
+
+.petition-block {
+  margin: 0 0 0.95rem;
+}
+
+.petition-heading {
+  margin: 0 0 0.28rem;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .petition-prose {
@@ -2905,6 +2944,12 @@ a.source-row {
   margin: 1.2rem 0 0;
   font-size: 0.78rem;
   color: #6f5210;
+}
+
+.petition-evolver {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  color: #7a2e12;
 }
 
 .petition-sheet[data-family="anayasa"] {

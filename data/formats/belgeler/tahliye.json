@@ -28,7 +28,7 @@
   "writing": {
     "tone": "Tahliye dilekçesi. Esas hakkında hüküm kurulmasını isteme.",
     "must": ["CMK m.100 ölçülülük", "Esas no yoksa —"],
-    "must_not": ["İstinaf dilekçesi gibi hükmü hedeflemek"]
+    "must_not": ["İstinaf dilekçesi gibi hükmü hedeflemek", "İhtiyaç sebebiyle kira tahliyesi / sulh hukuk kalıbına çevirmek"]
   },
   "example": {
     "makam": "Tutuklamaya karar veren mahkeme",

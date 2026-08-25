@@ -42,6 +42,7 @@ class ModelsConfig:
     llm_temperature: float
     llm_input_per_million: float
     llm_output_per_million: float
+    llm_disable_reasoning: bool
     embedding_model: str
     embedding_dims: int
     ollama_enabled: bool
@@ -69,8 +70,15 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         llm_max_tokens=int(llm.get("max_tokens") or 900),
         llm_timeout=float(llm.get("timeout") or 25),
         llm_temperature=float(llm.get("temperature") or 0.2),
-        llm_input_per_million=float(llm.get("input_per_million") or 0.075),
-        llm_output_per_million=float(llm.get("output_per_million") or 0.30),
+        # `or` yerine `is None` kontrolü: 0.0 (ücretsiz servis) geçerli bir
+        # değerdir, `x or default` bunu sessizce 0.075/0.30'a çevirirdi.
+        llm_input_per_million=float(
+            llm["input_per_million"] if llm.get("input_per_million") is not None else 0.075
+        ),
+        llm_output_per_million=float(
+            llm["output_per_million"] if llm.get("output_per_million") is not None else 0.30
+        ),
+        llm_disable_reasoning=bool(llm.get("disable_reasoning", False)),
         embedding_model=str(embedding.get("model") or "newmindai/Mursit-Base-TR-Retrieval"),
         embedding_dims=int(embedding.get("dims") or 768),
         ollama_enabled=bool(ollama.get("enabled", False)),
@@ -96,6 +104,7 @@ PROVIDER_LABELS = {
     "groq": "Groq",
     "ollama": "Ollama",
     "colab": "Colab",
+    "evren": "Evren",
 }
 
 
