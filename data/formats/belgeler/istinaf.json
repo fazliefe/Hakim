@@ -19,7 +19,7 @@
     "properties": {
       "makam": "string",
       "hukum": "string",
-      "sure_cumlesi": "string — 7 gün tebliğden, last_day veya eksik",
+      "sure_cumlesi": "string — 14 gün (iki hafta) tebliğden, last_day veya eksik",
       "sebepler": ["string — olgu, hukuka aykırılık, ceza tayini ayrı ayrı"],
       "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
       "talep": "string"
@@ -27,13 +27,13 @@
   },
   "writing": {
     "tone": "İstinaf dilekçesi. Temyiz dilini (Yargıtay, bozma-onama) kullanma.",
-    "must": ["CMK m.273 süre", "Sebepleri numaralandır"],
+    "must": ["CMK m.273 süre", "Sebepleri numaralandır", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
     "must_not": ["Yargıtay’a hitap", "BAM daire no uydurmak"]
   },
   "example": {
     "makam": "Bölge Adliye Mahkemesi ilgili ceza dairesi",
     "hukum": "İlk derece mahkemesinin mahkûmiyet hükmü",
-    "sure_cumlesi": "İstinaf süresi CMK m.273 uyarınca tebliğden itibaren yedi gündür.",
+    "sure_cumlesi": "İstinaf süresi CMK m.273 uyarınca tebliğden itibaren iki hafta içindedir.",
     "sebepler": ["Hükmün hukuka aykırılığı"],
     "hukuki_nitelendirme": [],
     "talep": "Hükmün kaldırılması talep olunur."

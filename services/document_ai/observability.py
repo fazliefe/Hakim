@@ -74,7 +74,22 @@ def observe_generation(name: str, messages: list[dict[str, str]], fn):
         with lf.start_as_current_observation(as_type="generation", name=name) as gen:
             gen.update(input=messages)
             out = fn()
-            gen.update(output=str(out)[:4000])
+            payload: dict[str, Any] = {"output": str(out)[:4000]}
+            try:
+                from llm.usage import estimate_cost, peek_usage
+
+                usage = peek_usage()
+                if usage.total_tokens:
+                    payload["usage_details"] = {
+                        "input": usage.prompt_tokens,
+                        "output": usage.completion_tokens,
+                    }
+                    payload["cost_details"] = {
+                        "total": estimate_cost(usage.prompt_tokens, usage.completion_tokens)
+                    }
+            except Exception:
+                pass
+            gen.update(**payload)
             return out
     except Exception:
         return fn()

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
-import { BelgeKalip, getBelgeler, writerIsLlm, writerLabel } from "@/lib/api";
+import { BelgeKalip, IslemGuess, getBelgeler, guessIslem } from "@/lib/api";
+import { DownloadActions } from "@/components/DownloadActions";
+import { petitionToBlocks } from "@/lib/exportDocument";
 import { useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const FALLBACK: BelgeKalip[] = [
@@ -18,86 +20,231 @@ const FALLBACK: BelgeKalip[] = [
   { id: "idari_dava", title: "İdari dava dilekçesi", when: "İYUK", makam: "İdare mahkemesi", legal_basis: [], sections: [] },
   { id: "tahliye", title: "Tahliye talebi", when: "Tutukluluk", makam: "Mahkeme / hakimlik", legal_basis: [], sections: [] },
   { id: "adli_kontrol_itiraz", title: "Adli kontrol itirazı", when: "Koruma tedbiri", makam: "İtiraz mercii", legal_basis: [], sections: [] },
-  { id: "ust_yazi", title: "Üst yazı / havale", when: "Kamu evrakı havalesi", makam: "Evrak kayıt ve havale", legal_basis: [], sections: [] },
-  { id: "bilgi_yazisi", title: "Bilgi yazısı", when: "Duyuru / tebliğ", makam: "Bilgi için ilgili birimler", legal_basis: [], sections: [] },
+];
+
+const SIDE = [{ id: "yazim", label: "Yazım" }];
+
+function gapPlaceholder(id: string): string {
+  switch (id) {
+    case "olay_tarihi":
+    case "teblig":
+      return "gg.aa.yyyy";
+    case "sikayetci":
+    case "ad_soyad":
+      return "Ad Soyad";
+    case "adres":
+      return "Mahalle, sokak, no";
+    case "il":
+      return "Ankara";
+    case "sikayet_edilen":
+      return "Ad Soyad veya kimliği belirsiz";
+    case "olay_yeri":
+      return "İl / ilçe / şube";
+    case "delil":
+      return "Dekont, mesaj, tanık…";
+    case "mahkeme":
+      return "Mahkeme adı";
+    case "esas":
+      return "2025/412";
+    case "anlatim":
+      return "Olayı kısaca yazın";
+    default:
+      return "Bildiklerinizi yazın";
+  }
+}
+
+function gapLine(id: string, value: string): string {
+  const v = value.trim();
+  if (!v) return "";
+  switch (id) {
+    case "sikayetci":
+      return `Şikayetçi: ${v}`;
+    case "ad_soyad":
+      return `Ad soyad: ${v}`;
+    case "adres":
+      return `Adres: ${v}`;
+    case "il":
+      return `İl: ${v}`;
+    case "sikayet_edilen":
+      return `Şikayet edilen: ${v}`;
+    case "olay_tarihi":
+      return `Olay tarihi: ${v}`;
+    case "olay_yeri":
+      return `Olay yeri: ${v}`;
+    case "delil":
+      return `Deliller: ${v}`;
+    case "teblig":
+      return `Tebliğ tarihi: ${v}`;
+    case "mahkeme":
+      return `Mahkeme: ${v}`;
+    case "esas":
+      return `Esas No: ${v}`;
+    case "anlatim":
+      return v;
+    default:
+      return `${id}: ${v}`;
+  }
+}
+
+const AUTO_EXAMPLES: Array<{ label: string; expect: string; text: string }> = [
+  {
+    label: "Şikayet",
+    expect: "sikayet",
+    text: "Banka hesabımdan paramı aldılar, dolandırıldım. Savcılığa şikayet etmek istiyorum.",
+  },
+  {
+    label: "Suç duyurusu",
+    expect: "suc_duyurusu",
+    text: "Komşunun evinde silah gördüm. Suç duyurusunda bulunmak istiyorum.",
+  },
+  {
+    label: "Cevap",
+    expect: "cevap",
+    text: "İddianame tebliğ edildi. Cevap dilekçesi vermek istiyorum.",
+  },
+  {
+    label: "İtiraz",
+    expect: "itiraz",
+    text: "Sulh ceza hakimliği tutuklama kararına itiraz dilekçesi yazmak istiyorum.",
+  },
+  {
+    label: "İstinaf",
+    expect: "istinaf",
+    text: "Ağır ceza mahkemesinin mahkumiyet hükmünü istinaf etmek istiyorum, bölge adliye mahkemesine.",
+  },
+  {
+    label: "Temyiz",
+    expect: "temyiz",
+    text: "BAM kararı tebliğ edildi. Yargıtay’a temyiz etmek istiyorum.",
+  },
+  {
+    label: "Katılma",
+    expect: "katilma",
+    text: "Açılan ceza davasında katılan sıfatıyla davaya katılma talebinde bulunmak istiyorum.",
+  },
+  {
+    label: "AYM",
+    expect: "bireysel_basvuru",
+    text: "İç hukuk yolları tükendi. Anayasa Mahkemesine bireysel başvuru yapmak istiyorum.",
+  },
+  {
+    label: "İdari dava",
+    expect: "idari_dava",
+    text: "Valiliğin idari işlemine karşı iptal davası açmak istiyorum, idare mahkemesine.",
+  },
+  {
+    label: "Tahliye",
+    expect: "tahliye",
+    text: "Tutukluyum. Tahliye talebinde bulunmak istiyorum.",
+  },
+  {
+    label: "Adli kontrol",
+    expect: "adli_kontrol_itiraz",
+    text: "Adli kontrol kapsamında imza yükümlülüğü ve yurt dışı yasağı var, buna itiraz etmek istiyorum.",
+  },
 ];
 
 export function IslemWorkbench() {
-  const { text, setText, action, setAction, loading, error, result, submit } = useDocumentAnalysis(
-    "/v1/islem",
-  );
-  const [approved, setApproved] = useState(false);
-  const [side, setSide] = useState("anlat");
+  const { text, setText, action, setAction, loading, error, result, submit } = useDocumentAnalysis("/v1/islem");
+  const [side, setSide] = useState("yazim");
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [kalip, setKalip] = useState<BelgeKalip[]>(FALLBACK);
+  const [guess, setGuess] = useState<IslemGuess | null>(null);
+  const [gapAnswers, setGapAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
     getBelgeler()
       .then((rows) => {
-        if (rows.length) setKalip(rows);
+        const dilekce = rows.filter((item) => item.family !== "kamu");
+        if (dilekce.length) setKalip(dilekce);
+        else if (rows.length) setKalip(rows);
       })
       .catch(() => setKalip(FALLBACK));
   }, []);
 
-  const selected = useMemo(
-    () => kalip.find((item) => item.id === action) ?? kalip.find((item) => item.id === side),
-    [kalip, action, side],
-  );
-
   useEffect(() => {
-    if (result?.action) setSide(result.action);
-  }, [result?.action]);
-
-  const sidebarItems = [
-    { id: "anlat", label: "Derdini anlat" },
-    ...kalip.map((item) => ({ id: item.id, label: item.title })),
-    { id: "disa-aktar", label: "Dışa aktar" },
-  ];
-
-  function downloadDraft() {
-    if (!result?.draft || !approved) return;
-    const blob = new Blob([result.draft], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `hakim-islem-${action}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function onSide(id: string) {
-    setSide(id);
-    if (id === "disa-aktar") return;
-    setApproved(false);
-    if (id === "anlat") {
-      setAction("");
+    if (mode !== "auto") return;
+    const blob = text.trim();
+    if (blob.length < 12) {
+      setGuess(null);
       return;
     }
-    if (result) {
-      void submit(undefined, id);
-    } else {
-      setAction(id);
-    }
+    const timer = window.setTimeout(() => {
+      guessIslem(blob)
+        .then(setGuess)
+        .catch(() => setGuess(null));
+    }, 420);
+    return () => window.clearTimeout(timer);
+  }, [text, mode]);
+
+  useEffect(() => {
+    const ids = new Set((result?.gaps || []).map((gap) => gap.id));
+    setGapAnswers((prev) => {
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (ids.has(key)) next[key] = value;
+      }
+      return next;
+    });
+  }, [result]);
+
+  const hasGapAnswers = Object.values(gapAnswers).some((value) => value.trim());
+
+  function applyGaps(event: FormEvent) {
+    event.preventDefault();
+    if (!result?.gaps?.length || !hasGapAnswers) return;
+    const extra = result.gaps
+      .map((gap) => gapLine(gap.id, gapAnswers[gap.id] || ""))
+      .filter(Boolean)
+      .join("\n");
+    if (!extra) return;
+    const next = [text.trim(), extra].filter(Boolean).join("\n");
+    void submit(undefined, (mode === "manual" ? action : result.action) || "", next);
   }
+
+  const detectedId = mode === "auto" ? result?.action || guess?.action : action;
+  const selected = useMemo(
+    () => kalip.find((item) => item.id === detectedId),
+    [kalip, detectedId],
+  );
+  const verdictTitle = selected?.title ?? guess?.title ?? (mode === "manual" ? "Dilekçe" : "Anlatıdan dilekçe");
+  const petitionReady = Boolean(
+    result?.petition &&
+      result.petition.layout !== "resmi" &&
+      (result.petition.hitap || result.petition.sections?.length || result.petition.konu),
+  );
+  const petitionBlocks = petitionReady && result?.petition ? petitionToBlocks(result.petition) : undefined;
+  const downloadBody = result?.draft || "";
+  const downloadName = `hakim-dilekce-${detectedId || "taslak"}`;
+  const downloads = (
+    <DownloadActions
+      content={downloadBody}
+      blocks={petitionBlocks}
+      basename={downloadName}
+      disabled={!petitionBlocks?.length && !downloadBody}
+    />
+  );
 
   return (
     <AppShell
       module="islem"
-      sidebarTitle="Belge kalıpları"
-      sidebarItems={sidebarItems}
+      sidebarTitle="Dilekçe"
+      sidebarItems={SIDE}
       sidebarActive={side}
-      onSidebarSelect={onSide}
-      quote="“Onaysız gönderim yoktur.”"
-      quoteMeta="vatandas.uyap.gov.tr"
-      inspectorTitle="Kontrol listesi"
+      onSidebarSelect={setSide}
+      inspectorTitle="Kontrol"
       inspector={
         result ? (
           <div className="islem-check">
             <ul className="check-list">
-              <li className={result.belge ? "ok" : ""}>Kalıp: {selected?.title ?? result.belge ?? action}</li>
+              <li className={result.belge ? "ok" : ""}>
+                Kalıp: {verdictTitle}
+              </li>
+              <li className="ok">{mode === "auto" ? "Otomatik anlama" : "Manuel kalıp"}</li>
               {result.route_reason ? <li className="ok">{result.route_reason}</li> : null}
               {result.gaps?.length ? (
                 <li className="gap-item">
-                  Şurada eksikliğin var ({result.gaps.length})
+                  Eksik ({result.gaps.length}) — soldaki kutuya yazın
                   <ul className="gap-mini">
                     {result.gaps.map((gap) => (
                       <li key={gap.id}>
@@ -110,13 +257,7 @@ export function IslemWorkbench() {
                 <li className="ok">Anlatım yeterli</li>
               )}
               <li className={result.related.length ? "ok" : ""}>Kaynak doğrulandı ({result.related.length})</li>
-              <li className={result.classification.document_type !== "belirsiz" ? "ok" : ""}>Evrak türü</li>
               <li className={result.draft ? "ok" : ""}>Taslak hazır</li>
-              <li className={writerIsLlm(result.writer) ? "ok" : ""}>
-                Yazıcı: {writerLabel(result.writer)}
-              </li>
-              {result.writer_error ? <li>{result.writer_error}</li> : null}
-              <li className={approved ? "ok" : ""}>Açık onay</li>
             </ul>
             <p className="muted">{result.uyap_note}</p>
             <div className="official-links">
@@ -126,21 +267,12 @@ export function IslemWorkbench() {
                 </a>
               ))}
             </div>
-            <label className="approve">
-              <input
-                type="checkbox"
-                checked={approved}
-                onChange={(e) => setApproved(e.target.checked)}
-              />
-              Taslağı okudum, dışa aktarmayı onaylıyorum
-            </label>
-            <button type="button" className="accent-btn" disabled={!approved} onClick={downloadDraft}>
-              Onayla ve dışa aktar
-            </button>
           </div>
         ) : (
           <p className="muted">
-            Derdinizi yazın; sistem konuyu anlayıp uygun dilekçe kalıbını seçer. UYAP gönderimi yok.
+            {mode === "auto"
+              ? "Derdinizi yazın; sistem türü anlar ve o kalıpta yazar. UYAP gönderimi yok."
+              : "Kalıbı siz seçin; anlatı o formata dökülür. UYAP gönderimi yok."}
           </p>
         )
       }
@@ -148,98 +280,162 @@ export function IslemWorkbench() {
         loading
           ? "Taslak yazılıyor…"
           : result
-            ? `${selected?.title ?? action} · onay ${approved ? "var" : "yok"}`
-            : "İşlem bekleniyor"
+            ? verdictTitle
+            : "Dilekçe bekleniyor"
       }
     >
       <section className="main-pane islem-pane">
         <div className="pane-hero">
-          <h1>
-            {side === "disa-aktar"
-              ? "Dışa aktar"
-              : side === "anlat"
-                ? "Derdini anlat"
-                : selected?.title ?? "İşlem taslağı"}
-          </h1>
+          <h1>{result ? verdictTitle : "Dilekçe"}</h1>
           <p>
-            {side === "disa-aktar"
-              ? "Onay olmadan indirme yok. UYAP’a otomatik gönderim yoktur."
-              : side === "anlat"
-                ? "Olayı kendi cümlelerinizle yazın. Uygun format (şikayet, istinaf, tahliye…) anlatıdan seçilir."
-                : selected
-                  ? `${selected.when} · ${selected.makam}${selected.legal_basis?.length ? ` · ${selected.legal_basis.join(" · ")}` : ""}`
-                  : "Kalıp seçin, derdinizi veya dayanak evrakı yazın."}
+            {mode === "auto"
+              ? "Derdinizi anlatın. Şikayet, istinaf, tahliye gibi türü sistem seçer ve o formatta yazar."
+              : selected
+                ? `${selected.when} · ${selected.makam}${selected.legal_basis?.length ? ` · ${selected.legal_basis.join(" · ")}` : ""}`
+                : "Listeden kalıbı seçin, olayı yazın."}
           </p>
         </div>
-        {side !== "disa-aktar" ? (
-          <form
-            className="islem-compose"
-            onSubmit={(event) => {
-              setApproved(false);
-              return submit(event, side === "anlat" ? "" : undefined);
-            }}
-          >
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              aria-label="Dert veya dayanak evrak"
-              rows={6}
-              spellCheck={false}
-              placeholder="Örn. Bankada hesabımdan para çekildi, savcılığa şikayet etmek istiyorum."
-            />
-            <button type="submit" disabled={loading || text.trim().length < 8}>
-              {loading
-                ? "Anlaşıyor, kalıp yazılıyor…"
-                : action
-                  ? `${selected?.title ?? "Taslak"} üret`
-                  : "Anla ve uygun dilekçeyi yaz"}
+        <form
+          className="islem-compose"
+          onSubmit={(event) => {
+            setGapAnswers({});
+            void submit(event, mode === "manual" ? action : "");
+          }}
+        >
+          <div className="mode-switch" role="tablist" aria-label="Yazım modu">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "auto"}
+              className={mode === "auto" ? "on" : ""}
+              onClick={() => {
+                setMode("auto");
+                setAction("");
+              }}
+            >
+              Otomatik anlama
             </button>
-          </form>
-        ) : null}
-        {error ? <p className="error">{error}</p> : null}
-        {result?.route_reason ? <p className="evrak-verdict">{result.route_reason}</p> : null}
-        {result?.gaps?.length && side !== "disa-aktar" ? (
-          <aside className="gap-banner">
-            <h2>Şurada eksikliğin var</h2>
-            <p>
-              Dilekçe yer tutucularla yazıldı. Aşağıdakileri metne ekleyip tekrar «Anla ve uygun dilekçeyi yaz»
-              deyin; kimlik ve tarih uydurulmaz.
-            </p>
-            <ul>
-              {result.gaps.map((gap) => (
-                <li key={gap.id}>
-                  <strong>{gap.label}</strong>
-                  {gap.hint}
-                </li>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "manual"}
+              className={mode === "manual" ? "on" : ""}
+              onClick={() => setMode("manual")}
+            >
+              Manuel kalıp
+            </button>
+          </div>
+          {mode === "auto" ? (
+            <div className="islem-examples" aria-label="Örnek anlatılar">
+              {AUTO_EXAMPLES.map((item) => (
+                <button
+                  key={item.expect}
+                  type="button"
+                  className={text === item.text ? "on" : ""}
+                  onClick={() => setText(item.text)}
+                >
+                  {item.label}
+                </button>
               ))}
-            </ul>
+            </div>
+          ) : null}
+          {mode === "manual" ? (
+            <select
+              className="kalip-select"
+              aria-label="Dilekçe kalıbı"
+              value={action}
+              onChange={(event) => setAction(event.target.value)}
+            >
+              <option value="">Kalıp seçin</option>
+              {kalip.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          ) : guess ? (
+            <p className="islem-guess" aria-live="polite">
+              Bu bir <strong>{guess.title}</strong>
+              {guess.confidence ? ` · %${Math.round(guess.confidence * 100)}` : ""}.
+              {guess.reason ? ` ${guess.reason}` : ""}
+            </p>
+          ) : (
+            <p className="islem-guess muted">Anlatıyı yazın; tür burada görünecek.</p>
+          )}
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="Olay veya dayanak evrak"
+            rows={6}
+            spellCheck={false}
+            placeholder={
+              mode === "auto"
+                ? "Örn. Bankada hesabımdan para çekildi, savcılığa şikayet etmek istiyorum."
+                : "Olayı, tarihi ve tarafları yazın."
+            }
+          />
+          <div className="islem-compose-actions">
+            <button
+              type="submit"
+              disabled={loading || text.trim().length < 8 || (mode === "manual" && !action)}
+            >
+              {loading
+                ? "Yazılıyor…"
+                : mode === "manual" && selected
+                  ? `${selected.title} üret`
+                  : guess
+                    ? `${guess.title} olarak yaz`
+                    : "Anla ve uygun dilekçeyi yaz"}
+            </button>
+            {downloads}
+          </div>
+        </form>
+        {error ? <p className="error">{error}</p> : null}
+        {result?.route_reason ? (
+          <p className="evrak-verdict">
+            {mode === "auto" ? `Bu bir ${verdictTitle.toLowerCase()}. ` : ""}
+            {result.route_reason}
+          </p>
+        ) : null}
+        {result?.gaps?.length ? (
+          <aside className="gap-banner">
+            <h2>Eksik hususlar</h2>
+            <p>Dilekçe yer tutucularla yazıldı. Aşağıya bildiklerinizi yazıp taslağı yenileyin; kimlik ve tarih uydurulmaz.</p>
+            <form className="gap-form" onSubmit={applyGaps}>
+              {result.gaps.map((gap) => (
+                <label key={gap.id} className="gap-field">
+                  <span>
+                    <strong>{gap.label}</strong>
+                    {gap.hint}
+                  </span>
+                  <input
+                    value={gapAnswers[gap.id] || ""}
+                    onChange={(event) =>
+                      setGapAnswers((prev) => ({ ...prev, [gap.id]: event.target.value }))
+                    }
+                    placeholder={gapPlaceholder(gap.id)}
+                    autoComplete="off"
+                  />
+                </label>
+              ))}
+              <button type="submit" disabled={loading || !hasGapAnswers}>
+                {loading ? "Yenileniyor…" : "Eksikleri işle ve dilekçeyi yenile"}
+              </button>
+            </form>
           </aside>
         ) : null}
-        {side === "disa-aktar" ? (
-          <div className="evrak-draft">
-            {result?.draft ? (
-              <>
-                <h2>Dışa aktarım</h2>
-                <p className="muted">
-                  {approved
-                    ? "Onay verildi. Sağ panelden taslağı indirin."
-                    : "Önce sağ paneldeki onay kutusunu işaretleyin."}
-                </p>
-                <pre className="draft-pre">{result.draft}</pre>
-              </>
-            ) : (
-            <p className="muted">Önce derdinizi yazıp uygun kalıbı üretin.</p>
-            )}
-          </div>
-        ) : result ? (
+        {result ? (
           <PetitionPreview
             petition={result.petition}
             draft={result.draft}
-            badge={selected?.title ?? action}
+            badge={verdictTitle}
+            actions={downloads}
           />
         ) : (
           <p className="muted islem-empty">
-            Soldan «Derdini anlat» ile olayı yazın; sistem uygun dilekçe formatını seçer. Kalıbı elle de değiştirebilirsiniz.
+            {mode === "auto"
+              ? "Derdinizi yazın; örneğin şikayet dilekçesi olduğunu anlayıp o kalıpta üretir."
+              : "Kalıbı seçip olayı yazın."}
           </p>
         )}
       </section>

@@ -2,48 +2,158 @@ from __future__ import annotations
 
 from datetime import date
 
-from deadline.engine import CalendarType, DurationUnit, compute_last_day
+from deadline.engine import (
+    CalendarType,
+    DurationUnit,
+    LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR,
+    compute_last_day,
+    religious_holiday_table_status,
+)
 
 
 def test_criminal_deadline_moves_off_weekend() -> None:
-    # 7 days from Friday 2026-08-14 is Friday 2026-08-21 (weekday).
+    # Trigger deliberately kept outside the 20 Temmuz-31 Ağustos adli tatil
+    # window so this test isolates the plain weekend-rollover behaviour
+    # (see the dedicated adli-tatil tests below for that separate rule).
+    # 2026-11-12 (Thu) + 2 gün = 2026-11-14 (Cumartesi) -> ilk iş günü
+    # 2026-11-16 Pazartesi.
     last = compute_last_day(
-        trigger=date(2026, 8, 14),
-        duration=7,
+        trigger=date(2026, 11, 12),
+        duration=2,
         unit=DurationUnit.DAY,
         calendar=CalendarType.CRIMINAL,
     )
-    assert last == date(2026, 8, 21)
+    assert last == date(2026, 11, 16)
 
 
 def test_criminal_deadline_friday_plus_one_is_monday() -> None:
     last = compute_last_day(
-        trigger=date(2026, 8, 14),
+        trigger=date(2026, 11, 13),
         duration=1,
         unit=DurationUnit.DAY,
         calendar=CalendarType.CRIMINAL,
     )
-    assert last == date(2026, 8, 17)
+    assert last == date(2026, 11, 16)
     assert last.weekday() == 0
 
 
-def test_administrative_deadline_moves_off_weekend() -> None:
-    # Friday 2026-08-14 + 1 day falls on Saturday; İYUK usulünde de ertesi iş gününe sarkar.
+def test_civil_deadline_also_moves_off_weekend() -> None:
+    # HMK m.93: resmi tatil erteleme kuralı sadece ceza takvimine özgü
+    # değil — hukuk takvimi de aynı kurala tabi. Trigger, adli tatil
+    # penceresinin (20 Temmuz-31 Ağustos) dışında tutuldu ki bu test sadece
+    # hafta sonu ertelemesini izole etsin (bkz. aşağıdaki adli-tatil testleri).
+    # 2026-11-13 Cuma + 1 gün = 2026-11-14 Cumartesi -> ilk iş günü olan
+    # 2026-11-16 Pazartesi'ye erteler.
     last = compute_last_day(
-        trigger=date(2026, 8, 14),
-        duration=1,
-        unit=DurationUnit.DAY,
-        calendar=CalendarType.ADMINISTRATIVE,
-    )
-    assert last == date(2026, 8, 17)
-    assert last.weekday() == 0
-
-
-def test_civil_deadline_keeps_calendar_day() -> None:
-    last = compute_last_day(
-        trigger=date(2026, 8, 14),
+        trigger=date(2026, 11, 13),
         duration=1,
         unit=DurationUnit.DAY,
         calendar=CalendarType.CIVIL,
     )
-    assert last == date(2026, 8, 15)
+    assert last == date(2026, 11, 16)
+
+
+def test_criminal_deadline_moves_off_fixed_resmi_tatil() -> None:
+    # 2026-04-22 (Çarşamba) + 1 gün = 2026-04-23 (23 Nisan, resmi tatil,
+    # ayrıca Perşembe) -> ertesi iş günü 2026-04-24 Cuma'ya erteler.
+    last = compute_last_day(
+        trigger=date(2026, 4, 22),
+        duration=1,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CRIMINAL,
+    )
+    assert last == date(2026, 4, 24)
+
+
+def test_administrative_deadline_moves_off_fixed_resmi_tatil() -> None:
+    # İYUK m.8/2 aynı erteleme kuralını idari takvim için de öngörür.
+    last = compute_last_day(
+        trigger=date(2026, 4, 22),
+        duration=1,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.ADMINISTRATIVE,
+    )
+    assert last == date(2026, 4, 24)
+
+
+def test_deadline_moves_off_religious_holiday() -> None:
+    # 2026 Ramazan Bayramı: 20-22 Mart. 2026-03-19 (Perşembe) + 1 gün =
+    # 2026-03-20 (bayramın ilk günü, ayrıca Cuma) -> bayram 22 Mart Pazar'da
+    # bitiyor (zaten hafta sonu) -> ilk iş günü 2026-03-23 Pazartesi.
+    last = compute_last_day(
+        trigger=date(2026, 3, 19),
+        duration=1,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CIVIL,
+    )
+    assert last == date(2026, 3, 23)
+
+
+def test_criminal_deadline_extends_three_days_after_adli_tatil() -> None:
+    # CMK m.331/4: adli tatile (20 Temmuz-31 Ağustos) rastlayan süre,
+    # tatilin bittiği günden itibaren 3 gün uzatılmış sayılır.
+    # 2026-08-10 (Pazartesi) + 14 gün = 2026-08-24 (Pazartesi, adli tatil
+    # içinde) -> 31 Ağustos (Pazartesi) + 3 gün = 3 Eylül Perşembe.
+    last = compute_last_day(
+        trigger=date(2026, 8, 10),
+        duration=14,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CRIMINAL,
+    )
+    assert last == date(2026, 9, 3)
+
+
+def test_civil_deadline_extends_seven_days_after_adli_tatil() -> None:
+    # HMK m.104: adli tatile rastlayan süre, tatilin bittiği günden
+    # itibaren bir hafta (7 gün) uzatılmış sayılır.
+    last = compute_last_day(
+        trigger=date(2026, 8, 10),
+        duration=14,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CIVIL,
+    )
+    assert last == date(2026, 9, 7)
+
+
+def test_administrative_deadline_extends_seven_days_after_adli_tatil() -> None:
+    # İYUK m.8/3 + m.61: çalışmaya ara verme (20 Temmuz-31 Ağustos)
+    # dönemine rastlayan süre, ara vermenin bitişinden itibaren 7 gün
+    # uzamış sayılır.
+    last = compute_last_day(
+        trigger=date(2026, 8, 10),
+        duration=14,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.ADMINISTRATIVE,
+    )
+    assert last == date(2026, 9, 7)
+
+
+def test_deadline_before_adli_tatil_window_is_unaffected() -> None:
+    # Adli tatil öncesinde biten bir süre uzatmadan etkilenmemeli.
+    last = compute_last_day(
+        trigger=date(2026, 6, 1),
+        duration=10,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CIVIL,
+    )
+    assert last == date(2026, 6, 11)
+
+
+def test_religious_holiday_table_ok_with_one_year_runway() -> None:
+    # Kapsanan son tam yıldan bir yıl önce hâlâ "ok" olmalı (bkz. 1 yıllık
+    # ufuk — bireysel başvuru gibi uzun süreler yıl sınırını aşabilir).
+    status = religious_holiday_table_status(
+        today=date(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR - 1, 1, 1)
+    )
+    assert status["ok"] is True
+    assert status["last_fully_covered_year"] == LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR
+
+
+def test_religious_holiday_table_warns_once_runway_runs_out() -> None:
+    # Kapsanan son tam yılın kendisinde artık bir sonraki yıl için ufuk
+    # kalmadığından uyarı vermeli — tablo tükenmeden ÖNCE fark edilsin diye.
+    status = religious_holiday_table_status(
+        today=date(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR, 1, 1)
+    )
+    assert status["ok"] is False
+    assert str(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR) in status["detail"]

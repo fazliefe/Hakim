@@ -1,19 +1,34 @@
 # HÂKİM model routing. Secrets stay in .env (HAKIM_LLM_API_KEY).
-# Switch stack with `active` below, or env: HAKIM_PROFILE=groq|ollama|colab
+# Switch stack with `active` below, or env: HAKIM_PROFILE=groq|ollama|colab|evren
 # Optional path override: HAKIM_MODELS_CONFIG=/path/to/models.yaml
 
-active: groq
+active: evren
 
 defaults:
   embedding:
     model: newmindai/Mursit-Base-TR-Retrieval
     dims: 768
+  # RRF'den çıkan adayları (kanun maddesi + emsal karar, tipik olarak <=12)
+  # daraltmadan önce yeniden sıralayan cross-encoder. Yerel CPU'da çalışır
+  # (Evren API'sinde ayrı bir rerank ucu yok); bu yüzden küçük/hızlı bir
+  # multilingual model seçildi — bge-reranker-v2-m3 gibi büyük modeller
+  # istek başına saniyeler ekleyebilir. Model indirilemezse/yüklenemezse
+  # (offline, ilk çalıştırmada internet yok) retrieval/rerank.py sessizce
+  # sözcük-örtüşme sezgiseline düşer — enabled: false ile de devre dışı
+  # bırakılabilir.
+  rerank:
+    enabled: true
+    model: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+    batch_size: 16
   research:
     allow_ollama: false
   llm:
     max_tokens: 900
     timeout: 25
     temperature: 0.2
+    # Groq openai/gpt-oss-20b (USD / 1M tokens)
+    input_per_million: 0.075
+    output_per_million: 0.30
 
 profiles:
   groq:
@@ -57,3 +72,42 @@ profiles:
       dims: 768
     research:
       allow_ollama: true
+
+  # TEKNOFEST 2026 çıkarım servisi: 8xH200, OpenAI-uyumlu, kota yok.
+  # Anahtar takım başına: HAKIM_LLM_API_KEY=sk-evren-team06-... (.env, gerçek key)
+  # vlm (video) ve bge-m3-embed ayrı uçlar üzerinden çalışır, bu writer profili
+  # llm-fast/llm-large metin çağrılarını kapsar. Detay: https://evren-teknofest.ssyz.org.tr/
+  evren:
+    writer: api
+    llm:
+      url: https://evren-llmapi.ssyz.org.tr/v1
+      model: llm-fast
+      timeout: 120
+      max_tokens: 3072
+      # Kotasız/ücretsiz TEKNOFEST H200 servisi; defaults.llm'deki groq USD
+      # tarifesi burada geçerli değil — usage.py yanlış maliyet raporlamasın.
+      input_per_million: 0.0
+      output_per_million: 0.0
+      # Qwen thinking modu varsayılan açık: karmaşık promptlarda reasoning izi
+      # max_tokens'ı tüketip boş içerik döndürüyordu (canlı doğrulandı — aynı
+      # istek thinking açıkken 2320, kapalıyken 126 token). vLLM/Qwen3 standart
+      # parametresiyle kapatılıyor.
+      disable_reasoning: true
+    # Emsal karar (Yargıtay/Danıştay) semantic aramasında kullanılıyor — AYRI
+    # bir anahtar (`embedding` DEĞİL): kanun maddeleri hâlâ defaults.embedding
+    # (768 dims, yerel CPU model) kullanıyor; iki dense_vector boyutu aynı ES
+    # index'te karışamaz, bkz. retrieval/mapping.py. Bu anahtarı `embedding`
+    # yaparsan `_merge()` defaults.embedding'in üzerine yazar ve kanun
+    # index'inin embedder'ı kırılır (bge-m3-embed geçerli bir yerel
+    # sentence-transformers modeli değil) — canlı doğrulandı, tekrar yapma.
+    decision_embedding:
+      provider: api
+      url: https://evren-llmapi.ssyz.org.tr/v1
+      model: bge-m3-embed
+      dims: 1024
+      timeout: 30
+    ollama:
+      enabled: false
+      url: http://127.0.0.1:11434
+      model: llama3.2:3b
+      keep_alive: 30m

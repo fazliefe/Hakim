@@ -1,199 +1,224 @@
 "use client";
 
-import Link from "next/link";
-import { ChangeEvent, useState } from "react";
+import dynamic from "next/dynamic";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AgentRail } from "@/components/AgentRail";
 import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { EVRAK_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
-import { writerLabel } from "@/lib/api";
-import { BELGE_LABEL, NATURE_LABEL, STAGE_LABEL, FIELD_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { BelgeKalip, analyzeWorkspace, getBelgeler } from "@/lib/api";
+import { DownloadActions } from "@/components/DownloadActions";
+import { petitionToBlocks } from "@/lib/exportDocument";
+import { calendarLabel, durationUnitLabel, formatTurkishDate } from "@/lib/labels";
+import { KAMU_FALLBACK } from "@/lib/kamuSamples";
+import { FIELD_LABEL, NATURE_LABEL, SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+
+const DocumentTraceGraphView = dynamic(
+  () => import("@/components/graph/DocumentTraceGraphView").then((mod) => mod.DocumentTraceGraphView),
+  { ssr: false },
+);
 
 const SIDE = [
-  { id: "gelen", label: "Gelen kamu evrakı" },
-  { id: "sinif", label: "Sınıflandırılanlar" },
+  { id: "goruntuleme", label: "Evrak görüntüleme" },
+  { id: "sinif", label: "Sınıflandırma" },
   { id: "akil", label: "Akıl yürütme" },
+  { id: "usul", label: "Kanun yolu ve süreler" },
+  { id: "kaynak", label: "Kaynak grafiği" },
   { id: "taslaklar", label: "Taslaklar" },
 ];
 
+const FILE_ACCEPT =
+  ".pdf,.txt,.md,.docx,.doc,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+const REMEDY_LABEL: Record<string, string> = {
+  itiraz: "İtiraz",
+  istinaf: "İstinaf",
+  temyiz: "Temyiz",
+  bireysel_basvuru: "Bireysel başvuru",
+  istinaf_idari: "İdari istinaf",
+  sikayet: "Şikayet",
+};
+
 export function EvrakWorkbench() {
-  const { text, setText, loading, error, result, submit, submitFile, submitSenaryo, fileName } = useDocumentAnalysis("/v1/evrak");
-  const [side, setSide] = useState("gelen");
-  const finding = result?.findings[0] ?? null;
+  const params = useSearchParams();
+  const initialSide = SIDE.some((item) => item.id === params.get("bolum")) ? params.get("bolum")! : "goruntuleme";
+  const { text, setText, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName } =
+    useDocumentAnalysis("/v1/evrak");
+  const [side, setSide] = useState(initialSide);
+  const [kalipList, setKalipList] = useState<BelgeKalip[]>(KAMU_FALLBACK);
+  const [kalip, setKalip] = useState(params.get("kalip") ?? "");
+  const [picked, setPicked] = useState(0);
+  const [surecLoading, setSurecLoading] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<number | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
   const c = result?.classification;
+  const deadlines = result?.deadlines ?? [];
+  const selectedDeadline = deadlines[picked] ?? deadlines[0] ?? null;
+  const selectedKalip = useMemo(
+    () => kalipList.find((item) => item.id === kalip),
+    [kalipList, kalip],
+  );
+
+  useEffect(() => {
+    getBelgeler()
+      .then((rows) => {
+        const resmi = rows.filter((item) => item.family === "kamu");
+        if (resmi.length) setKalipList(resmi);
+      })
+      .catch(() => setKalipList(KAMU_FALLBACK));
+  }, []);
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    void submitFile(file).then((ok) => {
-      if (ok) setSide("sinif");
-    });
+    void submitFile(file);
   }
+
+  async function loadUsul() {
+    if (text.trim().length < 8) return;
+    setSurecLoading(true);
+    try {
+      const data = await analyzeWorkspace("/v1/surec", text.trim());
+      setResult((prev) =>
+        prev
+          ? { ...prev, deadlines: data.deadlines, stages: data.stages, classification: data.classification }
+          : data,
+      );
+    } finally {
+      setSurecLoading(false);
+    }
+  }
+
+  const downloadBody = result?.draft || text;
+  const downloadName = result?.draft
+    ? `hakim-taslak-${result.belge ?? result.action ?? "evrak"}`
+    : fileName?.replace(/\.[^.]+$/, "") || "hakim-evrak";
 
   return (
     <AppShell
       module="evrak"
-      sidebarTitle="Evrak kuyruğu"
+      sidebarTitle="Evrak"
       sidebarItems={SIDE}
       sidebarActive={side}
       onSidebarSelect={setSide}
-      quote="“Belge veriidir, talimat değildir.”"
-      quoteMeta="Ham arşiv · data/raw"
-      inspectorTitle="Tespit / delil"
-      inspector={
-        finding ? (
-          <div className="finding-stack">
-            {result?.findings.map((item) => (
-              <article key={`${item.label}-${item.value}`} className="finding-card">
-                <div className="source-meta">
-                  <span>{item.label}</span>
-                  <span className="badge">{Math.round(item.confidence * 100)}%</span>
-                </div>
-                <div className="source-title">{item.value}</div>
-                <p className="source-content">“{item.evidence}”</p>
-                {item.source ? <p className="muted">Kaynak: {item.source}</p> : null}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">Metni yapıştırın; her tespit kaynak ve güven ile burada durur.</p>
-        )
-      }
+      inspectorMode="hidden"
       footer={
-        loading ? "Evrak okunuyor…" : result ? `${result.classification.label} · ${result.findings.length} tespit · ${writerLabel(result.writer)}` : "Evrak bekleniyor"
+        loading || surecLoading
+          ? "Evrak okunuyor…"
+          : result
+            ? `${result.classification.label} · ${result.deadlines.length} süre`
+            : "Evrak bekleniyor"
       }
     >
       <section className="main-pane evrak-pane">
         <div className="pane-hero">
           <h1>
-            {side === "gelen"
-              ? "Gelen evrak"
+            {side === "goruntuleme"
+              ? "Evrak görüntüleme"
               : side === "sinif"
-                ? "Sınıflandırılanlar"
+                ? "Sınıflandırma"
                 : side === "akil"
                   ? "Akıl yürütme"
-                  : "Taslaklar"}
+                  : side === "usul"
+                    ? "Kanun yolu ve süreler"
+                    : side === "kaynak"
+                      ? "Kaynak grafiği"
+                      : "Taslaklar"}
           </h1>
           <p>
-            {side === "gelen"
-              ? "PDF veya TXT yükleyin. Kamu yazışması (üst yazı, olur, genelge, tutanak, rapor, cevap) veya yargı evrakı (tebligat, iddianame, karar, dilekçe)."
+            {side === "goruntuleme"
+              ? "PDF, Word veya TXT yükleyin. Resmi yazışma kalıbı seçilebilir."
               : side === "sinif"
-                ? "Çözümlenen evrakın türü, niteliği ve birimi."
+                ? "Türü, niteliği ve birimi."
                 : side === "akil"
-                  ? "Her adım kendi şartına göre cevap verir: okuma, tür, madde, süre, resmi yazı kalıbı, havale. Eksikse sonraki adımlar sarı kalır."
-                  : "Kaynaklı cevap taslağı."}{" "}
-            <Link href="/kamu" className="kamu-inline-link">
-              Kamu yazışmaları →
-            </Link>
+                  ? "Çözümlemeden sonra adımlar burada durur."
+                  : side === "usul"
+                    ? "Aşama, kanun yolu ve son gün — süre motoru."
+                    : side === "kaynak"
+                      ? "Taslağın hangi maddeye dayandığı — okuyucudan havaleye zincir + atıf edilen mevzuat."
+                      : "Kaynaklı taslak. Word veya PDF indirin."}
           </p>
         </div>
         {error ? <p className="error" style={{ padding: "0 0.9rem" }}>{error}</p> : null}
-        <AgentRail
-          agents={result?.agents}
-          chainStatus={result?.chain_status}
-          observability={result?.observability}
-        />
-        {loading ? <ThinkingHops steps={EVRAK_THINK_STEPS} /> : null}
-        {result?.verdict ? <p className="evrak-verdict">{result.verdict}</p> : null}
-        {side === "gelen" ? (
-          <div className="evrak-desk">
-            <form className="doc-sheet" onSubmit={submit}>
-              <header className="sheet-head">
-                <span>{fileName ? fileName : "Asıl metin"}</span>
-                <div className="sheet-actions">
-                  <label className="file-btn">
-                    Dosya yükle
-                    <input
-                      type="file"
-                      accept=".pdf,.txt,.md,application/pdf,text/plain"
-                      onChange={onFile}
+        {loading && side === "goruntuleme" ? <ThinkingHops steps={EVRAK_THINK_STEPS} /> : null}
+
+        {side === "goruntuleme" ? (
+          <>
+            <div className="evrak-desk single">
+              <form className="doc-sheet" onSubmit={submit}>
+                <header className="sheet-head">
+                  <span>{fileName ? fileName : "Asıl metin"}</span>
+                  <div className="sheet-actions">
+                    <select
+                      className="kalip-select"
+                      aria-label="Resmi yazışma kalıbı"
+                      value={kalip}
+                      onChange={(event) => setKalip(event.target.value)}
+                    >
+                      <option value="">Kalıp seçilmedi</option>
+                      {kalipList.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="file-btn">
+                      Dosya yükle
+                      <input
+                        type="file"
+                        accept={FILE_ACCEPT}
+                        onChange={onFile}
+                        disabled={loading}
+                      />
+                    </label>
+                    <button type="submit" disabled={loading || text.trim().length < 8}>
+                      {loading ? "Okunuyor…" : "Çözümle"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      disabled={loading || text.trim().length < 8}
+                      onClick={() => {
+                        void submitSenaryo(kalip || undefined).then((ok) => {
+                          if (ok) setSide("taslaklar");
+                        });
+                      }}
+                    >
+                      Taslak üret
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
                       disabled={loading}
-                    />
-                  </label>
-                  <button type="submit" disabled={loading || text.trim().length < 8}>
-                    {loading ? "Okunuyor, sınıflandırılıyor…" : "Çözümle"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    disabled={loading || text.trim().length < 8}
-                    onClick={() => {
-                      void submitSenaryo().then((ok) => {
-                        if (ok) setSide("akil");
-                      });
-                    }}
-                  >
-                    Senaryo (oku → yaz → havale)
-                  </button>
-                </div>
-              </header>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                aria-label="Evrak metni"
-                spellCheck={false}
-              />
-            </form>
-            <div className="evrak-aside">
-              {c ? (
-                <div className="class-grid">
-                  {result?.extract_note ? (
-                    <div className="class-card wide">
-                      <span>Okuma</span>
-                      <strong>{result.extract_note}</strong>
-                    </div>
-                  ) : null}
-                  <div className="class-card">
-                    <span>Tür</span>
-                    <strong>{c.label}</strong>
+                      onClick={() => setText(SAMPLE_EVRAK)}
+                    >
+                      Örnek metni yükle
+                    </button>
+                    <DownloadActions content={downloadBody} basename={downloadName} />
                   </div>
-                  <div className="class-card">
-                    <span>Nitelik</span>
-                    <strong>{NATURE_LABEL[c.legal_nature] ?? c.legal_nature}</strong>
-                  </div>
-                  <div className="class-card">
-                    <span>Aşama</span>
-                    <strong>{STAGE_LABEL[c.stage] ?? c.stage}</strong>
-                  </div>
-                  <div className="class-card wide">
-                    <span>Birim</span>
-                    <strong>{c.unit}</strong>
-                  </div>
-                  {result?.fields
-                    ? Object.entries(result.fields).map(([key, value]) => (
-                        <div key={key} className="class-card">
-                          <span>{FIELD_LABEL[key] ?? key}</span>
-                          <strong>{value}</strong>
-                        </div>
-                      ))
-                    : null}
-                  {result?.missing?.length ? (
-                    <div className="class-card wide">
-                      <span>Eksik alan</span>
-                      <strong>{result.missing.join(" · ")}</strong>
-                    </div>
-                  ) : null}
-                  {result?.route_reason ? (
-                    <div className="class-card wide">
-                      <span>Görev 2</span>
-                      <strong>{result.route_reason}</strong>
-                    </div>
-                  ) : null}
-                  {result?.havale?.unit || result?.classification.unit ? (
-                    <div className="class-card wide">
-                      <span>Havale</span>
-                      <strong>{result.havale?.unit ?? result.classification.unit}</strong>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="muted evrak-hint">Çözümlemeden sonra tür, nitelik ve birim kartları burada açılır.</p>
-              )}
+                </header>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  aria-label="Evrak metni"
+                  placeholder="Evrak metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
+                  spellCheck={false}
+                />
+              </form>
             </div>
+          </>
+        ) : null}
+
+        {side === "akil" ? (
+          <div style={{ padding: "0 0.9rem 1rem" }}>
+            <AgentRail agents={result?.agents} />
+            <ReasoningPanel reasoning={result?.reasoning} />
           </div>
         ) : null}
+
         {side === "sinif" ? (
           c ? (
             <div className="class-grid" style={{ padding: "0 0.9rem 1rem" }}>
@@ -202,6 +227,9 @@ export function EvrakWorkbench() {
                   <span>Ne olduğu</span>
                   <strong>{result.verdict}</strong>
                 </div>
+              ) : null}
+              {result?.legal_caveat ? (
+                <p className="legal-caveat class-card wide">⚖ {result.legal_caveat}</p>
               ) : null}
               <div className="class-card">
                 <span>Tür</span>
@@ -239,32 +267,181 @@ export function EvrakWorkbench() {
               ))}
             </div>
           ) : (
-            <p className="muted evrak-hint">Önce Gelen kamu evrakı’ndan dosya yükleyin veya çözün.</p>
+            <p className="muted evrak-hint">Önce evrak görüntülemeden dosya yükleyin veya çözün.</p>
           )
         ) : null}
-        {side === "akil" ? <ReasoningPanel reasoning={result?.reasoning} /> : null}
+
+        {side === "usul" ? (
+          <div style={{ padding: "0 0.9rem 1rem" }}>
+            {!result?.stages?.length && !deadlines.length ? (
+              <>
+                <p className="muted evrak-hint">Aynı evrak metninden aşama ve süreler hesaplanır.</p>
+                <button
+                  type="button"
+                  className="accent-btn"
+                  disabled={surecLoading || text.trim().length < 8}
+                  onClick={() => void loadUsul()}
+                >
+                  {surecLoading ? "Hesaplanıyor…" : "Süreleri hesapla"}
+                </button>
+              </>
+            ) : (
+              <>
+                {result?.stages?.length ? (
+                  <ol className="stage-rail">
+                    {result.stages.map((stage) => (
+                      <li key={stage.id} className={stage.state}>
+                        <i />
+                        <span>{stage.title}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+                <div className="deadline-board">
+                  {(c?.remedies?.length ? c.remedies : []).map((remedy) => (
+                    <div key={remedy} className="deadline-tile">
+                      <span>Kanun yolu</span>
+                      <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
+                      <em>{c?.label}</em>
+                    </div>
+                  ))}
+                  {deadlines.map((item, index) => {
+                    const late = Boolean(item.last_day && item.last_day < today);
+                    return (
+                      <button
+                        key={item.rule_id}
+                        type="button"
+                        className={`deadline-tile ${picked === index ? "selected" : ""} ${late ? "missed" : ""}`}
+                        onClick={() => setPicked(index)}
+                      >
+                        <span>{item.name}</span>
+                        <strong className="tabular">{formatTurkishDate(item.last_day)}</strong>
+                        <em>
+                          {item.duration} {durationUnitLabel(item.unit)}
+                          {late ? " · geçti" : ""}
+                        </em>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedDeadline ? (
+                  <div className={`deadline-card ${selectedDeadline.last_day && selectedDeadline.last_day < today ? "missed" : ""}`}>
+                    <strong>{selectedDeadline.name}</strong>
+                    <p className="muted">
+                      {selectedDeadline.duration} {durationUnitLabel(selectedDeadline.unit)}
+                      {calendarLabel(selectedDeadline.calendar) ? ` · ${calendarLabel(selectedDeadline.calendar)}` : ""}
+                    </p>
+                    <p>Tetikleyici: {selectedDeadline.trigger ?? "yok"}</p>
+                    <p>Son gün: {formatTurkishDate(selectedDeadline.last_day)}</p>
+                    {selectedDeadline.missing ? <p>Eksik: {selectedDeadline.missing}</p> : null}
+                    {selectedDeadline.legal_basis.length ? (
+                      <p className="muted">{selectedDeadline.legal_basis.join(" · ")}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
+
+        {side === "kaynak" ? (
+          result?.trace_nodes?.length ? (
+            <div style={{ padding: "0 0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ height: "380px" }}>
+                <DocumentTraceGraphView
+                  nodes={result.trace_nodes}
+                  edges={result.trace_edges ?? []}
+                  evidence={result.related}
+                  selected={selectedEvidence}
+                  onSelect={setSelectedEvidence}
+                />
+              </div>
+              {result.related.length ? (
+                <div className="source-stack">
+                  {result.related.map((item) => (
+                    <button
+                      key={item.chunk_id}
+                      type="button"
+                      className={`source-row ${selectedEvidence === item.n ? "selected" : ""}`}
+                      onClick={() => setSelectedEvidence(item.n)}
+                    >
+                      {item.mulga_warning ? "⚠ " : ""}[{item.n}] {item.law_no ? `K.${item.law_no} m.${item.article_no}` : item.title}
+                    </button>
+                  ))}
+                  {(() => {
+                    const selectedItem = result.related.find((item) => item.n === selectedEvidence);
+                    if (!selectedItem) return null;
+                    return (
+                      <article className="source-detail">
+                        <div className="source-meta">
+                          <span>
+                            {selectedItem.law_no ? `K.${selectedItem.law_no} m.${selectedItem.article_no}` : selectedItem.title}
+                          </span>
+                          <span className="badge">{selectedItem.authority || "resmi"}</span>
+                        </div>
+                        <div className="source-title">{selectedItem.title || "Başlıksız madde"}</div>
+                        <p className="source-content">{selectedItem.content}</p>
+                        {selectedItem.mulga_warning ? <p className="error">⚠ {selectedItem.mulga_warning}</p> : null}
+                        {selectedItem.graph_neighbors?.length ? (
+                          <p className="muted">
+                            Komşu madde:{" "}
+                            {selectedItem.graph_neighbors
+                              .slice(0, 3)
+                              .map((n) => (n.article_no ? `m.${n.article_no}` : n.title))
+                              .join(", ")}
+                          </p>
+                        ) : null}
+                      </article>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <p className="muted evrak-hint">Bu evrak için eşleşen mevzuat bulunamadı.</p>
+              )}
+            </div>
+          ) : (
+            <p className="muted evrak-hint">Önce evrak görüntülemeden dosya yükleyin veya çözün.</p>
+          )
+        ) : null}
+
         {side === "taslaklar" ? (
           result?.draft ? (
-            result.petition ? (
-              <PetitionPreview
-                petition={result.petition}
-                draft={result.draft}
-                badge={result.belge ?? result.action}
-              />
-            ) : (
-            <article className="evrak-draft">
-              <h2>Cevap taslağı</h2>
-              <p className="muted" style={{ fontSize: 12 }}>
-                Yazıcı: {writerLabel(result.writer)}
-                {result.belge ? ` · kalıp: ${BELGE_LABEL[result.belge] ?? result.belge}` : ""}
-                {result.writer_error ? ` · ${result.writer_error}` : ""}
-              </p>
-              {result.havale ? <p className="muted">Havale: {result.havale.unit}. {result.havale.note}</p> : null}
-              <pre className="draft-pre">{result.draft}</pre>
-            </article>
-            )
+            <div style={{ padding: "0 0.9rem 1rem" }}>
+              {result.legal_caveat ? (
+                <p className="legal-caveat" style={{ marginBottom: "0.7rem" }}>
+                  ⚖ {result.legal_caveat}
+                </p>
+              ) : null}
+              <div className="sheet-actions" style={{ marginBottom: "0.7rem" }}>
+                <DownloadActions
+                  content={result.draft}
+                  blocks={
+                    result.petition && result.petition.layout !== "resmi" && (result.petition.hitap || result.petition.sections?.length)
+                      ? petitionToBlocks(result.petition)
+                      : undefined
+                  }
+                  basename={downloadName}
+                />
+                {selectedKalip ? <span className="muted">{selectedKalip.title}</span> : null}
+              </div>
+              {result.petition ? (
+                <PetitionPreview
+                  petition={result.petition}
+                  draft={result.draft}
+                  badge={result.belge ?? result.action}
+                />
+              ) : (
+                <article className="evrak-draft">
+                  <h2>Cevap taslağı</h2>
+                  {result.havale ? (
+                    <p className="muted">Havale: {result.havale.unit}. {result.havale.note}</p>
+                  ) : null}
+                  <pre className="draft-pre">{result.draft}</pre>
+                </article>
+              )}
+            </div>
           ) : (
-            <p className="muted evrak-hint">Henüz taslak yok. Evrakı çözünce burada durur.</p>
+            <p className="muted evrak-hint">Henüz taslak yok. Görüntülemede «Taslak üret» deyin.</p>
           )
         ) : null}
       </section>

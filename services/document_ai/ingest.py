@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from dataclasses import dataclass
+from xml.etree import ElementTree
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MIN_TEXT_CHARS = 8
@@ -25,6 +28,23 @@ def _decode_text(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def _extract_docx(data: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            xml = archive.read("word/document.xml")
+    except Exception as exc:
+        raise UploadError("Word dosyası okunamadı.") from exc
+    root = ElementTree.fromstring(xml)
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs: list[str] = []
+    for para in root.findall(".//w:p", ns):
+        pieces = [(node.text or "") + (node.tail or "") for node in para.findall(".//w:t", ns)]
+        line = "".join(pieces).strip()
+        if line:
+            paragraphs.append(line)
+    return "\n".join(paragraphs)
 
 
 def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
@@ -63,4 +83,13 @@ def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
             raise UploadError("Metin dosyası çok kısa.")
         return ExtractedEvrak(text=text, filename=name, kind="txt", note="Düz metin okundu.")
 
-    raise UploadError("Yalnızca PDF veya TXT kabul edilir.")
+    if lower.endswith(".docx"):
+        text = _extract_docx(data)
+        if len(text) < MIN_TEXT_CHARS:
+            raise UploadError("Word dosyasından yeterli metin çıkmadı.")
+        return ExtractedEvrak(text=text, filename=name, kind="docx", note="Word belgesi okundu.")
+
+    if lower.endswith(".doc"):
+        raise UploadError("Eski .doc yerine .docx, PDF veya TXT yükleyin.")
+
+    raise UploadError("Yalnızca PDF, Word (.docx) veya TXT kabul edilir.")

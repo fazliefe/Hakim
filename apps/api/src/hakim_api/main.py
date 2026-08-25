@@ -4,11 +4,12 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -37,6 +38,12 @@ _load_dotenv()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    try:
+        from auth.store import get_store
+
+        get_store()
+    except Exception:
+        pass
     if "pytest" not in sys.modules:
         import threading
 
@@ -71,10 +78,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from hakim_api.auth import optional_user, router as auth_router
+
+app.include_router(auth_router)
+
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=2)
-    law_no: str = "5237"
+    # Varsayılan davranış AYNI kalıyor (TCK). `null` gönderilirse arama tüm
+    # kanunlara VE emsal karar index'ine (Yargıtay/Danıştay) açılır — bkz.
+    # HybridSearcher.search: law_no=None olduğunda kararlar da dahil edilir.
+    law_no: str | None = "5237"
 
 
 class EvidenceOut(BaseModel):
@@ -93,6 +107,7 @@ class EvidenceOut(BaseModel):
     retrievers: list[str]
     graph_neighbors: list[dict[str, Any]] = []
     used_in_answer: bool = False
+    mulga_warning: str | None = None
 
 
 class TraceNodeOut(BaseModel):
@@ -118,6 +133,7 @@ class ResearchResponse(BaseModel):
     writer: str = "extractive"
     writer_error: str | None = None
     reasoning: dict[str, Any] | None = None
+    observability: dict[str, Any] | None = None
 
 
 class DocumentRequest(BaseModel):
@@ -128,8 +144,9 @@ class DocumentRequest(BaseModel):
 @lru_cache(maxsize=1)
 def _engine():
     from graph.neo4j_client import create_neo4j_driver
-    from retrieval.embeddings import create_embedder
+    from retrieval.embeddings import create_decision_embedder, create_embedder
     from retrieval.es_client import create_es_client
+    from retrieval.mapping import DECISION_INDEX_NAME
     from retrieval.research import ResearchEngine
 
     es = create_es_client(os.environ.get("HAKIM_ELASTICSEARCH_URL", "http://127.0.0.1:9200"))
@@ -139,36 +156,60 @@ def _engine():
         neo4j.verify_connectivity()
     except Exception:
         neo4j = None
-    return ResearchEngine(es, embedder=embedder, neo4j_driver=neo4j)
+    # Emsal karar (Yargıtay/Danıştay) index'i — kanun index'inden AYRI embedder
+    # (Evren bge-m3-embed, 1024 dims), law_no'suz sorgularda devreye girer.
+    decision_embedder = create_decision_embedder()
+    return ResearchEngine(
+        es,
+        embedder=embedder,
+        neo4j_driver=neo4j,
+        decision_index=DECISION_INDEX_NAME,
+        decision_embedder=decision_embedder,
+    )
 
 
-def _retrieve_related(query: str) -> list[dict[str, Any]]:
+def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, Any]]:
+    """Evrak analizi için mevzuat kaynağı: hybrid arama → rerank → Neo4j
+    komşuluğu. Araştırma yüzeyinin (research.py) aynı bileşenlerini kullanır,
+    böylece evrak/işlem taslağı da rank/skor/atıf metadatasıyla izlenebilir.
+
+    `at` verildiğinde (evrakın tebliğ/karar tarihi), arama o tarihte yürürlükte
+    olan madde versiyonlarıyla sınırlanır — bkz. `retrieval.mapping.corpus_filters`.
+    """
+    from retrieval.hybrid import fused_to_dict
+    from retrieval.mapping import detect_mulga_warning
+    from retrieval.rerank import rerank_fused
+    from retrieval.research import collect_neighbors
+
     try:
-        fused = _engine().hybrid.search(query, law_no=None, limit=4)
+        fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
     except Exception:
         return []
+    ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
+    neighbors = collect_neighbors(_engine(), ranked)
     rows: list[dict[str, Any]] = []
-    for hit in fused:
-        rows.append(
-            {
-                "n": hit.rank,
-                "chunk_id": hit.chunk_id,
-                "document_id": hit.hit.document_id,
-                "law_no": hit.hit.law_no,
-                "article_no": hit.hit.article_no,
-                "title": hit.hit.title,
-                "content": (hit.hit.content or "")[:220],
-                "authority": hit.hit.authority,
-            }
+    for hit in ranked:
+        row = fused_to_dict(hit)
+        row["n"] = hit.rank
+        # Mülga taraması kırpılmamış tam metinden — uyarı 400 karakterden
+        # sonra da olabilir (bkz. CMK m.291 fıkra 2).
+        row["mulga_warning"] = detect_mulga_warning(
+            hit.hit.content or "", is_decision=bool((hit.hit.document_id or "").startswith("decision:"))
         )
+        row["content"] = (hit.hit.content or "")[:400]
+        row["used_in_answer"] = True
+        row["graph_neighbors"] = neighbors.get(hit.chunk_id) or []
+        rows.append(row)
     return rows
 
 
 def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) -> dict[str, Any]:
     from document_ai.agents import elapsed_ms, mark_writer, now
     from document_ai.pipeline import analysis_to_dict, analyze_document
+    from llm.usage import reset_usage, take_usage, usage_totals
     from llm.writer import ACTION_TO_BELGE, compose_islem, write_module, writer_name
 
+    reset_usage()  # önceki istekten kalmış kullanım verisiyle karışmasın
     retrieve = _retrieve_related if _check_elasticsearch() == "ok" else None
     payload = analysis_to_dict(analyze_document(text, retrieve=retrieve))
     payload["writer"] = "extractive"
@@ -201,11 +242,28 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             payload["draft"] = draft
             payload["writer"] = writer_name()
             mark_writer(payload.get("agents") or [], writer=payload["writer"], ms=elapsed_ms(started))
+            if surface != "surec":
+                from document_ai.gaps import merge_placeholder_gaps
+
+                payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
     except Exception as exc:
         payload["writer"] = "extractive"
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    usage = take_usage()
+    if isinstance(payload.get("observability"), dict):
+        payload["observability"]["totals"] = usage_totals(usage)
     return payload
+
+
+def _record_activity(_user: Any, _kind: str, _summary: str, _detail: dict[str, Any] | None = None) -> None:
+    return
+
+
+# Topbar pills are live probes only. "ok" means that process answered now.
+# Docker Desktop being open, a key in .env, or a Python import is not enough.
+LIVE_OK = "ok"
+LIVE_DOWN = "kapalı"
 
 
 def _check_elasticsearch() -> str:
@@ -214,9 +272,9 @@ def _check_elasticsearch() -> str:
         from retrieval.es_client import DEFAULT_ES_URL
 
         es = Elasticsearch(DEFAULT_ES_URL, request_timeout=1.5)
-        return "ok" if es.ping() else "kapalı"
+        return LIVE_OK if es.ping() else LIVE_DOWN
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_neo4j() -> str:
@@ -226,9 +284,9 @@ def _check_neo4j() -> str:
         driver = create_neo4j_driver()
         driver.verify_connectivity()
         driver.close()
-        return "ok"
+        return LIVE_OK
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_postgres() -> str:
@@ -238,23 +296,46 @@ def _check_postgres() -> str:
         url = os.environ.get("HAKIM_DATABASE_URL", "postgresql://hakim:hakim@127.0.0.1:5433/hakim")
         with psycopg.connect(url, connect_timeout=1) as conn:
             conn.execute("SELECT 1")
-        return "ok"
+        return LIVE_OK
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
-_OLLAMA_CHECK: dict[str, Any] = {"at": 0.0, "value": "kapalı"}
+_OLLAMA_CHECK: dict[str, Any] = {"at": 0.0, "value": LIVE_DOWN}
+_YAZIM_CHECK: dict[str, Any] = {"at": 0.0, "value": LIVE_DOWN}
 
 
 def _check_yazim() -> str:
+    now = time.monotonic()
+    if now - float(_YAZIM_CHECK["at"]) < 20:
+        return str(_YAZIM_CHECK["value"])
+    value = LIVE_DOWN
     try:
-        from llm.api_client import api_configured
+        from llm.api_client import api_configured, _headers
+        from hakim_config import get_models
 
         if api_configured():
-            return "ok"
+            import urllib.request
+
+            key = os.environ.get("HAKIM_LLM_API_KEY", "").strip()
+            base = get_models().llm_url.rstrip("/")
+            request = urllib.request.Request(f"{base}/models", headers=_headers(key), method="GET")
+            with urllib.request.urlopen(request, timeout=2.5) as response:
+                if 200 <= int(response.status) < 300:
+                    value = LIVE_OK
+        else:
+            value = _check_ollama()
     except Exception:
-        pass
-    return _check_ollama()
+        try:
+            from llm.api_client import api_configured
+
+            if not api_configured():
+                value = _check_ollama()
+        except Exception:
+            value = LIVE_DOWN
+    _YAZIM_CHECK["at"] = now
+    _YAZIM_CHECK["value"] = value
+    return value
 
 
 def _check_ollama() -> str:
@@ -264,9 +345,9 @@ def _check_ollama() -> str:
     try:
         from llm.client import ping
 
-        value = "ok" if ping() else "kapalı"
+        value = LIVE_OK if ping() else LIVE_DOWN
     except Exception:
-        value = "kapalı"
+        value = LIVE_DOWN
     _OLLAMA_CHECK["at"] = now
     _OLLAMA_CHECK["value"] = value
     return value
@@ -276,24 +357,34 @@ def _check_langfuse() -> str:
     try:
         from document_ai.observability import langfuse_configured
 
-        return "ok" if langfuse_configured() else "kapalı"
+        return LIVE_OK if langfuse_configured() else LIVE_DOWN
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 def _check_langgraph() -> str:
-    try:
-        import langgraph  # noqa: F401
+    return _check_neo4j()
 
-        return "ok"
+
+def _check_deadline_calendar() -> str:
+    """Sürekli-güncel VERİ kontrolü — Docker gibi çalışan bir servis değil,
+    services/deadline/engine.py::_RELIGIOUS_HOLIDAYS tablosunun ileriye
+    dönük yeterince güncel olup olmadığını gösterir (bkz. o dosyadaki not).
+    `required`e eklenmiyor: tablo eskiyince yalnızca bayram günlerine denk
+    gelen süre hesapları ±birkaç gün kayabilir, tüm API'yi "kapalı" saymak
+    orantısız olur — diğer pilller gibi bilgilendirici kalır."""
+    try:
+        from deadline.engine import religious_holiday_table_status
+
+        return LIVE_OK if religious_holiday_table_status()["ok"] else LIVE_DOWN
     except Exception:
-        return "kapalı"
+        return LIVE_DOWN
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
     checks = {
-        "api": "ok",
+        "api": LIVE_OK,
         "elasticsearch": _check_elasticsearch(),
         "neo4j": _check_neo4j(),
         "postgres": _check_postgres(),
@@ -301,12 +392,14 @@ def health() -> dict[str, Any]:
         "ollama": _check_ollama(),
         "langfuse": _check_langfuse(),
         "langgraph": _check_langgraph(),
+        "takvim": _check_deadline_calendar(),
     }
     required = ("api", "elasticsearch", "neo4j", "postgres")
+    live = all(checks[key] == LIVE_OK for key in required)
     return {
-        "status": "ok",
+        "status": LIVE_OK if live else LIVE_DOWN,
         "service": "hakim-api",
-        "ready": all(checks[key] == "ok" for key in required),
+        "ready": live,
         "checks": checks,
     }
 
@@ -323,6 +416,7 @@ def durum() -> dict[str, Any]:
         "ollama": "Ollama",
         "langfuse": "Langfuse",
         "langgraph": "LangGraph",
+        "takvim": "Süre takvimi",
     }
     return payload
 
@@ -459,12 +553,18 @@ def belgeler() -> dict[str, Any]:
 
 
 @app.post("/v1/arastirma", response_model=ResearchResponse)
-def arastirma(body: ResearchRequest) -> ResearchResponse:
+def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchResponse:
     try:
-        result = _engine().research(body.query.strip(), law_no=body.law_no)
+        result = _engine().research(body.query.strip(), law_no=(body.law_no or None))
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=503, detail=f"Araştırma motoru hazır değil: {exc}") from exc
 
+    _record_activity(
+        user,
+        "arastirma",
+        "Araştırma sorgusu çalıştırıldı",
+        {"route": result.route, "writer": result.writer},
+    )
     return ResearchResponse(
         query=result.query,
         answer=result.answer,
@@ -475,16 +575,20 @@ def arastirma(body: ResearchRequest) -> ResearchResponse:
         writer=result.writer,
         writer_error=result.writer_error,
         reasoning=result.reasoning or None,
+        observability=result.observability or None,
     )
 
 
 @app.post("/v1/evrak")
-def evrak(body: DocumentRequest) -> dict[str, Any]:
-    return _analyze(body.text, surface="evrak")
+def evrak(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    payload = _analyze(body.text, surface="evrak")
+    label = (payload.get("classification") or {}).get("label") or "evrak"
+    _record_activity(user, "evrak", f"Evrak: {label}", {"label": label, "verdict": payload.get("verdict")})
+    return payload
 
 
 @app.post("/v1/evrak/dosya")
-async def evrak_dosya(file: UploadFile = File(...)) -> dict[str, Any]:
+async def evrak_dosya(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
     from document_ai.ingest import UploadError, extract_upload
 
     data = await file.read()
@@ -497,16 +601,30 @@ async def evrak_dosya(file: UploadFile = File(...)) -> dict[str, Any]:
     payload["source_kind"] = extracted.kind
     payload["extract_note"] = extracted.note
     payload["text"] = extracted.text
+    label = (payload.get("classification") or {}).get("label") or "evrak"
+    _record_activity(
+        user,
+        "evrak",
+        f"Dosya: {extracted.filename} ({label})",
+        {"filename": extracted.filename, "label": label},
+    )
     return payload
 
 
 @app.post("/v1/surec")
-def surec(body: DocumentRequest) -> dict[str, Any]:
-    return _analyze(body.text, surface="surec")
+def surec(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    payload = _analyze(body.text, surface="surec")
+    _record_activity(
+        user,
+        "surec",
+        "Süreç analizi",
+        {"stage": (payload.get("classification") or {}).get("stage"), "verdict": payload.get("verdict")},
+    )
+    return payload
 
 
 @app.post("/v1/islem")
-def islem(body: DocumentRequest) -> dict[str, Any]:
+def islem(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     from document_ai.route_islem import ACTION_TITLES, route_islem
     from llm.writer import ACTION_TO_BELGE
 
@@ -530,17 +648,39 @@ def islem(body: DocumentRequest) -> dict[str, Any]:
     payload["uyap_note"] = (
         "UYAP entegrasyonu yok. Taslağı indirip vatandas.uyap.gov.tr üzerinden yetkili kullanıcı gönderir."
     )
+    _record_activity(
+        user,
+        "islem",
+        f"İşlem: {payload.get('belge') or action}",
+        {"action": payload.get("action"), "belge": payload.get("belge")},
+    )
     return payload
 
 
+@app.post("/v1/islem/anla")
+def islem_anla(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    from document_ai.route_islem import route_islem
+
+    routed = route_islem(body.text)
+    return {
+        "action": routed.action,
+        "title": routed.title,
+        "reason": routed.reason,
+        "evidence": routed.evidence,
+        "confidence": routed.confidence,
+    }
+
+
 @app.post("/v1/senaryo")
-def senaryo(body: DocumentRequest) -> dict[str, Any]:
+def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     """Görev 1+2 tek paket: oku → sınıf → mevzuat → süre → resmi yazı → havale."""
     from document_ai.agents import build_reasoning, elapsed_ms, mark_writer, now
     from document_ai.answers import format_havale
     from document_ai.pipeline import analysis_to_dict, analyze_document
+    from llm.usage import reset_usage, take_usage, usage_totals
     from llm.writer import ACTION_TO_BELGE, compose_islem, writer_name
 
+    reset_usage()
     retrieve = _retrieve_related if _check_elasticsearch() == "ok" else None
     analysis = analyze_document(body.text, retrieve=retrieve)
     explicit = (body.action or "").strip().lower()
@@ -572,6 +712,9 @@ def senaryo(body: DocumentRequest) -> dict[str, Any]:
             payload["petition"] = petition
             payload["writer"] = writer_name()
             mark_writer(payload.get("agents") or [], writer=payload["writer"], ms=elapsed_ms(started))
+            from document_ai.gaps import merge_placeholder_gaps
+
+            payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
     except Exception as exc:
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
@@ -581,7 +724,16 @@ def senaryo(body: DocumentRequest) -> dict[str, Any]:
         route_reason=reason,
     )
     payload["chain_status"] = payload["reasoning"]["status"]
+    usage = take_usage()
+    if isinstance(payload.get("observability"), dict):
+        payload["observability"]["totals"] = usage_totals(usage)
     payload["uyap_note"] = (
         "UYAP entegrasyonu yok. Taslağı indirip vatandas.uyap.gov.tr üzerinden yetkili kullanıcı gönderir."
+    )
+    _record_activity(
+        user,
+        "senaryo",
+        f"Senaryo: {payload.get('belge') or action}",
+        {"action": payload.get("action"), "belge": payload.get("belge")},
     )
     return payload

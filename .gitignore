@@ -13,6 +13,7 @@ build/
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 
 .env
 .env.local
@@ -24,10 +25,19 @@ Thumbs.db
 
 data/raw/
 data/minio/
+data/accounts.sqlite
+data/accounts.sqlite-*
 data/_sample_*.html
 data2/
 data/_tmp_*.json
+data/hf_cache/
+data/tessdata/
 !data/raw/.gitkeep
+
+# Cloudflare Tunnel: gerçek tunnel ID / hostname / credentials makineye
+# özeldir, commit edilmez. Şablon (config.yml.example) tracked kalır.
+infra/cloudflared/config.yml
+infra/cloudflared/*.json
 
 # Local models and unrelated checkouts — not needed to run the app
 Anadolum-main/

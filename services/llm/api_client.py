@@ -32,14 +32,30 @@ def api_chat(
     **_kwargs: Any,
 ) -> str:
     def _run() -> str:
-        return _api_chat_body(messages, timeout=timeout, json_mode=json_mode)
+        try:
+            return _api_chat_body(messages, timeout=timeout, json_mode=json_mode)
+        except OllamaError as exc:
+            if json_mode and "json_validate_failed" in str(exc).lower():
+                return _api_chat_body(messages, timeout=timeout, json_mode=False)
+            raise
 
     try:
         from document_ai.observability import observe_generation
 
         return observe_generation("llm-api", messages, _run)
+    except OllamaError:
+        raise
     except Exception:
         return _run()
+
+
+def _record_usage(body: dict[str, Any], *, model: str) -> None:
+    try:
+        from llm.usage import record_usage_from_response
+
+        record_usage_from_response(body, model=model)
+    except Exception:
+        pass
 
 
 def _api_chat_body(
@@ -62,6 +78,10 @@ def _api_chat_body(
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
+    if cfg.llm_disable_reasoning:
+        # vLLM/Qwen3 thinking modu varsayılan açık; karmaşık promptlarda
+        # reasoning izi max_tokens'ı tüketip boş içerik döndürebiliyor.
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         f"{base}/chat/completions",
@@ -73,10 +93,15 @@ def _api_chat_body(
         with urllib.request.urlopen(request, timeout=timeout or cfg.llm_timeout) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:180]
-        raise OllamaError(f"LLM API {exc.code}: {detail}") from exc
+        detail = exc.read().decode("utf-8", errors="replace")
+        try:
+            _record_usage(json.loads(detail), model=model)
+        except Exception:
+            pass
+        raise OllamaError(f"LLM API {exc.code}: {detail[:180]}") from exc
     except urllib.error.URLError as exc:
         raise OllamaError(str(exc)) from exc
+    _record_usage(body, model=model)
     choices = body.get("choices") or []
     message = ((choices[0].get("message") or {}) if choices else {}).get("content") or ""
     if not str(message).strip():

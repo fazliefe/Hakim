@@ -1,10 +1,11 @@
-import { Suspense } from "react";
-import { KamuWorkbench } from "@/components/KamuWorkbench";
+import { redirect } from "next/navigation";
 
-export default function KamuPage() {
-  return (
-    <Suspense fallback={<p className="muted" style={{ padding: "2rem" }}>Yükleniyor…</p>}>
-      <KamuWorkbench />
-    </Suspense>
-  );
+export default async function KamuPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ kalip?: string }>;
+}) {
+  const params = await searchParams;
+  const kalip = params.kalip?.trim();
+  redirect(kalip ? `/evrak?kalip=${encodeURIComponent(kalip)}` : "/evrak");
 }

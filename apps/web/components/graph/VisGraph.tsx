@@ -11,6 +11,9 @@ export type VisNode = {
   group?: string;
   size?: number;
   level?: number;
+  x?: number;
+  y?: number;
+  fixed?: boolean;
   shape?: "dot" | "box" | "diamond" | "ellipse";
   color?: {
     background: string;
@@ -27,6 +30,7 @@ export type VisEdge = {
   to: string;
   label?: string;
   color?: string;
+  dashes?: boolean;
 };
 
 type Props = {
@@ -61,6 +65,30 @@ const baseOptions: Options = {
   },
 };
 
+function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const id = String(item.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+  }
+  return out;
+}
+
+function uniqueEdges(edges: VisEdge[]): VisEdge[] {
+  const ids = new Set<string>();
+  const out: VisEdge[] = [];
+  edges.forEach((edge, index) => {
+    const id = String(edge.id || `e${index}`);
+    if (ids.has(id)) return;
+    ids.add(id);
+    out.push({ ...edge, id });
+  });
+  return out.map((edge, index) => ({ ...edge, id: `e${index}` }));
+}
+
 export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -73,11 +101,14 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
     const el = containerRef.current;
     if (!el) return;
 
+    const cleanNodes = uniqueById(nodes.map(({ evidenceN: _evidenceN, ...node }) => node));
+    const nodeIds = new Set(cleanNodes.map((node) => String(node.id)));
     const payload = {
-      nodes: nodes.map(({ evidenceN: _evidenceN, ...node }) => node),
-      edges,
+      nodes: cleanNodes,
+      edges: uniqueEdges(edges.filter((edge) => nodeIds.has(String(edge.from)) && nodeIds.has(String(edge.to)))),
     };
 
+    const hasFixed = cleanNodes.some((node) => node.x != null && node.y != null);
     const options: Options = hierarchical
       ? {
           ...baseOptions,
@@ -95,6 +126,16 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
           },
           physics: { enabled: false },
         }
+      : hasFixed
+        ? {
+            ...baseOptions,
+            layout: { hierarchical: { enabled: false }, improvedLayout: false, randomSeed: 1 },
+            physics: { enabled: false },
+            edges: {
+              ...baseOptions.edges,
+              smooth: { enabled: true, type: "cubicBezier", forceDirection: "horizontal", roundness: 0.38 },
+            },
+          }
       : {
           ...baseOptions,
           layout: { improvedLayout: nodes.length < 120, hierarchical: { enabled: false } },
@@ -111,7 +152,12 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
           },
         };
 
-    const network = new Network(el, payload, options);
+    let network: Network;
+    try {
+      network = new Network(el, payload, options);
+    } catch {
+      return;
+    }
     const resize = () => {
       if (!el.clientWidth || !el.clientHeight) return;
       network.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
@@ -124,7 +170,7 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
       network.setOptions({ physics: { enabled: false } });
       network.fit({ animation: false });
     });
-    if (hierarchical) {
+    if (hierarchical || hasFixed) {
       network.fit({ animation: false });
     }
     network.on("click", (params) => {

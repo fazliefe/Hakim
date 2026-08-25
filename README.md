@@ -18,7 +18,7 @@ Gelen metni okur, türünü ve eksiklerini gösterir, ilgili mevzuata bağlar, s
 
 - Python 3.12+, [uv](https://docs.astral.sh/uv/)
 - Node 20+
-- Docker (Postgres, isteğe bağlı Elasticsearch / Neo4j)
+- Docker (Postgres, Elasticsearch, Neo4j; `docker compose up -d`)
 - Groq veya Ollama anahtarı (yazım için; yoksa extractive taslak üretilir)
 
 ## Kurulum
@@ -33,11 +33,12 @@ copy .env.example .env
 
 ```powershell
 cd infra
-docker compose up -d postgres redis minio
-docker compose --profile search --profile graph up -d
+docker compose up -d
 cd ..
 uv sync
 ```
+
+Üst çubuktaki pill’ler canlı kontroldür: süreç cevap veriyorsa yeşil, vermiyorsa kırmızıdır. Docker Desktop’ın açık olması yetmez. API (uvicorn) ve arayüz (`npm run dev`) Docker’da değildir; ayrı açılır.
 
 İki terminal:
 

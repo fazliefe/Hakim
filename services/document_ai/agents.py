@@ -141,6 +141,10 @@ def route_yazisma(classification: Classification) -> tuple[str, str]:
     nature = classification.legal_nature
     if kind == "mahkeme_karari" and nature == "ceza":
         return "istinaf", "İlk derece ceza hükmü → istinaf dilekçesi (CMK m.273)."
+    if kind == "mahkeme_karari" and nature == "hukuk":
+        if classification.stage == "temyiz":
+            return "temyiz_hukuk", "Bölge Adliye Mahkemesi (istinaf) kararı → temyiz dilekçesi (HMK m.361)."
+        return "istinaf_hukuk", "İlk derece hukuk hükmü → istinaf dilekçesi (HMK m.345)."
     if kind == "iddianame":
         return "cevap", "İddianame → cevap dilekçesi."
     if kind == "tebligat":

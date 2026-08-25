@@ -25,7 +25,9 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "remedy": "itiraz",
         "nature": "ceza",
         "trigger": "teblig",
-        "duration": 7,
+        # CMK m.268/1: "...kararı öğrendiği günden itibaren iki hafta içinde..."
+        # — 7 gün değil, 14 gün.
+        "duration": 14,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.CRIMINAL,
         "legal_basis": ("law:5271:article:268",),
@@ -35,10 +37,17 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "id": "deadline:istinaf:cmk273",
         "name": "İstinaf",
         "procedure": "ceza_kovusturma",
-        "remedy": "istinaf",
+        # "istinaf_ceza" — hukuk davaları için ayrı "istinaf_hukuk"/HMK m.345
+        # kuralı eklendiğinde (bkz. aşağı), aynı bare "istinaf" etiketi
+        # paylaşılırsa hukuk davalarına da bu CMK kuralı uygulanıyordu (canlı
+        # bir BAM/istinaf tazminat kararıyla doğrulandı) — nitelik-bazlı ayrıldı.
+        "remedy": "istinaf_ceza",
         "nature": "ceza",
         "trigger": "teblig",
-        "duration": 7,
+        # CMK m.273/1: "...tebliğ edildiği tarihten itibaren iki hafta içinde..."
+        # — 7 gün değil, 14 gün. (Yazım modülünün ürettiği taslak metni zaten
+        # doğru şekilde "iki hafta" diyordu; süre motoru bununla çelişiyordu.)
+        "duration": 14,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.CRIMINAL,
         "legal_basis": ("law:5271:article:273",),
@@ -48,10 +57,12 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "id": "deadline:temyiz:cmk291",
         "name": "Temyiz",
         "procedure": "ceza_istinaf",
-        "remedy": "temyiz",
+        "remedy": "temyiz_ceza",
         "nature": "ceza",
         "trigger": "teblig",
-        "duration": 15,
+        # CMK m.291/1: "...tebliğ edildiği tarihten itibaren iki hafta içinde..."
+        # — 15 gün değil, 14 gün.
+        "duration": 14,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.CRIMINAL,
         "legal_basis": ("law:5271:article:291",),
@@ -71,12 +82,55 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "legal_basis_label": "6216 s.K. m.47",
     },
     {
+        "id": "deadline:istinaf_hukuk:hmk345",
+        "name": "İstinaf (hukuk)",
+        "procedure": "hukuk_ilk_derece",
+        "remedy": "istinaf_hukuk",
+        "nature": "hukuk",
+        "trigger": "teblig",
+        # HMK m.345/1: "İstinaf yoluna başvuru süresi, ilamın... tebliğiyle
+        # işlemeye başlar... aksine kanun hükmü bulunmadıkça iki haftadır."
+        # HMK arşive henüz alınmadı (sadece TCK/CMK/İYUK/6216 var) — bu yüzden
+        # canonical law: id yok, sadece okunabilir atıf (bkz. dosya başı notu).
+        # CalendarType.CIVIL kullanıldı (AYM m.47 kuralıyla aynı grup); HMK
+        # m.93 (resmi tatil erteleme) ve m.102/104 (adli tatil + 7 gün uzama)
+        # CIVIL takvimi için deadline/engine.py::compute_last_day() içinde
+        # genelleştirildi — bkz. o dosyanın başındaki not.
+        "duration": 14,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CIVIL,
+        "legal_basis": ("HMK m.345",),
+        "legal_basis_label": "HMK m.345",
+    },
+    {
+        "id": "deadline:temyiz_hukuk:hmk361",
+        "name": "Temyiz (hukuk)",
+        "procedure": "hukuk_istinaf",
+        "remedy": "temyiz_hukuk",
+        "nature": "hukuk",
+        "trigger": "teblig",
+        # HMK m.361/1: "Temyiz süresi, ilamın... tebliğiyle işlemeye başlar ve
+        # iki haftadır."
+        "duration": 14,
+        "unit": DurationUnit.DAY,
+        "calendar": CalendarType.CIVIL,
+        "legal_basis": ("HMK m.361",),
+        "legal_basis_label": "HMK m.361",
+    },
+    {
         "id": "deadline:idari_dava:iyuk7",
         "name": "İdari dava açma süresi",
         "procedure": "idari_dava",
         "remedy": "idari_dava",
         "nature": "idare",
         "trigger": "teblig",
+        # İYUK m.7/1: "...Danıştayda ve idare mahkemelerinde altmış... gündür."
+        # (vergi mahkemesinde otuz gün — ayrı, daha dar bir durum; genel kural
+        # burada uygulanıyor). İYUK m.8/2 (resmi tatil erteleme) ve m.8/3 +
+        # m.61 (çalışmaya ara verme: 20 Temmuz-31 Ağustos + 7 gün uzama)
+        # ADMINISTRATIVE takvimi için deadline/engine.py::compute_last_day()
+        # içinde genelleştirildi — önceki sürümdeki "ceza takviminin hafta
+        # sonu erteleme kuralı burada yok" notu YANLIŞTI, düzeltildi.
         "duration": 60,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.ADMINISTRATIVE,

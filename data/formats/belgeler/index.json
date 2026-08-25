@@ -40,6 +40,18 @@
       "makam": "Yargıtay ilgili ceza dairesi"
     },
     {
+      "id": "istinaf_hukuk",
+      "title": "İstinaf dilekçesi (hukuk)",
+      "when": "İlk derece hukuk mahkemesi hükmüne karşı istinaf (HMK m.345).",
+      "makam": "Bölge Adliye Mahkemesi (ilgili hukuk dairesi)"
+    },
+    {
+      "id": "temyiz_hukuk",
+      "title": "Temyiz dilekçesi (hukuk)",
+      "when": "Hukuk davasında istinaf kararına karşı temyiz (HMK m.361).",
+      "makam": "Yargıtay ilgili hukuk dairesi"
+    },
+    {
       "id": "katilma",
       "title": "Davaya katılma talebi",
       "when": "Kamu davasına katılma (CMK m.237).",

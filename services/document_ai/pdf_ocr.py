@@ -13,6 +13,10 @@ WORKER = ROOT / "scripts" / "paddle_ocr_worker.py"
 OCR_VENV_PY = ROOT / ".venv-ocr" / ("Scripts" if os.name == "nt" else "bin") / (
     "python.exe" if os.name == "nt" else "python"
 )
+# Tesseract'ın kendi Program Files kurulumu admin yetkisi olmadan yazılamıyor
+# (Türkçe dil verisi kurulum sırasında seçilmemişse eklenemiyor) — bu yüzden
+# repo içinde yazılabilir bir tessdata klasörü tutuyoruz (eng+osd+tur).
+REPO_TESSDATA_DIR = ROOT / "data" / "tessdata"
 
 # Bozuk/ağır bir PDF, OCR alt-sürecini süresiz kilitlemesin. Yerel CPU'da PaddleOCR
 # ~4 dk/sayfa olabiliyor (bkz. COLAB_OCR.md); varsayılan geniş tutuldu, gerekirse
@@ -42,6 +46,15 @@ def _default_tesseract_cmd() -> str | None:
     ):
         if Path(candidate).exists():
             return candidate
+    return None
+
+
+def _tessdata_dir() -> Path | None:
+    env = os.environ.get("TESSDATA_PREFIX") or os.environ.get("HAKIM_TESSDATA_DIR")
+    if env and (Path(env) / "tur.traineddata").exists():
+        return Path(env)
+    if (REPO_TESSDATA_DIR / "tur.traineddata").exists():
+        return REPO_TESSDATA_DIR
     return None
 
 
@@ -167,6 +180,12 @@ def extract_pdf_ocr_tesseract(
     cmd = _configure_tesseract()
     if not cmd:
         raise RuntimeError("tesseract not found")
+    tessdata_dir = _tessdata_dir()
+    # pytesseract config string'i shlex ile bölüyor (POSIX kuralları) —
+    # Windows'ta ters slash + tırnak birleşimi yanlış parse ediliyor (canlı
+    # doğrulandı: tırnak yol dizesine yapışıp dosya bulunamıyordu). Tırnaksız,
+    # ileri-slash'lı yol hem Windows hem tesseract için sorunsuz çalışıyor.
+    config = f"--tessdata-dir {tessdata_dir.as_posix()}" if tessdata_dir else ""
 
     doc = fitz.open(stream=data, filetype="pdf")
     try:
@@ -183,14 +202,14 @@ def extract_pdf_ocr_tesseract(
             try:
                 parts.append(
                     pytesseract.image_to_string(
-                        image, lang=lang, timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
+                        image, lang=lang, config=config, timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
                     )
                     or ""
                 )
             except pytesseract.TesseractError:
                 parts.append(
                     pytesseract.image_to_string(
-                        image, lang="eng", timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
+                        image, lang="eng", config=config, timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
                     )
                     or ""
                 )

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { writerLabel } from "@/lib/api";
-import { STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const SIDE = [
   { id: "asama", label: "Aşama" },
@@ -84,26 +84,36 @@ export function SurecWorkbench() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             aria-label="Karar veya tebligat metni"
+            placeholder="Karar veya tebligat metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
             rows={4}
             spellCheck={false}
           />
-          <button type="submit" disabled={loading || text.trim().length < 8}>
-            {loading ? "Hesaplanıyor…" : "Süreleri hesapla"}
-          </button>
+          <div className="surec-input-actions">
+            <button type="submit" disabled={loading || text.trim().length < 8}>
+              {loading ? "Hesaplanıyor…" : "Süreleri hesapla"}
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => setText(SAMPLE_EVRAK)} disabled={loading}>
+              Örnek metni yükle
+            </button>
+          </div>
         </form>
         {error ? <p className="error">{error}</p> : null}
+        {result?.legal_caveat ? (
+          <p className="legal-caveat" style={{ margin: "0 0.9rem 0.9rem" }}>
+            ⚖ {result.legal_caveat}
+          </p>
+        ) : null}
         {result?.draft ? (
           <article className="evrak-draft" style={{ margin: "0 0.9rem 1rem" }}>
             <h2>Usul anlatımı</h2>
             <p className="muted" style={{ fontSize: 12 }}>
-              Süre rakamları kural motorundan. Yazıcı: {writerLabel(result.writer)}
-              {result.writer_error ? ` · ${result.writer_error}` : ""}
+              Süreler mevzuattaki süre kurallarına göre hesaplanır.
             </p>
             <pre className="draft-pre">{result.draft}</pre>
           </article>
         ) : null}
         {!result ? (
-          <p className="muted surec-empty">Örnek gerekçeli kararı bırakıp süreleri hesaplayın.</p>
+          <p className="muted surec-empty">Bir karar/tebligat metni yapıştırıp süreleri hesaplayın.</p>
         ) : side === "asama" ? (
           <ol className="stage-rail" style={{ margin: "0 1.2rem 1rem" }}>
             {result.stages.map((stage) => (

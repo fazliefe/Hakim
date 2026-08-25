@@ -8,7 +8,24 @@ from hakim_legal_schema.ids import article_id
 from hakim_legal_schema.ingestion import IngestionReport
 
 from courts.bedesten import ParsedDecision
-from graph.citations import extract_article_citations
+from graph.citations import extract_law_article_citations
+
+
+def _known_articles_by_law(conn) -> dict[str, set[str]]:
+    """Postgres'te şu an ingest edilmiş TÜM kanunların madde numaraları,
+    kanun no'suna göre gruplu. Hardcoded tek-kanun (TCK) varsayımı yerine —
+    yeni bir kanun ingest edildiğinde otomatik kapsanır."""
+    known: dict[str, set[str]] = {}
+    rows = conn.execute(
+        """
+        SELECT ld.number, a.article_no
+        FROM articles a
+        JOIN legal_documents ld ON ld.id = a.document_id
+        """
+    ).fetchall()
+    for law_no, article_no in rows:
+        known.setdefault(law_no, set()).add(article_no)
+    return known
 
 
 def write_decisions(
@@ -16,17 +33,10 @@ def write_decisions(
     decisions: list[ParsedDecision],
     *,
     source_id: str,
-    cite_law_no: str = "5237",
 ) -> IngestionReport:
     warnings: list[str] = []
     now = datetime.now(timezone.utc)
-    known_articles = {
-        row[0]
-        for row in conn.execute(
-            "SELECT article_no FROM articles WHERE document_id = %s",
-            (f"law:{cite_law_no}",),
-        ).fetchall()
-    }
+    known_articles = _known_articles_by_law(conn)
     written = 0
     last_id = source_id
     for decision in decisions:
@@ -34,13 +44,14 @@ def write_decisions(
         conn.execute(
             """
             INSERT INTO court_decisions
-                (id, court_id, year, docket_no, decision_no, decision_date, title, body, source_id, content_hash)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (id, court_id, year, docket_no, decision_no, decision_date, title, body, source_id, content_hash, chamber)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (court_id, year, docket_no, decision_no) DO UPDATE SET
                 title = EXCLUDED.title,
                 body = EXCLUDED.body,
                 decision_date = EXCLUDED.decision_date,
-                content_hash = EXCLUDED.content_hash
+                content_hash = EXCLUDED.content_hash,
+                chamber = EXCLUDED.chamber
             """,
             (
                 decision.id,
@@ -53,6 +64,7 @@ def write_decisions(
                 decision.body,
                 decision.source_id,
                 decision.content_hash,
+                decision.chamber,
             ),
         )
         conn.execute(
@@ -64,9 +76,9 @@ def write_decisions(
             """,
             (decision.court_id, decision.id),
         )
-        cites = extract_article_citations(decision.body or "", from_article_no="_")
+        cites = extract_law_article_citations(decision.body or "", from_article_no="_")
         for cite in cites:
-            if cite.to_article_no not in known_articles:
+            if cite.to_article_no not in known_articles.get(cite.law_no, set()):
                 continue
             conn.execute(
                 """
@@ -75,7 +87,7 @@ def write_decisions(
                 VALUES (%s, 'decision', %s, 'article', 'CITES', 'official_text', 1.0)
                 ON CONFLICT (from_id, to_id, relation_type, provenance) DO NOTHING
                 """,
-                (decision.id, article_id(cite_law_no, cite.to_article_no)),
+                (decision.id, article_id(cite.law_no, cite.to_article_no)),
             )
         written += 1
 

@@ -1,28 +1,23 @@
 from __future__ import annotations
 
-import json
 import re
 from typing import Any, Callable
 
 from llm.api_client import api_chat, api_configured
 from llm.client import OllamaError, chat, ollama_enabled, parse_json_content, ping
-from llm.formats import (
-    belge_system_prompt,
-    load_belge,
-    load_format,
-    system_prompt,
-    validate_belge,
-    validate_parsed,
-)
+from llm.formats import load_belge, load_format, validate_belge, validate_parsed
+from llm.prompt import LAW_SHORT, belge_messages, module_messages
 from llm.render import petition_view, render_arastirma, render_belge, render_evrak, render_islem_module, render_surec
 
 ACTION_TO_BELGE = {
     "istinaf": "istinaf",
+    "istinaf_hukuk": "istinaf_hukuk",
     "itiraz": "itiraz",
     "cevap": "cevap",
     "sikayet": "sikayet",
     "suc_duyurusu": "suc_duyurusu",
     "temyiz": "temyiz",
+    "temyiz_hukuk": "temyiz_hukuk",
     "katilma": "katilma",
     "bireysel_basvuru": "bireysel_basvuru",
     "idari_dava": "idari_dava",
@@ -36,11 +31,11 @@ ACTION_TO_BELGE = {
 
 ChatFn = Callable[..., str]
 
-SPAN_CHARS = 160
-EVIDENCE_SPAN_CHARS = 360
+SPAN_CHARS = 280
+EVIDENCE_SPAN_CHARS = 720
 USER_TEXT_CHARS = 800
-RELATED_HITS = 3
-EVIDENCE_HITS = 4
+RELATED_HITS = 5
+EVIDENCE_HITS = 6
 
 
 def _span(text: Any, limit: int = SPAN_CHARS) -> str:
@@ -104,23 +99,53 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _user_payload(engine: dict[str, Any]) -> str:
-    extra = ""
-    if engine.get("gaps"):
-        extra = (
-            "\nEksik alanları doldurmak için kimlik, T.C. no, esas no veya tarih uydurma. "
-            "Eksik kimlik/tarih için «[…]» yer tutucu kullan. Kullanıcının cümlelerini olay bölümünde koru.\n"
-        )
-    if not (engine.get("related") or engine.get("evidence")):
-        extra += (
-            "\nrelated/evidence boş: hukuki_nitelendirme'ye ceza maddesi numarası yazma.\n"
-        )
-    return (
-        "Aşağıdaki motor çıktısını kaynak kabul et. Yeni madde, tarih veya süre uydurma."
-        + extra
-        + "\n"
-        + json.dumps(compact_engine(engine), ensure_ascii=False, default=str)
-    )
+def _messages(module_or_belge: str, engine: dict[str, Any], *, belge: bool = False) -> list[dict[str, str]]:
+    compact = compact_engine(engine)
+    if belge:
+        return belge_messages(module_or_belge, compact)
+    return module_messages(module_or_belge, compact)
+
+
+def _correction_messages(
+    base_messages: list[dict[str, str]], raw: str, errors: list[str]
+) -> list[dict[str, str]]:
+    """Şema doğrulama hatası sonrası TEK seferlik düzeltme turu için sohbeti
+    uzatır — modelin kendi hatalı cevabını görüp aynı kaynaklara dayanarak
+    düzeltmesini ister. Hâlâ geçmezse çağıran taraf extractive fallback'e
+    düşer (bkz. main.py::_analyze except bloğu); burada ikinci bir retry
+    yok, maliyet/gecikmeyi sınırlı tutmak için tek tur yeterli kabul edildi."""
+    return base_messages + [
+        {"role": "assistant", "content": raw},
+        {
+            "role": "user",
+            "content": (
+                "Önceki cevap şemaya uymuyor: "
+                + "; ".join(errors)
+                + ". Yeni kaynak veya alan uydurma; yalnızca aynı kaynaklara dayanarak "
+                "düzeltilmiş JSON'u döndür. Açıklama, markdown veya kod çiti ekleme."
+            ),
+        },
+    ]
+
+
+def _attempt_json(
+    fn: ChatFn,
+    messages: list[dict[str, str]],
+    *,
+    build: Callable[[dict[str, Any]], dict[str, Any]],
+    validate: Callable[[dict[str, Any]], list[str]],
+) -> tuple[dict[str, Any] | None, str, list[str]]:
+    """Tek bir sohbet turu: modeli çağır, JSON ayrıştır, `build` ile son
+    hâline getir, `validate` ile şema kontrolü yap. JSON hiç ayrıştırılamazsa
+    (`parse_json_content` OllamaError fırlatırsa) da aynı "errors" sözleşmesine
+    döner — çağıran taraf hem parse hem şema hatasını aynı tek-retry yoluyla
+    (bkz. `_correction_messages`) ele alabilsin diye."""
+    raw = fn(messages)
+    try:
+        payload = build(parse_json_content(raw))
+    except OllamaError as exc:
+        return None, raw, [str(exc)]
+    return payload, raw, validate(payload)
 
 
 BELGE_FIELD_ALIASES = (
@@ -232,12 +257,7 @@ def write_module(
         parsed = extractive_surec(engine)
         if fn is not None:
             try:
-                raw = fn(
-                    [
-                        {"role": "system", "content": system_prompt(module_id)},
-                        {"role": "user", "content": _user_payload(engine)},
-                    ]
-                )
+                raw = fn(_messages(module_id, engine))
                 asama = str(parse_json_content(raw).get("asama_cumlesi") or "").strip()
                 if asama:
                     parsed["asama_cumlesi"] = asama
@@ -246,18 +266,23 @@ def write_module(
         return render_surec(parsed)
     if fn is None:
         return None
-    raw = fn(
-        [
-            {"role": "system", "content": system_prompt(module_id)},
-            {"role": "user", "content": _user_payload(engine)},
-        ]
-    )
     spec = load_format(module_id)
-    parsed = parse_json_content(raw)
-    parsed = _merge_example(spec.get("example") or {}, parsed)
-    errors = validate_parsed(module_id, parsed)
+    example = spec.get("example") or {}
+    base_messages = _messages(module_id, engine)
+
+    def build(payload: dict[str, Any]) -> dict[str, Any]:
+        return _merge_example(example, payload)
+
+    def validate(payload: dict[str, Any]) -> list[str]:
+        return validate_parsed(module_id, payload)
+
+    parsed, raw, errors = _attempt_json(fn, base_messages, build=build, validate=validate)
     if errors:
-        raise OllamaError("; ".join(errors))
+        parsed, raw, errors = _attempt_json(
+            fn, _correction_messages(base_messages, raw, errors), build=build, validate=validate
+        )
+        if errors:
+            raise OllamaError("; ".join(errors))
     if module_id == "arastirma":
         return render_arastirma(parsed)
     if module_id == "evrak":
@@ -265,23 +290,42 @@ def write_module(
     return render_islem_module(parsed)
 
 
-NARRATIVE_FIELD = {
+# Olay/savunma gövdesi — künye satırına (hüküm, karar no) ham konuşma yapıştırılmaz.
+STORY_FIELD = {
     "sikayet": "olay",
     "suc_duyurusu": "olay",
     "cevap": "esasa_cevap",
-    "itiraz": "karar",
-    "istinaf": "hukum",
-    "temyiz": "karar",
+    "itiraz": "sebepler",
+    "istinaf": "sebepler",
+    "temyiz": "sebepler",
     "katilma": "dava",
     "bireysel_basvuru": "olay",
-    "idari_dava": "islem",
-    "tahliye": "tutuklama",
-    "adli_kontrol_itiraz": "karar",
+    "idari_dava": "sebepler",
+    "tahliye": "sebepler",
+    "adli_kontrol_itiraz": "sebepler",
     "ust_yazi": "metin",
     "bilgi_yazisi": "metin",
     "olur": "metin",
     "cevap_yazisi": "metin",
 }
+
+META_FIELDS = {
+    "istinaf": ("hukum",),
+    "itiraz": ("itiraz_olunan", "karar"),
+    "temyiz": ("karar",),
+    "tahliye": ("tutuklama",),
+    "idari_dava": ("islem",),
+    "adli_kontrol_itiraz": ("karar",),
+}
+
+OFFENCE_BELGE = {"sikayet", "suc_duyurusu"}
+_INFORMAL_RE = re.compile(
+    r"\b(beni|bana|benim|istiyorum|gitmek|mahkum etti|hapisteyim|"
+    r"cezaevindeyim|parami|paramı|aldılar|aldirlar)\b",
+    re.IGNORECASE,
+)
+_PROC_CITE_RE = re.compile(r"\b(CMK|İYUK|IYUK|2577|6216|Anayasa|İİK|IIK|Tebligat)\b", re.IGNORECASE)
+_TCK_CITE_RE = re.compile(r"\bTCK\s*m\.\s*\d+", re.IGNORECASE)
 
 
 def _overlay_filled(parsed: dict[str, Any], data: dict[str, Any]) -> None:
@@ -337,6 +381,14 @@ _ARTICLE_RE = re.compile(r"m\.\s*(\d+[a-zA-Z]?(?:/\d+)?)", re.IGNORECASE)
 DEFAULT_SIKAYET_TALEP = (
     "Şikayet edilen hakkında soruşturma açılması, delillerin toplanması ve kamu davası açılması talep olunur."
 )
+STORY_LINE = {
+    "istinaf": "İlk derece mahkemesince kurulan hükmün hukuka aykırılığı nedeniyle istinaf yoluna başvurulmaktadır.",
+    "itiraz": "Kararın usul ve yasaya aykırılığı nedeniyle itiraz yoluna başvurulmaktadır.",
+    "temyiz": "Kararın hukuka aykırılığı nedeniyle temyiz yoluna başvurulmaktadır.",
+    "tahliye": "Tutuklama nedenlerinin ortadan kalktığı, tahliyenin ölçülü olacağı beyan olunur.",
+    "adli_kontrol_itiraz": "Koruma tedbirinin ölçüsüz olduğu, kararın kaldırılması gerektiği beyan olunur.",
+    "idari_dava": "Dava konusu işlemin hukuka aykırı olduğu ileri sürülmektedir.",
+}
 
 
 def _sourced_articles(engine: dict[str, Any]) -> set[str]:
@@ -357,21 +409,53 @@ def _madde_ok(token: str, allowed: set[str]) -> bool:
     return raw in allowed or raw.split("/")[0] in allowed
 
 
+def _nitelendirme_blob(row: Any) -> str:
+    if isinstance(row, dict):
+        return f"{row.get('madde') or ''} {row.get('cumle') or ''} {row.get('kanun') or ''}"
+    return str(row or "")
+
+
+def _is_system_note(text: str) -> bool:
+    raw = str(text or "").lower()
+    folded = _fold_tr(text)
+    blob = f"{raw} {folded}"
+    return any(
+        marker in blob
+        for marker in (
+            "eşleşen madde yok",
+            "eslesen madde yok",
+            "yazılmadı",
+            "yazilmadi",
+            "taslaga tck",
+            "sistem not",
+        )
+    )
+
+
 def _nitelendirme_unsourced(row: Any, allowed: set[str]) -> bool:
+    """Kaynaksız TCK suç maddesini düşür; CMK/İYUK usul cümlelerini bırak."""
+    blob = _nitelendirme_blob(row)
+    if _is_system_note(blob):
+        return True
     if isinstance(row, dict):
         madde = str(row.get("madde") or "").strip()
-        blob = f"{madde} {row.get('cumle') or ''}"
     else:
         madde = ""
-        blob = str(row)
     cited = [m.group(1) for m in _ARTICLE_RE.finditer(blob)]
     if madde:
         cited.append(madde)
     if not cited:
         return False
+    procedural = bool(_PROC_CITE_RE.search(blob))
+    tck = bool(_TCK_CITE_RE.search(blob)) or (bool(madde) and not procedural)
     if not allowed:
-        return True
-    return any(not _madde_ok(token, allowed) for token in cited)
+        return tck or not procedural
+    bad = [token for token in cited if not _madde_ok(token, allowed)]
+    if not bad:
+        return False
+    if procedural and not tck:
+        return False
+    return True
 
 
 def _fold_tr(text: str) -> str:
@@ -385,64 +469,196 @@ def _fold_tr(text: str) -> str:
     )
 
 
+def _norm_line(text: str) -> str:
+    return re.sub(r"\s+", " ", _fold_tr(text)).strip(" .,:;")
+
+
+def _looks_like_raw_user(value: str, user: str) -> bool:
+    a, b = _norm_line(value), _norm_line(user)
+    if not a or not b or len(b) < 8:
+        return False
+    if a == b or b in a or a in b:
+        return True
+    wa, wb = set(a.split()), set(b.split())
+    if not wa or not wb:
+        return False
+    return len(wa & wb) / min(len(wa), len(wb)) >= 0.7
+
+
+def _informal_meta(value: str) -> bool:
+    return bool(_INFORMAL_RE.search(value or ""))
+
+
+def _story_sentence(belge_id: str, user: str) -> str:
+    folded = _fold_tr(user)
+    if belge_id == "istinaf" and ("mahkum" in folded or "hukum" in folded):
+        return (
+            "İlk derece mahkemesince kurulan mahkûmiyet hükmünün hukuka aykırı olduğu "
+            "ileri sürülmektedir."
+        )
+    if belge_id == "tahliye" and ("tutuk" in folded or "cezaev" in folded or "hapis" in folded):
+        return "Yürürlükteki tutuklama tedbirinin ölçüsüz kaldığı, tahliyenin yerinde olacağı beyan olunur."
+    return STORY_LINE.get(belge_id, "")
+
+
+def _as_lines(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def _formal_sebepler(belge_id: str, user: str, existing: Any) -> list[str]:
+    sentence = _story_sentence(belge_id, user)
+    out: list[str] = []
+    if sentence:
+        out.append(sentence)
+    for item in _as_lines(existing):
+        if _looks_like_raw_user(item, user) or _informal_meta(item):
+            continue
+        if sentence and _norm_line(item) in _norm_line(sentence):
+            continue
+        out.append(item)
+    return out or _as_lines(existing)
+
+
+def _usul_nitelendirme(spec: dict[str, Any]) -> list[dict[str, str]]:
+    belge_id = str(spec.get("id") or "")
+    if belge_id in OFFENCE_BELGE:
+        return []
+    basis = [str(item).strip() for item in (spec.get("legal_basis") or []) if str(item).strip()]
+    if not basis:
+        return []
+    return [{"cumle": f"Başvuru {', '.join(basis)} hükümlerine tabidir."}]
+
+
+def _related_nitelendirme(engine: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for hit in (engine.get("related") or [])[:3]:
+        cumle = hit.get("span") or hit.get("title") or ""
+        if not cumle:
+            continue
+        kanun = LAW_SHORT.get(str(hit.get("law_no") or "").strip())
+        rows.append(
+            {
+                "n": hit.get("n"),
+                "madde": hit.get("article_no"),
+                "kanun": kanun,
+                "cumle": cumle,
+            }
+        )
+    return rows
+
+
 def _strip_mahkumiyet(talep: str) -> str:
     chunks = [part.strip() for part in re.split(r"(?<=\.)\s+", str(talep or "").strip()) if part.strip()]
     kept = [part for part in chunks if "mahkumiyet" not in _fold_tr(part)]
     return " ".join(kept).strip() or DEFAULT_SIKAYET_TALEP
 
 
+def _sanitize_meta_fields(
+    parsed: dict[str, Any],
+    spec: dict[str, Any],
+    engine: dict[str, Any],
+) -> dict[str, Any]:
+    """Hüküm/karar künyesine ham kullanıcı cümlesi ve sistem notu yapıştırma."""
+    user = str(engine.get("user_text") or "").strip()
+    belge_id = str(spec.get("id") or engine.get("action") or "")
+    example = spec.get("example") or {}
+    for key in META_FIELDS.get(belge_id, ()):
+        value = str(parsed.get(key) or "")
+        if not value:
+            continue
+        if _looks_like_raw_user(value, user) or _informal_meta(value) or _is_system_note(value):
+            parsed[key] = example.get(key) or value
+    story_key = STORY_FIELD.get(belge_id)
+    if story_key == "sebepler":
+        parsed["sebepler"] = _formal_sebepler(belge_id, user, parsed.get("sebepler"))
+    return parsed
+
+
 def _finalize_belge_facts(
     parsed: dict[str, Any],
     engine: dict[str, Any],
     belge_id: str = "",
+    spec: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Kaynakta olmayan TCK maddesini ve şikayette mahkûmiyet talebini düşür."""
+    kind = (belge_id or str(engine.get("action") or "")).strip().lower()
+    catalog = spec if spec and spec.get("id") == kind else None
+    if catalog is None and kind:
+        try:
+            catalog = load_belge(kind)
+        except Exception:
+            catalog = spec
+    if catalog:
+        parsed = _sanitize_meta_fields(parsed, catalog, engine)
     allowed = _sourced_articles(engine)
     rows = parsed.get("hukuki_nitelendirme")
+    fallback = _usul_nitelendirme(catalog or {"id": kind})
     if isinstance(rows, list):
         kept = [row for row in rows if not _nitelendirme_unsourced(row, allowed)]
-        parsed["hukuki_nitelendirme"] = kept or [{"cumle": NO_MADDE_CUMLE}]
+        parsed["hukuki_nitelendirme"] = kept or fallback
     elif rows and _nitelendirme_unsourced(rows, allowed):
-        parsed["hukuki_nitelendirme"] = [{"cumle": NO_MADDE_CUMLE}]
-    kind = (belge_id or str(engine.get("action") or "")).strip().lower()
-    if kind in {"sikayet", "suc_duyurusu"} and parsed.get("talep"):
+        parsed["hukuki_nitelendirme"] = fallback
+    if kind in OFFENCE_BELGE and parsed.get("talep"):
         parsed["talep"] = _strip_mahkumiyet(str(parsed.get("talep") or ""))
     return parsed
 
 
 def extractive_parsed(spec: dict[str, Any], engine: dict[str, Any]) -> dict[str, Any]:
-    """LLM yokken kalıp örneği + kullanıcı metni; evrak birimini makam diye yazma."""
+    """LLM yokken kalıp örneği + resmi gövde; ham konuşmayı künye satırına yazma."""
     if spec.get("family") == "kamu":
         return _extractive_kamu(spec, engine)
     parsed = dict(spec.get("example") or {})
     parsed["makam"] = spec.get("makam") or parsed.get("makam")
     user = str(engine.get("user_text") or "").strip()
     fields = engine.get("fields") or {}
+    from document_ai.gaps import labeled_facts
+
+    facts = labeled_facts(user)
     belge_id = str(spec.get("id") or "")
-    narrative_key = NARRATIVE_FIELD.get(belge_id)
-    if user and narrative_key:
-        parsed[narrative_key] = user[:1200]
+    story_key = STORY_FIELD.get(belge_id)
+    if user and story_key == "sebepler":
+        parsed["sebepler"] = _formal_sebepler(belge_id, user, parsed.get("sebepler"))
+    elif user and story_key:
+        parsed[story_key] = user[:1200]
     if fields.get("konu"):
         parsed["konu"] = fields["konu"]
     elif not parsed.get("konu"):
         parsed["konu"] = spec.get("title")
-    related = engine.get("related") or []
+    if facts.get("adres") or fields.get("adres"):
+        parsed["adres"] = facts.get("adres") or fields["adres"]
+    elif not parsed.get("adres"):
+        parsed["adres"] = "«[adres]»"
+    if facts.get("sehir") or fields.get("sehir") or fields.get("il"):
+        parsed["sehir"] = facts.get("sehir") or fields.get("sehir") or fields.get("il")
+    if facts.get("ad_soyad") or fields.get("ad_soyad"):
+        parsed["ad_soyad"] = facts.get("ad_soyad") or fields["ad_soyad"]
+    if facts.get("sikayetci"):
+        parsed["sikayetci"] = facts["sikayetci"]
+        parsed["duyuran"] = facts["sikayetci"]
+    if facts.get("esas_no"):
+        parsed["esas_no"] = facts["esas_no"]
+    from datetime import date as _date
+    from llm.layouts import _CITY_RE
+
+    if not parsed.get("tarih"):
+        today = _date.today()
+        parsed["tarih"] = f"{today.day:02d}.{today.month:02d}.{today.year}"
+    if not parsed.get("sehir"):
+        found = _CITY_RE.search(user)
+        if found:
+            parsed["sehir"] = found.group(1)
     if "hukuki_nitelendirme" in parsed:
-        rows = []
-        for hit in related[:3]:
-            madde = hit.get("article_no")
-            cumle = hit.get("span") or hit.get("title") or ""
-            if not cumle:
-                continue
-            rows.append({"n": hit.get("n"), "madde": madde, "cumle": cumle})
-        parsed["hukuki_nitelendirme"] = rows or [{"cumle": NO_MADDE_CUMLE}]
+        parsed["hukuki_nitelendirme"] = _related_nitelendirme(engine) or _usul_nitelendirme(spec)
     deadlines = engine.get("deadlines") or []
     for item in deadlines:
         if item.get("last_day") and not parsed.get("sure_cumlesi"):
             parsed["sure_cumlesi"] = f"{item.get('name')}: son gün {item.get('last_day')}."
             break
     parsed["onay_notu"] = "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
-    return _finalize_belge_facts(_apply_islem_gaps(parsed, engine), engine, belge_id)
+    return _finalize_belge_facts(_apply_islem_gaps(parsed, engine), engine, belge_id, spec)
 
 
 def compose_belge(
@@ -453,20 +669,27 @@ def compose_belge(
     allow_ollama: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     spec = load_belge(belge_id)
-    parsed = extractive_parsed(spec, engine)
+    extractive = extractive_parsed(spec, engine)
+    parsed = extractive
     fn = chat_fn or resolve_writer(allow_ollama=allow_ollama)
     if fn is not None:
-        raw = fn(
-            [
-                {"role": "system", "content": belge_system_prompt(belge_id)},
-                {"role": "user", "content": _user_payload(engine)},
-            ]
-        )
-        parsed = _alias_belge_fields(_merge_example(parsed, parse_json_content(raw)))
-        parsed = _finalize_belge_facts(_apply_islem_gaps(parsed, engine), engine, belge_id)
-        errors = validate_belge(belge_id, parsed)
+        base_messages = _messages(belge_id, engine, belge=True)
+
+        def build(payload: dict[str, Any]) -> dict[str, Any]:
+            merged = _alias_belge_fields(_merge_example(extractive, payload))
+            return _finalize_belge_facts(_apply_islem_gaps(merged, engine), engine, belge_id, spec)
+
+        def validate(payload: dict[str, Any]) -> list[str]:
+            return validate_belge(belge_id, payload)
+
+        candidate, raw, errors = _attempt_json(fn, base_messages, build=build, validate=validate)
         if errors:
-            raise OllamaError("; ".join(errors))
+            candidate, raw, errors = _attempt_json(
+                fn, _correction_messages(base_messages, raw, errors), build=build, validate=validate
+            )
+            if errors:
+                raise OllamaError("; ".join(errors))
+        parsed = candidate
     return render_belge(spec, parsed), petition_view(spec, parsed)
 
 

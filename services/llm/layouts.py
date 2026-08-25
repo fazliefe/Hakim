@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 TASLAK_NOTU = "Taslaktır. UYAP’a otomatik gönderim yoktur. vatandas.uyap.gov.tr"
@@ -49,7 +50,7 @@ LAYOUTS: dict[str, dict[str, Any]] = {
     "itiraz": {
         "layout": "itiraz",
         "subtitle": "İTİRAZ DİLEKÇESİDİR",
-        "meta": (("İtiraz olunan karar", "itiraz_olunan"), ("Süre (CMK m.268)", "sure_cumlesi")),
+        "meta": (("İtiraz olunan karar", "itiraz_olunan"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.268)", "sure_cumlesi")),
         "body": (
             ("sebepler", "İtiraz sebepleri", "numbered"),
             ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
@@ -61,7 +62,7 @@ LAYOUTS: dict[str, dict[str, Any]] = {
     "adli_kontrol_itiraz": {
         "layout": "itiraz",
         "subtitle": "ADLİ KONTROL / TUTUKLAMA İTİRAZIDIR",
-        "meta": (("İtiraz olunan karar", "karar"), ("Süre (CMK m.268)", "sure_cumlesi")),
+        "meta": (("İtiraz olunan karar", "karar"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.268)", "sure_cumlesi")),
         "body": (
             ("sebepler", "İtiraz sebepleri", "numbered"),
             ("talep", "Sonuç ve talep", "prose"),
@@ -73,7 +74,7 @@ LAYOUTS: dict[str, dict[str, Any]] = {
         "layout": "istinaf",
         "via": "İlgili ilk derece mahkemesi aracılığıyla",
         "subtitle": "İSTİNAF DİLEKÇESİDİR",
-        "meta": (("İstinaf olunan hüküm", "hukum"), ("Süre (CMK m.273)", "sure_cumlesi")),
+        "meta": (("İstinaf olunan hüküm", "hukum"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.273)", "sure_cumlesi")),
         "body": (
             ("sebepler", "İstinaf sebepleri", "numbered"),
             ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
@@ -86,7 +87,7 @@ LAYOUTS: dict[str, dict[str, Any]] = {
         "layout": "temyiz",
         "via": "Bölge Adliye Mahkemesi aracılığıyla",
         "subtitle": "TEMYİZ DİLEKÇESİDİR",
-        "meta": (("Temyiz olunan karar", "karar"), ("Süre (CMK m.291)", "sure_cumlesi")),
+        "meta": (("Temyiz olunan karar", "karar"), ("Esas / karar no", "esas_no"), ("Süre (CMK m.291)", "sure_cumlesi")),
         "body": (
             ("sebepler", "Temyiz sebepleri", "numbered"),
             ("hukuki_nitelendirme", "Hukuki dayanak", "cite"),
@@ -162,13 +163,27 @@ def tr_upper(text: str) -> str:
 
 
 def hitap(makam: str) -> str:
+    """Resmî dilekçe hitabı: T.C. satırındaki makam, -na/-ne ekli, bağıran büyük harf yok."""
+    return hitap_official(makam)
+
+
+def hitap_official(makam: str) -> str:
     text = " ".join(str(makam or "").split())
     if not text:
-        return "İLGİLİ MAKAMA"
-    upper = tr_upper(text)
-    if upper.endswith(("NA", "NE", "'NA", "'NE", "’NA", "’NE")):
-        return upper
-    return f"{upper}'NA"
+        return "İlgili makama"
+    folded = text.replace("I", "ı").replace("İ", "i").casefold()
+    if folded.endswith(("na", "ne", "'na", "'ne", "’na", "’ne")):
+        return text
+    last_vowel = ""
+    for ch in reversed(text):
+        if ch in "aıouAIOUâÂ":
+            last_vowel = "back"
+            break
+        if ch in "eiöüEIÖÜîÎ":
+            last_vowel = "front"
+            break
+    suffix = "ne" if last_vowel == "front" else "na"
+    return text + suffix
 
 
 def belge_layout(spec: dict[str, Any]) -> str:
@@ -191,13 +206,43 @@ def _get(parsed: dict[str, Any], key: str) -> Any:
     return None
 
 
+def _cited_evidence_ns(parsed: dict[str, Any]) -> list[int]:
+    """`hukuki_nitelendirme` satırlarında gerçekten hangi kaynak (`related`/
+    `evidence` listesindeki `n`) kullanıldığını döndürür. Sanitizer (bkz.
+    writer.py:_finalize_belge_facts) kaynaksız/uydurma maddeleri düşürüp
+    yerine `n` taşımayan bir yer tutucu (`_usul_nitelendirme`/`NO_MADDE_CUMLE`)
+    koyabilir — o durumda hiçbir kaynak "kullanıldı" sayılmaz. `Kaynak
+    grafiği`nin `used_in_answer` alanı bu listeye göre dolduruluyor."""
+    rows = parsed.get("hukuki_nitelendirme")
+    if not isinstance(rows, list):
+        return []
+    out: list[int] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        n = row.get("n")
+        try:
+            if n not in (None, "") and int(n) not in out:
+                out.append(int(n))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _cite_line(item: dict[str, Any]) -> str:
     cumle = str(item.get("cumle") or item.get("metin") or "").strip()
-    madde = item.get("madde")
+    madde = str(item.get("madde") or "").strip()
+    kanun = str(item.get("kanun") or item.get("law") or "").strip()
     n = item.get("n")
     parts: list[str] = []
-    if madde:
-        parts.append(f"TCK m.{madde}")
+    already = bool(madde and re.search(rf"\bm\.\s*{re.escape(madde)}\b", cumle, re.IGNORECASE))
+    if madde and not already:
+        if kanun:
+            parts.append(f"{kanun} m.{madde}")
+        elif re.search(r"\b(CMK|İYUK|IYUK|TCK|TMK|TBK|Anayasa)\b", cumle):
+            pass
+        else:
+            parts.append(f"TCK m.{madde}")
     if cumle:
         parts.append(cumle)
     text = " — ".join(parts)
@@ -236,13 +281,227 @@ def _meta_rows(cfg: dict[str, Any], spec: dict[str, Any], parsed: dict[str, Any]
         value = _get(parsed, key)
         if key == "konu" and value in (None, ""):
             value = parsed.get("konu") or spec.get("title")
-        if value in (None, "", []):
+        if value in (None, "", [], "—"):
             continue
         rows.append({"label": label, "value": " ".join(str(value).split())})
     return rows
 
 
+CLASSIC_CLOSING = "Gereğini arz ederim."
+SHEET_WIDTH = 64
+ADRES_PLACEHOLDER = "«[adres]»"
+NAME_PLACEHOLDER = "«[ad soyad]»"
+CITY_PLACEHOLDER = "«[il]»"
+
+_CITY_RE = re.compile(
+    r"\b(Adana|Ankara|Antalya|Bursa|Gaziantep|İstanbul|Istanbul|İzmir|Izmir|Konya|Mersin)\b",
+    re.IGNORECASE,
+)
+_SIGNER_KEYS = (
+    "ad_soyad",
+    "imza_ad",
+    "sikayetci",
+    "duyuran",
+    "cevap_veren",
+    "katilan",
+    "talep_eden",
+    "davaci",
+    "basvurucu",
+)
+_GENERIC_NAMES = {
+    "şikayetçi",
+    "duyuran",
+    "sanık / müdafi",
+    "cevap veren",
+    "suçtan zarar gören",
+    "davacı",
+    "başvurucu",
+    "talep eden",
+    "istinaf eden",
+    "itiraz eden",
+    "katılma talep eden",
+}
+_DEFAULT_EKLER = {
+    "istinaf": ["Gerekçeli karar fotokopisi"],
+    "temyiz": ["Bölge adliye mahkemesi kararı fotokopisi"],
+    "itiraz": ["İtiraz olunan karar fotokopisi"],
+    "adli_kontrol_itiraz": ["Tedbir kararı fotokopisi"],
+    "tahliye": ["Tutuklama müzekkeresi fotokopisi"],
+    "idari_dava": ["Dava konusu işlemin örneği"],
+    "bireysel_basvuru": ["Nihai karar örneği"],
+    "katilma": ["İddianame / esas belgesi fotokopisi"],
+    "cevap": ["İddianame fotokopisi"],
+}
+_EKLER_SKIP_KEYS = {"deliller"}
+
+
+def _sheet_date(parsed: dict[str, Any]) -> str:
+    raw = str(parsed.get("tarih") or "").strip()
+    match = re.match(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", raw)
+    if match:
+        return f"{int(match.group(1)):02d}.{int(match.group(2)):02d}.{match.group(3)}"
+    from datetime import date
+
+    today = date.today()
+    return f"{today.day:02d}.{today.month:02d}.{today.year}"
+
+
+def _sheet_city(parsed: dict[str, Any]) -> str:
+    raw = str(parsed.get("sehir") or parsed.get("il") or "").strip()
+    if raw and raw not in {"—", "-"}:
+        return raw if raw.startswith("«") else _city_title(raw)
+    blob = " ".join(
+        str(parsed.get(key) or "")
+        for key in ("olay", "hukum", "karar", "makam", "adres", "islem")
+    )
+    found = _CITY_RE.search(blob)
+    if found:
+        return _city_title(found.group(1))
+    return CITY_PLACEHOLDER
+
+
+def _city_title(raw: str) -> str:
+    key = raw.replace("I", "ı").replace("İ", "i").casefold()
+    names = {
+        "adana": "Adana",
+        "ankara": "Ankara",
+        "antalya": "Antalya",
+        "bursa": "Bursa",
+        "gaziantep": "Gaziantep",
+        "istanbul": "İstanbul",
+        "izmir": "İzmir",
+        "konya": "Konya",
+        "mersin": "Mersin",
+    }
+    return names.get(key, raw.strip())
+
+
+def _signer_name(parsed: dict[str, Any]) -> str:
+    for key in _SIGNER_KEYS:
+        value = str(parsed.get(key) or "").strip()
+        if not value or value in {"—", "-"}:
+            continue
+        if value.lower() in _GENERIC_NAMES:
+            continue
+        return _official_name(value)
+    return NAME_PLACEHOLDER
+
+
+def _official_name(name: str) -> str:
+    if name.startswith("«"):
+        return name
+    parts = name.split()
+    if len(parts) >= 2:
+        return " ".join(parts[:-1]) + " " + tr_upper(parts[-1])
+    return name
+
+
+def _sheet_adres(parsed: dict[str, Any]) -> str:
+    value = str(parsed.get("adres") or "").strip()
+    if value and value not in {"—", "-", "...", "…"}:
+        return value
+    return ADRES_PLACEHOLDER
+
+
+def _collect_ekler(belge_id: str, parsed: dict[str, Any]) -> list[str]:
+    raw = parsed.get("ekler")
+    if isinstance(raw, list):
+        items = [str(item).strip() for item in raw if str(item).strip()]
+        if items:
+            return items
+    if isinstance(raw, str) and raw.strip() and raw.strip() not in {"—", "-"}:
+        return [raw.strip()]
+    deliller = parsed.get("deliller")
+    if isinstance(deliller, list):
+        items = [str(item).strip() for item in deliller if str(item).strip()]
+        if items:
+            return items
+    return list(_DEFAULT_EKLER.get(belge_id) or ["—"])
+
+
+def _lead_paragraph(belge_id: str, parsed: dict[str, Any]) -> str:
+    esas = str(_get(parsed, "esas_no") or "").strip()
+    esas_bit = f" ({esas})" if esas and esas not in {"—", "-"} else ""
+    sure = str(_get(parsed, "sure_cumlesi") or "").strip()
+    if belge_id == "istinaf":
+        hukum = str(_get(parsed, "hukum") or "").strip()
+        head = f"{hukum}{esas_bit} aleyhine istinaf yoluna başvurulmaktadır." if hukum else ""
+        return " ".join(part for part in (head, sure) if part)
+    if belge_id in {"itiraz", "adli_kontrol_itiraz"}:
+        karar = str(_get(parsed, "itiraz_olunan") or _get(parsed, "karar") or "").strip()
+        head = f"{karar}{esas_bit} aleyhine itiraz yoluna başvurulmaktadır." if karar else ""
+        return " ".join(part for part in (head, sure) if part)
+    if belge_id == "temyiz":
+        karar = str(_get(parsed, "karar") or "").strip()
+        head = f"{karar}{esas_bit} aleyhine temyiz yoluna başvurulmaktadır." if karar else ""
+        return " ".join(part for part in (head, sure) if part)
+    if belge_id == "tahliye":
+        tutuklama = str(_get(parsed, "tutuklama") or "").strip()
+        head = f"{tutuklama}{esas_bit} hakkında tahliye talebinde bulunulmaktadır." if tutuklama else ""
+        return head
+    if belge_id == "idari_dava":
+        islem = str(_get(parsed, "islem") or "").strip()
+        head = f"{islem} aleyhine iptal davası açılmaktadır." if islem else ""
+        return " ".join(part for part in (head, sure) if part)
+    if belge_id == "sikayet":
+        kim = str(parsed.get("sikayet_edilen") or "").strip()
+        if kim and kim.lower() not in {"kimliği belirsiz şüpheli"}:
+            return f"{kim} hakkında şikayette bulunulmaktadır."
+    return ""
+
+
+def _body_paragraphs(cfg: dict[str, Any], parsed: dict[str, Any], belge_id: str) -> list[str]:
+    paragraphs: list[str] = []
+    lead = _lead_paragraph(belge_id, parsed)
+    if lead:
+        paragraphs.append(lead)
+    for key, _label, kind in cfg.get("body") or ():
+        if key in _EKLER_SKIP_KEYS:
+            continue
+        text = _format_value(_get(parsed, key), kind)
+        if not text:
+            continue
+        if lead and _fold_simple(text) in _fold_simple(lead):
+            continue
+        paragraphs.append(text)
+    return paragraphs
+
+
+def _fold_simple(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").lower()).strip()
+
+
+def _center(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    if len(raw) >= SHEET_WIDTH:
+        return raw
+    return raw.center(SHEET_WIDTH).rstrip()
+
+
+def _right(text: str) -> str:
+    raw = str(text or "").strip()
+    if len(raw) >= SHEET_WIDTH:
+        return raw
+    return raw.rjust(SHEET_WIDTH)
+
+
+def _format_ekler_block(items: list[str]) -> list[str]:
+    lines = ["EKLER:"]
+    for idx, item in enumerate(items, start=1):
+        lines.append(f"EK-{idx}  {item}")
+    return lines
+
+
 def _body_sections(cfg: dict[str, Any], parsed: dict[str, Any]) -> list[dict[str, str]]:
+    sections: list[dict[str, str]] = []
+    for key, label, kind in cfg.get("body") or ():
+        text = _format_value(_get(parsed, key), kind)
+        if not text:
+            continue
+        sections.append({"id": key, "label": label, "text": text, "kind": kind})
+    return sections
     sections: list[dict[str, str]] = []
     for key, label, kind in cfg.get("body") or ():
         text = _format_value(_get(parsed, key), kind)
@@ -272,85 +531,88 @@ def petition_view(spec: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any
             "closing": "",
             "signature": None,
             "onay_notu": onay,
+            "cited_ns": _cited_evidence_ns(parsed),
         }
 
     cfg = LAYOUTS.get(str(spec.get("id") or ""), {})
-    subtitle = str(cfg.get("subtitle") or spec.get("title") or "DİLEKÇEDİR")
-    sections = _body_sections(cfg, parsed)
-    eksikler = parsed.get("eksikler") or []
-    if eksikler:
-        if isinstance(eksikler, list):
-            text = "\n".join(f"• {line}" for line in eksikler if str(line).strip())
-        else:
-            text = str(eksikler).strip()
-        if text:
-            sections.insert(
-                0,
-                {
-                    "id": "eksikler",
-                    "label": "Eksik hususlar — şurada eksikliğin var",
-                    "text": text,
-                    "kind": "eksik",
-                },
-            )
+    belge_id = str(spec.get("id") or "")
+    sections = [section for section in _body_sections(cfg, parsed) if section.get("kind") != "eksik"]
+    paragraphs = _body_paragraphs(cfg, parsed, belge_id)
+    name = _signer_name(parsed)
+    adres = _sheet_adres(parsed)
+    ekler = _collect_ekler(belge_id, parsed)
     return {
         "id": spec.get("id"),
         "title": spec.get("title"),
         "family": spec.get("family") or "ceza",
         "layout": layout,
+        "form": "dilekce",
         "makam": makam,
         "hitap": hitap(makam),
         "via": cfg.get("via"),
-        "subtitle": subtitle,
+        "subtitle": None,
         "konu": parsed.get("konu") or spec.get("title"),
+        "tarih": _sheet_date(parsed),
+        "sehir": _sheet_city(parsed),
+        "adres": adres,
+        "ekler": ekler,
+        "paragraphs": paragraphs,
         "meta": _meta_rows(cfg, spec, parsed),
         "sections": sections,
-        "closing": cfg.get("closing") or "Arz olunur.",
-        "signature": {"role": cfg.get("signature") or "", "name": "(İmza)"},
+        "closing": CLASSIC_CLOSING,
+        "signature": {"role": "(imza)", "name": name},
         "onay_notu": onay,
+        "cited_ns": _cited_evidence_ns(parsed),
     }
 
 
+def _adres_lines(adres: str) -> list[str]:
+    raw = str(adres or ADRES_PLACEHOLDER).strip()
+    parts = [part.strip() for part in re.split(r"[\n;]+", raw) if part.strip()]
+    if not parts:
+        parts = [ADRES_PLACEHOLDER]
+    return ["Adres:"] + parts
+
+
 def render_petition_text(view: dict[str, Any]) -> str:
-    lines: list[str] = ["T.C."]
+    lines: list[str] = [_center("T.C.")]
     via = str(view.get("via") or "").strip()
     if via:
-        lines.append(tr_upper(via))
-    lines.append(str(view.get("hitap") or "İLGİLİ MAKAMA"))
+        lines.append(_center(via[0].upper() + via[1:] if via else via))
+    lines.append(_center(str(view.get("hitap") or "İlgili makama")))
+    sehir = str(view.get("sehir") or "").strip()
+    if sehir:
+        lines.append(_center(sehir))
     lines.append("")
-    subtitle = str(view.get("subtitle") or "").strip()
-    if subtitle:
-        lines.append(subtitle)
-        lines.append("")
-    for row in view.get("meta") or []:
-        label = str(row.get("label") or "")
-        value = str(row.get("value") or "")
-        pad = " " * max(1, 24 - len(label))
-        lines.append(f"{label}{pad}: {value}")
-    if view.get("meta"):
-        lines.append("")
-    for section in view.get("sections") or []:
-        label = str(section.get("label") or "").strip()
-        text = str(section.get("text") or "").strip()
+    lines.append("")
+    first = True
+    for paragraph in view.get("paragraphs") or []:
+        text = str(paragraph or "").strip()
         if not text:
             continue
-        if label:
-            lines.append(tr_upper(label))
-        lines.append(text)
+        lines.append(("     " + text) if first else text)
+        first = False
         lines.append("")
-    closing = str(view.get("closing") or "").strip()
+    closing = str(view.get("closing") or CLASSIC_CLOSING).strip()
     if closing:
-        lines.append(closing)
+        lines.append("     " + closing)
         lines.append("")
+    tarih = str(view.get("tarih") or _sheet_date({}))
     signature = view.get("signature") or {}
-    role = str(signature.get("role") or "").strip()
-    name = str(signature.get("name") or "").strip()
-    if role or name:
-        indent = " " * 36
-        if role:
-            lines.append(f"{indent}{role}")
-        if name:
-            lines.append(f"{indent}{name}")
-        lines.append("")
+    name = str(signature.get("name") or NAME_PLACEHOLDER).strip()
+    left = _adres_lines(str(view.get("adres") or ADRES_PLACEHOLDER))
+    right = [tarih, "(imza)", name]
+    rows = max(len(left), len(right))
+    for idx in range(rows):
+        lft = left[idx] if idx < len(left) else ""
+        rgt = right[idx] if idx < len(right) else ""
+        if rgt:
+            gap = max(2, SHEET_WIDTH - len(lft) - len(rgt))
+            lines.append(f"{lft}{' ' * gap}{rgt}")
+        else:
+            lines.append(lft)
+    lines.append("")
+    lines.extend(_format_ekler_block(list(view.get("ekler") or ["—"])))
+    lines.append("")
     lines.append(str(view.get("onay_notu") or TASLAK_NOTU))
     return "\n".join(part for part in lines).strip() + "\n"

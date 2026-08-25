@@ -11,9 +11,30 @@ class Classification:
     unit: str
     stage: str
     remedies: tuple[str, ...]
+    # Kaç bağımsız kural-sinyalinin (bkz. `_confidence_from_hits`) tutarlı
+    # sonuç verdiğinin ölçeklenmiş oranı — istatistiksel olarak KALİBRE
+    # EDİLMİŞ bir olasılık DEĞİLDİR (etiketli bir eval seti yok, bkz.
+    # eval/gold). "Kurallar ne kadar hemfikir" olarak okunmalı, "P(doğru
+    # sınıflandırma)" olarak değil.
     confidence: float
     evidence_span: str
     label: str
+
+
+# confidence, `hits` bağımsız sinyalin (bkz. classify_document) kaçının
+# tuttuğuna göre bu aralığa doğrusal ölçeklenir. Alt sınır 0'a yakın ama
+# sıfır değil (hiç sinyal tutmasa bile "belirsiz" etiketi zaten kendini
+# açıklıyor); üst sınır 1'e yakın ama %100 iddia etmiyor — kural motoru
+# yine de yanılabilir. LLM yedeği (classify_document_llm_assist) bu
+# ölçeği atlayıp kendi sabit `confidence_override` değerini kullanır.
+_CONFIDENCE_SIGNALS = 6
+_CONFIDENCE_FLOOR = 0.15
+_CONFIDENCE_CEILING = 0.95
+
+
+def _confidence_from_hits(hits: int) -> float:
+    span = _CONFIDENCE_CEILING - _CONFIDENCE_FLOOR
+    return round(_CONFIDENCE_FLOOR + span * hits / _CONFIDENCE_SIGNALS, 2)
 
 
 # Şartname (yargı) + Resmî Yazışma Usulleri / EBYS kamu evrakı.
@@ -22,14 +43,23 @@ _TYPE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("tebligat", ("tebliğ mazbatası", "tebligat kanunu", "7201 sayılı", "muhataba tebliğ")),
     ("olur", ("olura arz", "olur'a arz", "makamın oluruna", "olur'unuz", "olurunuz")),
     ("genelge", ("genelge", "genelgenin")),
-    ("tutanak", ("tutanaktır", "işbu tutanak", "tutanak")),
+    # Bare "tutanak" needle kaldırıldı — canlı bir istinaf kararında "duruşma
+    # tutanaklarının yeterince irdelenmediği" gibi, belgenin KENDİSİNİ değil,
+    # dosyadaki BAŞKA bir belgeyi anan bir cümlede geçtiği için yanlışlıkla
+    # eşleşip (üstelik ilk 420 karakterlik "header" bonusunu da alıp) gerçek
+    # "mahkeme_karari" eşleşmesini (karar verildi) puanla geçmişti.
+    ("tutanak", ("tutanaktır", "işbu tutanak")),
     ("rapor", ("faaliyet raporu", "inceleme raporu", "işbu rapor", "raporudur")),
     ("cevap_yazisi", ("cevap yazısı", "yazınıza cevaben", "ilgi yazıya cevaben", "cevaben")),
     ("bilgi_yazisi", ("bilgi yazısı", "bilgilerine arz", "bilgi için")),
     ("ust_yazi", ("üst yazı", "havale olunur", "ek listesi", "dağıtım listesi")),
     ("iddianame", ("iddianame", "kamu davası açılmış", "kamu davası açılmıştır")),
     ("mahkeme_karari", ("gerekçeli karar", "mahkûmiyetine", "beraatine", "hükmün", "karar verildi")),
-    ("dilekce", ("dilekçe", "şikayetçidir", "müvekkilim adına", "arz olunur")),
+    # Bare "dilekçe" needle kaldırıldı — aynı sınıf hata (bkz. "tutanak" notu):
+    # bir mahkeme kararı, "istinaf başvuru dilekçesinde özetle..." diyerek
+    # TARAFIN dilekçesinden alıntı yapar; bu, KARARIN KENDİSİNİN bir dilekçe
+    # olduğu anlamına gelmez. Canlı doğrulandı.
+    ("dilekce", ("şikayetçidir", "müvekkilim adına", "arz olunur")),
 ]
 
 KAMU_TYPES = frozenset(
@@ -55,6 +85,30 @@ _NATURE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("ceza", ("tck", "ceza mahkemesi", "ağır ceza", "asliye ceza", "savcılık", "sanık", "mahkûmiyet", "iddianame")),
     ("anayasa", ("bireysel başvuru", "anayasa mahkemesi", "aym")),
     ("idare", ("danıştay", "idare mahkemesi", "iptal davası", "2577")),
+    (
+        "hukuk",
+        (
+            "hmk",
+            "hukuk muhakemeleri kanunu",
+            "6100 sayılı",
+            "hukuk mahkemesi",
+            "asliye hukuk",
+            "sulh hukuk",
+            "hukuk dairesi",
+            "tazminat davası",
+            "maddi tazminat",
+            "alacak davası",
+            "boşanma davası",
+            "kira tespiti",
+            "tapu iptal",
+            "aile mahkemesi",
+            "iş mahkemesi",
+            "ticaret mahkemesi",
+            "tüketici mahkemesi",
+            "davacı vekili",
+            "davalı vekili",
+        ),
+    ),
     ("kamu", ("bakanlık", "valilik", "kaymakamlık", "genel müdürlük", "daire başkanlığı", "ebys")),
 ]
 
@@ -82,6 +136,7 @@ _NATURE_UNIT: dict[str, str] = {
     "ceza": "İlgili Cumhuriyet savcılığı / ceza mahkemesi",
     "idare": "İlgili idare mahkemesi / Danıştay",
     "anayasa": "Anayasa Mahkemesi",
+    "hukuk": "İlgili hukuk mahkemesi / Yargıtay hukuk dairesi",
     "kamu": "Evrak kayıt ve havale",
 }
 
@@ -154,7 +209,7 @@ def classify_document(text: str) -> Classification:
 
 
 # Kural motoru belirsiz/düşük güvenli kaldığında LLM'in seçebileceği kapalı liste.
-_NATURE_CHOICES = ("ceza", "idare", "anayasa", "kamu", "belirsiz")
+_NATURE_CHOICES = ("ceza", "idare", "anayasa", "hukuk", "kamu", "belirsiz")
 
 
 def _finalize(
@@ -194,25 +249,46 @@ def _finalize(
         else:
             stage = "kovusturma"
 
+    # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK, idare→İYUK)
+    # etiketlere ayrıldı — aksi halde hepsi aynı "istinaf"/"temyiz" etiketini
+    # paylaşıp, deadline/catalog.py'de CMK kuralları hukuk davalarına da
+    # (yanlışlıkla) uygulanıyordu — canlı bir BAM/istinaf tazminat kararıyla
+    # doğrulandı.
     remedies: list[str] = []
     if legal_nature == "ceza" and document_type in {"mahkeme_karari", "tebligat"}:
-        remedies.extend(["itiraz", "istinaf", "temyiz"])
+        remedies.extend(["itiraz", "istinaf_ceza", "temyiz_ceza"])
+    if legal_nature == "hukuk" and document_type in {"mahkeme_karari", "tebligat"}:
+        remedies.extend(["istinaf_hukuk", "temyiz_hukuk"])
     if document_type not in KAMU_TYPES:
-        if legal_nature == "ceza":
-            # Nature'a bağlı: "istinaf"/"temyiz" idare metninde geçerse CMK süresine sızmasın.
-            if "istinaf" in blob:
-                remedies.append("istinaf")
-            if "temyiz" in blob:
-                remedies.append("temyiz")
-        if legal_nature == "idare":
-            remedies.append("idari_dava")
-            if "istinaf" in blob:
+        if "istinaf" in blob:
+            if legal_nature == "ceza":
+                remedies.append("istinaf_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("istinaf_hukuk")
+            elif legal_nature == "idare":
                 remedies.append("istinaf_idari")
-            if "temyiz" in blob or "danıştay" in blob or "danistay" in blob:
-                remedies.append("temyiz_idari")
+        if "temyiz" in blob:
+            if legal_nature == "ceza":
+                remedies.append("temyiz_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("temyiz_hukuk")
+        if legal_nature == "idare" and ("temyiz" in blob or "danıştay" in blob or "danistay" in blob):
+            remedies.append("temyiz_idari")
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
-        if "şikayet" in blob or "sikayet" in blob:
+        if legal_nature == "idare":
+            # İYUK m.7 dava açma süresine bağlanıyor (bkz. deadline/catalog.py).
+            # İstinaf/temyiz_idari yukarıda yalnızca blob'da gerçekten
+            # geçiyorsa eklenir — her idare evrakına spekülatif olarak
+            # İYUK m.45/46 süresi eklenmesin diye (route_islem.py/
+            # ACTION_TO_BELGE/idari_dava.json "idari_dava" adını kullanıyor).
+            remedies.append("idari_dava")
+        # "şikayet" (TCK m.73, 6 aylık şikayet süresi) ceza-özgü bir
+        # kurum — hukuk davalarında (tazminat vb.) kavram olarak yok.
+        # Canlı doğrulandı: bir hukuk kararı, dosyada anılan paralel ceza
+        # yargılaması nedeniyle "şikayetçi" kelimesini içeriyordu ve
+        # yanlışlıkla TCK m.73 süresi almıştı.
+        if legal_nature != "hukuk" and ("şikayet" in blob or "sikayet" in blob):
             remedies.append("sikayet")
     unique = tuple(dict.fromkeys(remedies))
 
@@ -220,7 +296,7 @@ def _finalize(
     if document_type in {"mahkeme_karari", "tebligat", "iddianame"} and (
         "yargıtay" in blob or "yargitay" in blob
     ):
-        unit = "Yargıtay ilgili ceza dairesi"
+        unit = "Yargıtay ilgili hukuk dairesi" if legal_nature == "hukuk" else "Yargıtay ilgili ceza dairesi"
 
     hits = sum(
         [
@@ -232,10 +308,11 @@ def _finalize(
             nature_score >= 5 or document_type in KAMU_TYPES,
         ]
     )
-    if confidence_override is None:
-        confidence = round(min(0.99, 0.32 + 0.11 * hits), 2)
-    else:
-        confidence = round(min(0.99, max(0.0, confidence_override)), 2)
+    confidence = (
+        _confidence_from_hits(hits)
+        if confidence_override is None
+        else round(min(0.99, max(0.0, confidence_override)), 2)
+    )
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,

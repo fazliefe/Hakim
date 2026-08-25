@@ -19,7 +19,7 @@
     "properties": {
       "makam": "string",
       "karar": "string",
-      "sure_cumlesi": "string — 15 gün",
+      "sure_cumlesi": "string — 14 gün (iki hafta)",
       "sebepler": ["string"],
       "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
       "talep": "string — bozma"
@@ -27,13 +27,13 @@
   },
   "writing": {
     "tone": "Temyiz: hukuka aykırılık. Olay tartışmasını istinaf gibi uzatma.",
-    "must": ["CMK m.291", "Yargıtay daire no uydurma"],
+    "must": ["CMK m.291", "Yargıtay daire no uydurma", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
     "must_not": ["BAM’a hitap"]
   },
   "example": {
     "makam": "Yargıtay ilgili ceza dairesi",
     "karar": "Bölge adliye mahkemesi kararı",
-    "sure_cumlesi": "Temyiz süresi CMK m.291 uyarınca on beş gündür.",
+    "sure_cumlesi": "Temyiz süresi CMK m.291 uyarınca iki hafta (14 gün) içindedir.",
     "sebepler": ["Kararın hukuka aykırılığı"],
     "hukuki_nitelendirme": [],
     "talep": "Kararın bozulması talep olunur."
