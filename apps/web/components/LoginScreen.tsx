@@ -14,6 +14,7 @@ import {
   verifyAccount,
 } from "@/lib/api";
 import { subscribePhoneLayout } from "@/lib/phone-layout";
+import { QrEntryLink } from "@/components/QrEntryLink";
 
 type Mode = "giris" | "kayit" | "dogrula" | "unuttum" | "reset-kod" | "yeni-sifre";
 
@@ -463,6 +464,7 @@ export function LoginScreen() {
               ) : null}
             </div>
           </form>
+          <QrEntryLink variant="login" />
         </div>
       </section>
 

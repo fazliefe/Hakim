@@ -6,6 +6,7 @@ import { CSSProperties, PointerEvent, ReactNode, useEffect, useRef, useState } f
 import { useRouter } from "next/navigation";
 import { SystemStatus, getStoredUser, getSystemStatus, isLiveCheck, logoutAccount, type AuthUser } from "@/lib/api";
 import { HakimTheme, applyTheme, readTheme } from "@/lib/theme";
+import { QrEntryLink } from "@/components/QrEntryLink";
 
 const OFFLINE_STATUS: SystemStatus = {
   status: "kapalı",
@@ -208,6 +209,7 @@ export function AppShell({
               );
             })}
           </div>
+          <QrEntryLink />
           <button
             type="button"
             className="theme-toggle"

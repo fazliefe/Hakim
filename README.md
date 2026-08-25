@@ -59,7 +59,36 @@ API’yi `--reload` olmadan çalıştırın; kod değişince süreci yeniden ba�
 
 ### Giriş
 
-Web’de demo için şifre boş bırakılabilir (`/giris`).
+Web’de demo için şifre boş bırakılabilir (`/giris`). Varsayılan yönetici kullanıcı adı `admin`’dir. `HAKIM_ADMIN_PASSWORD` yoksa ilk API açılışında rastgele bir şifre yazdırılır; sonra Ayarlar’dan değiştirilebilir.
+
+### Mobil erişim (QR / Cloudflare tünel)
+
+Telefon aynı Wi-Fi’de olmak zorunda değildir. Cloudflare quick tunnel, bu makinedeki `localhost:3000` arayüzünü geçici bir `https://….trycloudflare.com` adresine taşır. QR o adresi `/giris` ile kodlar.
+
+Gereken: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (`winget install --id Cloudflare.cloudflared`). Üç süreç **aynı anda** açık kalır:
+
+| Süreç | Ne işe yarar |
+| --- | --- |
+| `uv run uvicorn … --port 8000` | Giriş ve API |
+| `npm run dev` (`apps/web`, port 3000) | Arayüz |
+| `powershell -File scripts\start_tunnel_qr.ps1` | Public URL + QR |
+
+```powershell
+powershell -File scripts\start_tunnel_qr.ps1
+```
+
+Script public adresi `data/tunnel-url.txt` dosyasına yazar (git’e girmez). Tünel hazır olunca arayüzdeki **QR** düğmesi güncel kodu açar.
+
+QR’a şu yerlerden tıklanır (hepsi `/qr` sayfasını açar):
+
+- Giriş: `http://localhost:3000/giris` — kartın altında **Telefonda aç**
+- Araştırma, Evrak, Dilekçe ve diğer çalışma ekranları — üst çubukta, tema düğmesinin solundaki QR ikonu
+
+Tünel scripti ayrıca `/qr` sayfasını tarayıcıda açmayı dener. Quick tunnel her çalıştırmada **yeni adres** verir; eski QR ve eski `trycloudflare.com` linki ölür. Telefonda her seferinde arayüzdeki **güncel** kodu okutun. Tünel penceresini kapatınca public adres düşer; `npm` veya API kapanınca sayfa / giriş çalışmaz.
+
+Giriş istekleri telefonda `127.0.0.1:8000` aramaz; tarayıcı aynı origin üzerinden `/api-hakim` proxy’sine gider. `NEXT_PUBLIC_HAKIM_API_URL` localhost’a işaret ediyorsa tünelde yok sayılır.
+
+Sabit bir domain (adresin restart’ta değişmemesi) için named Cloudflare tunnel gerekir; bu script quick tunnel kullanır.
 
 ## Demo metinler
 

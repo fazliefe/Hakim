@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getAuthToken, getCurrentUser, getStoredUser } from "@/lib/api";
 import { subscribePhoneLayout } from "@/lib/phone-layout";
 
-const PUBLIC_PATHS = new Set(["/", "/giris"]);
+const PUBLIC_PATHS = new Set(["/", "/giris", "/qr"]);
 
 export function SessionSplash({ message = "Oturum Kontrol Ediliyor…" }: { message?: string }) {
   return (

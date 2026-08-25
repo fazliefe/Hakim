@@ -692,6 +692,36 @@ button {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.login-qr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid rgba(226, 188, 106, 0.16);
+  color: rgba(226, 188, 106, 0.7);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.login-qr svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.login-qr:hover,
+.login-qr:focus-visible {
+  color: #f3d78a;
+}
+
 .btn-ghost {
   border: 1px solid rgba(212, 175, 55, 0.28);
   background: transparent;
@@ -1544,6 +1574,32 @@ button {
 }
 
 .theme-toggle:hover {
+  color: var(--navy-950);
+  background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+  border-color: transparent;
+}
+
+.qr-entry {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: transparent;
+  color: var(--gold-400);
+  text-decoration: none;
+}
+
+.qr-entry svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+.qr-entry:hover,
+.qr-entry:focus-visible {
   color: var(--navy-950);
   background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
   border-color: transparent;
@@ -4182,7 +4238,15 @@ html[data-theme="light"] .account-menu-toggle {
   border-color: rgba(154, 120, 32, 0.28);
 }
 
-html[data-theme="light"] .theme-toggle:hover {
+html[data-theme="light"] .qr-entry {
+  background: transparent;
+  color: var(--gold-400);
+  border-color: rgba(154, 120, 32, 0.28);
+}
+
+html[data-theme="light"] .theme-toggle:hover,
+html[data-theme="light"] .qr-entry:hover,
+html[data-theme="light"] .qr-entry:focus-visible {
   color: #1a1204;
 }
 
@@ -4466,6 +4530,12 @@ html[data-theme="light"] .login-screen.cinematic {
     min-height: 40px;
   }
 
+  .qr-entry {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
   .account-menu-panel {
     right: 0;
     width: min(18rem, calc(100vw - 1.2rem));
@@ -4739,6 +4809,11 @@ html[data-phone-layout="landscape"] .login-actions {
   margin-top: 0.1rem;
 }
 
+html[data-phone-layout="landscape"] .login-qr {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+}
+
 html[data-phone-layout="landscape"] .login-screen.cinematic .btn-gold {
   padding: 0.55rem 0.9rem;
   min-height: 40px;
@@ -4827,4 +4902,96 @@ html[data-theme="light"] .mobile-modulenav {
 
 html[data-theme="light"] .mobile-modulenav a {
   color: #5c4a24;
+}
+
+.qr-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem 1rem 2rem;
+  background:
+    radial-gradient(ellipse 50% 40% at 50% 0%, rgba(212, 175, 55, 0.12), transparent 55%),
+    var(--navy-950);
+}
+
+.qr-brand {
+  position: absolute;
+  top: 1.2rem;
+  left: 1.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.qr-brand strong {
+  font-family: var(--font-brand);
+  letter-spacing: 0.16em;
+  color: var(--gold-400);
+}
+
+.qr-card {
+  width: min(28rem, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  padding: 1.6rem 1.4rem 1.4rem;
+  border-radius: 18px;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: rgba(10, 18, 32, 0.88);
+  text-align: center;
+}
+
+.qr-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-600);
+}
+
+.qr-card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  color: var(--gold-200);
+}
+
+.qr-lede,
+.qr-wait {
+  margin: 0;
+  color: var(--silver-400);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.qr-image {
+  width: min(280px, 72vw);
+  height: auto;
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.65rem;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.qr-url {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  color: var(--gold-400);
+}
+
+.qr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+  margin-top: 0.35rem;
+}
+
+.qr-actions .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
 }
