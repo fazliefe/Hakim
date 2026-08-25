@@ -10,7 +10,7 @@ export function AgentRail({
   if (!agents?.length) return null;
   return (
     <div className="agent-rail-wrap">
-      <ol className="agent-rail" aria-label="İşlem adımları">
+      <ol className="agent-rail" aria-label="İşlem Adımları">
         {agents.map((agent) => (
           <li key={agent.id} className={agent.state}>
             <span className="agent-sticker" aria-hidden>

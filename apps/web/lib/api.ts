@@ -98,9 +98,9 @@ export type SystemStatus = {
 };
 
 export function writerLabel(writer?: string | null): string {
-  if (writer === "refuse") return "Cevap yok";
-  if (writer === "api" || writer === "ollama") return "Kaynaklı gerekçe";
-  return "Kaynaklı gerekçe";
+  if (writer === "refuse") return "Cevap Yok";
+  if (writer === "api" || writer === "ollama") return "Kaynaklı Gerekçe";
+  return "Kaynaklı Gerekçe";
 }
 
 export function writerIsLlm(writer?: string | null): boolean {
@@ -115,7 +115,30 @@ export function writerIsLlm(writer?: string | null): boolean {
 // tarafındaki gerçek backend'e istek gider. NEXT_PUBLIC_HAKIM_API_URL yalnızca
 // bilinçli bir override için var (ör. backend'i başka bir origin'den doğrudan
 // çağırmak); production için hardcoded bir origin BURAYA yazılmaz.
-const API_BASE = process.env.NEXT_PUBLIC_HAKIM_API_URL ?? "/api-hakim";
+//
+// apiBase() ayrıca tarayıcıda çalışırken loopback/tünel uyuşmazlığını
+// (ör. NEXT_PUBLIC_HAKIM_API_URL yanlışlıkla 127.0.0.1'e işaret ediyorsa ama
+// sayfa tünel üzerinden public bir origin'den açıldıysa) tespit edip yine
+// göreli `/api-hakim`'e düşer.
+const CONFIGURED_API_BASE = (process.env.NEXT_PUBLIC_HAKIM_API_URL ?? "/api-hakim").replace(/\/$/, "");
+
+function apiBase(): string {
+  const configured = CONFIGURED_API_BASE;
+  if (typeof window === "undefined") return configured;
+  try {
+    const target = new URL(configured, window.location.origin);
+    const loopback = target.hostname === "127.0.0.1" || target.hostname === "localhost";
+    const pageLoopback =
+      window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+    if (loopback && !pageLoopback) return "/api-hakim";
+    if (window.location.protocol === "https:" && target.protocol === "http:" && loopback) {
+      return "/api-hakim";
+    }
+  } catch {
+    return "/api-hakim";
+  }
+  return configured;
+}
 
 const TOKEN_KEY = "hakim-token";
 const USER_KEY = "hakim-user";
@@ -192,7 +215,15 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${API_BASE}${path}`, { ...init, headers, cache: init?.cache ?? "no-store" });
+  try {
+    return await fetch(`${apiBase()}${path}`, { ...init, headers, cache: init?.cache ?? "no-store" });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : "";
+    if (/load failed|failed to fetch|networkerror|network request failed/i.test(raw)) {
+      throw new Error("Sunucuya bağlanılamadı.");
+    }
+    throw err;
+  }
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {

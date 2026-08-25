@@ -27,6 +27,7 @@ data/raw/
 data/minio/
 data/accounts.sqlite
 data/accounts.sqlite-*
+data/tunnel-url.txt
 data/_sample_*.html
 data2/
 data/_tmp_*.json

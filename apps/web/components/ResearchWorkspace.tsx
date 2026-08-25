@@ -24,7 +24,14 @@ type ChatTurn = { id: string; query: string; answer: string; result: ResearchRes
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
   { id: "gecmis", label: "Geçmiş" },
-  { id: "kaydedilen", label: "Kaydedilen maddeler" },
+  { id: "kaydedilen", label: "Kaydedilen Maddeler" },
+];
+
+const RESEARCH_TABS: Array<[Tab, string]> = [
+  ["metin", "Metin"],
+  ["kaynaklar", "Kaynaklar"],
+  ["graf", "Bilgi Grafı"],
+  ["iz", "Arama İzi"],
 ];
 
 const HISTORY_KEY = "hakim-research-history";
@@ -144,7 +151,7 @@ function isDecision(item: Evidence) {
 
 function sourceHeading(item: Evidence) {
   if (isDecision(item)) {
-    return item.title || item.document_id || "Mahkeme kararı";
+    return item.title || item.document_id || "Mahkeme Kararı";
   }
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
@@ -188,6 +195,7 @@ export function ResearchWorkspace() {
   const [saved, setSaved] = useState<SavedArticle[]>([]);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("collapsed");
   const threadEnd = useRef<HTMLDivElement>(null);
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
@@ -204,6 +212,7 @@ export function ResearchWorkspace() {
   }, [result, selected]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const reading = saved.find((item) => item.id === readingId) ?? null;
   const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
   const decisions = useMemo(() => result?.evidence.filter(isDecision) ?? [], [result]);
 
@@ -224,7 +233,6 @@ export function ResearchWorkspace() {
 
   function onTab(next: Tab) {
     setTab(next);
-    if (next === "kaynaklar") setInspectorMode("open");
   }
 
   async function runQuery(text: string, opts?: { followUp?: boolean; replace?: boolean }) {
@@ -310,12 +318,12 @@ export function ResearchWorkspace() {
             <span className="badge">{selectedEvidence.authority || "resmi"}</span>
           </div>
           <div className="source-title">
-            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
+            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız Karar" : "Başlıksız Madde")}
           </div>
           <p className="source-content">{selectedEvidence.content}</p>
           {selectedEvidence.mulga_warning ? <p className="error">⚠ {selectedEvidence.mulga_warning}</p> : null}
           <button type="button" className="side-action" onClick={toggleSave}>
-            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
+            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan Çıkar" : "Maddeyi Kaydet"}
           </button>
         </article>
       ) : null}
@@ -325,10 +333,16 @@ export function ResearchWorkspace() {
   return (
     <AppShell
       module="arastirma"
-      sidebarTitle="Hukuki araştırma"
+      sidebarTitle="Hukuki Araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
-      onSidebarSelect={(id) => setSide(id as SideView)}
+      onSidebarSelect={(id) => {
+        const next = id as SideView;
+        setSide(next);
+        if (next === "kaydedilen" && saved[0] && !saved.some((item) => item.id === readingId)) {
+          setReadingId(saved[0].id);
+        }
+      }}
       inspectorTitle="Kaynak"
       inspector={inspector}
       inspectorMode={inspectorMode}
@@ -339,7 +353,7 @@ export function ResearchWorkspace() {
         <div className={`research-scroll${tab === "graf" || tab === "iz" ? " graph-fill" : ""}`}>
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
-              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
+              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen Maddeler"}</h1>
               <p>
                 {side === "gecmis"
                   ? "Önceki araştırmalar. Tıklayınca yeni sohbet başlar."
@@ -455,21 +469,36 @@ export function ResearchWorkspace() {
               ) : null}
               {side === "kaydedilen" ? (
                 saved.length ? (
-                  saved.map((item) => (
-                    <article key={item.id} className="saved-article">
-                      <div className="saved-article-head">
-                        <strong>{item.heading}</strong>
+                  <>
+                    {saved.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`source-row ${readingId === item.id ? "selected" : ""}`}
+                        onClick={() => setReadingId(item.id)}
+                      >
+                        {item.heading}
+                      </button>
+                    ))}
+                    {reading ? (
+                      <article className="source-detail">
+                        <div className="source-title">{reading.heading}</div>
+                        <p className="source-content">{reading.content}</p>
                         <button
                           type="button"
-                          className="text-btn"
-                          onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
+                          className="side-action"
+                          onClick={() => {
+                            persistSaved(saved.filter((row) => row.id !== reading.id));
+                            setReadingId(null);
+                          }}
                         >
                           Kayıttan çıkar
                         </button>
-                      </div>
-                      <p>{item.content}</p>
-                    </article>
-                  ))
+                      </article>
+                    ) : (
+                      <p className="muted">Bir madde seçin.</p>
+                    )}
+                  </>
                 ) : (
                   <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
                 )

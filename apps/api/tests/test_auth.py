@@ -36,7 +36,7 @@ def test_register_requires_verification() -> None:
         json={
             "username": "avukat1",
             "email": "avukat1@example.com",
-            "password": "avukat12",
+            "password": "avukat1200",
             "display_name": "Avukat",
         },
     )
@@ -46,7 +46,7 @@ def test_register_requires_verification() -> None:
     assert body.get("preview_code")
     blocked = client.post(
         "/v1/auth/login",
-        json={"identifier": "avukat1", "password": "avukat12"},
+        json={"identifier": "avukat1", "password": "avukat1200"},
     )
     assert blocked.status_code == 403
     verified = client.post(
@@ -103,7 +103,7 @@ def test_user_cannot_list_accounts() -> None:
         json={
             "username": "okur1",
             "email": "okur1@example.com",
-            "password": "okur123",
+            "password": "okur123456",
             "display_name": "Okur",
         },
     )
@@ -128,7 +128,7 @@ def test_admin_creates_user() -> None:
         json={
             "username": "stajyer1",
             "email": "stajyer1@example.com",
-            "password": "stajyer1",
+            "password": "stajyer100",
             "display_name": "Stajyer",
             "role": "user",
         },
@@ -140,7 +140,7 @@ def test_admin_creates_user() -> None:
     assert body.get("preview_code")
     blocked = client.post(
         "/v1/auth/login",
-        json={"identifier": "stajyer1", "password": "stajyer1"},
+        json={"identifier": "stajyer1", "password": "stajyer100"},
     )
     assert blocked.status_code == 403
     verified = client.post(
@@ -150,7 +150,7 @@ def test_admin_creates_user() -> None:
     assert verified.status_code == 200
     login = client.post(
         "/v1/auth/login",
-        json={"identifier": "stajyer1", "password": "stajyer1"},
+        json={"identifier": "stajyer1", "password": "stajyer100"},
     )
     assert login.status_code == 200
 
@@ -162,7 +162,7 @@ def test_forgot_password_reset() -> None:
         json={
             "username": "reset1",
             "email": "reset1@example.com",
-            "password": "eski123",
+            "password": "eski123456",
             "display_name": "Reset",
         },
     )
@@ -178,24 +178,61 @@ def test_forgot_password_reset() -> None:
     assert code
     bad = client.post(
         "/v1/auth/reset",
-        json={"identifier": "reset1", "code": "000000", "password": "yeni1234"},
+        json={"identifier": "reset1", "code": "000000", "password": "yeni123456"},
     )
     assert bad.status_code == 401
     reset = client.post(
         "/v1/auth/reset",
-        json={"identifier": "reset1", "code": code, "password": "yeni1234"},
+        json={"identifier": "reset1", "code": code, "password": "yeni123456"},
     )
     assert reset.status_code == 200
     old = client.post(
         "/v1/auth/login",
-        json={"identifier": "reset1", "password": "eski123"},
+        json={"identifier": "reset1", "password": "eski123456"},
     )
     assert old.status_code == 401
     fresh = client.post(
         "/v1/auth/login",
-        json={"identifier": "reset1", "password": "yeni1234"},
+        json={"identifier": "reset1", "password": "yeni123456"},
     )
     assert fresh.status_code == 200
+
+
+def test_forgot_unknown_account_same_response() -> None:
+    client = TestClient(app)
+    known = client.post(
+        "/v1/auth/register",
+        json={
+            "username": "reset2",
+            "email": "reset2@example.com",
+            "password": "eski123456",
+            "display_name": "Reset",
+        },
+    )
+    assert known.status_code == 200
+    client.post("/v1/auth/verify", json={"identifier": "reset2", "code": known.json()["preview_code"]})
+    existing = client.post("/v1/auth/forgot", json={"identifier": "reset2"})
+    missing = client.post("/v1/auth/forgot", json={"identifier": "yok_boyle_hesap"})
+    assert existing.status_code == 200
+    assert missing.status_code == 200
+    assert set(existing.json().keys()) == set(missing.json().keys())
+    assert existing.json()["message"] == missing.json()["message"]
+    assert existing.json()["mailed"] == missing.json()["mailed"]
+    assert existing.json()["smtp"] == missing.json()["smtp"]
+
+
+def test_register_rejects_short_password() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/v1/auth/register",
+        json={
+            "username": "kisa1",
+            "email": "kisa1@example.com",
+            "password": "abc12",
+            "display_name": "Kisa",
+        },
+    )
+    assert response.status_code == 422
 
 
 def _admin_token(client: TestClient) -> str:
@@ -234,7 +271,7 @@ def test_admin_lock_role_revoke_and_delete() -> None:
         json={
             "username": "kilit1",
             "email": "kilit1@example.com",
-            "password": "kilit12",
+            "password": "kilit12345",
             "display_name": "Kilit",
             "role": "user",
         },
@@ -245,13 +282,13 @@ def test_admin_lock_role_revoke_and_delete() -> None:
     locked = client.patch(f"/v1/auth/users/{user_id}", headers=auth, json={"locked": True})
     assert locked.status_code == 200
     assert locked.json()["user"]["locked"] is True
-    blocked = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12"})
+    blocked = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12345"})
     assert blocked.status_code == 403
     opened = client.patch(f"/v1/auth/users/{user_id}", headers=auth, json={"locked": False, "role": "admin"})
     assert opened.status_code == 200
     assert opened.json()["user"]["role"] == "admin"
     assert opened.json()["user"]["locked"] is False
-    login = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12"})
+    login = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12345"})
     assert login.status_code == 200
     revoked = client.post(f"/v1/auth/users/{user_id}/revoke-sessions", headers=auth)
     assert revoked.status_code == 200
@@ -259,7 +296,7 @@ def test_admin_lock_role_revoke_and_delete() -> None:
     assert me.status_code == 401
     deleted = client.delete(f"/v1/auth/users/{user_id}", headers=auth)
     assert deleted.status_code == 200
-    missing = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12"})
+    missing = client.post("/v1/auth/login", json={"identifier": "kilit1", "password": "kilit12345"})
     assert missing.status_code == 401
 
 
@@ -273,7 +310,7 @@ def test_admin_sends_password_email() -> None:
         json={
             "username": "posta1",
             "email": "posta1@example.com",
-            "password": "eski123",
+            "password": "eski123456",
             "display_name": "Posta",
             "role": "user",
         },
@@ -281,7 +318,7 @@ def test_admin_sends_password_email() -> None:
     assert created.status_code == 200
     user_id = created.json()["user"]["id"]
     client.post("/v1/auth/verify", json={"identifier": "posta1", "code": created.json()["preview_code"]})
-    old = client.post("/v1/auth/login", json={"identifier": "posta1", "password": "eski123"})
+    old = client.post("/v1/auth/login", json={"identifier": "posta1", "password": "eski123456"})
     assert old.status_code == 200
     sent = client.post(f"/v1/auth/users/{user_id}/send-password", headers=auth)
     assert sent.status_code == 200
@@ -289,13 +326,13 @@ def test_admin_sends_password_email() -> None:
     assert body["mailed"] is False
     password = body.get("preview_password")
     assert password
-    blocked = client.post("/v1/auth/login", json={"identifier": "posta1", "password": "eski123"})
+    blocked = client.post("/v1/auth/login", json={"identifier": "posta1", "password": "eski123456"})
     assert blocked.status_code == 401
     fresh = client.post("/v1/auth/login", json={"identifier": "posta1", "password": password})
     assert fresh.status_code == 200
     dead = client.get("/v1/auth/me", headers={"Authorization": f"Bearer {old.json()['token']}"})
     assert dead.status_code == 401
-    user = _register_verified(client, "posta2", "posta2@example.com", "posta12")
+    user = _register_verified(client, "posta2", "posta2@example.com", "posta12345")
     denied = client.post(
         f"/v1/auth/users/{user_id}/send-password",
         headers={"Authorization": f"Bearer {user['token']}"},
@@ -318,28 +355,28 @@ def test_cannot_delete_self_or_last_admin() -> None:
 
 def test_password_and_email_settings() -> None:
     client = TestClient(app)
-    session = _register_verified(client, "ayar1", "ayar1@example.com", "eski123")
+    session = _register_verified(client, "ayar1", "ayar1@example.com", "eski123456")
     headers = {"Authorization": f"Bearer {session['token']}"}
     bad = client.post(
         "/v1/auth/password",
         headers=headers,
-        json={"current_password": "wrong", "new_password": "yeni1234"},
+        json={"current_password": "wrong", "new_password": "yeni123456"},
     )
     assert bad.status_code == 401
     changed = client.post(
         "/v1/auth/password",
         headers=headers,
-        json={"current_password": "eski123", "new_password": "yeni1234"},
+        json={"current_password": "eski123456", "new_password": "yeni123456"},
     )
     assert changed.status_code == 200
-    old = client.post("/v1/auth/login", json={"identifier": "ayar1", "password": "eski123"})
+    old = client.post("/v1/auth/login", json={"identifier": "ayar1", "password": "eski123456"})
     assert old.status_code == 401
     still = client.get("/v1/auth/me", headers=headers)
     assert still.status_code == 200
     email_req = client.post(
         "/v1/auth/email",
         headers=headers,
-        json={"password": "yeni1234", "email": "ayar1b@example.com"},
+        json={"password": "yeni123456", "email": "ayar1b@example.com"},
     )
     assert email_req.status_code == 200
     code = email_req.json().get("preview_code")
@@ -347,18 +384,18 @@ def test_password_and_email_settings() -> None:
     confirmed = client.post("/v1/auth/email/confirm", headers=headers, json={"code": code})
     assert confirmed.status_code == 200
     assert confirmed.json()["user"]["email"] == "ayar1b@example.com"
-    login = client.post("/v1/auth/login", json={"identifier": "ayar1b@example.com", "password": "yeni1234"})
+    login = client.post("/v1/auth/login", json={"identifier": "ayar1b@example.com", "password": "yeni123456"})
     assert login.status_code == 200
 
 
 def test_profile_and_own_sessions() -> None:
     client = TestClient(app)
-    first = _register_verified(client, "ayar2", "ayar2@example.com", "eski123")
+    first = _register_verified(client, "ayar2", "ayar2@example.com", "eski123456")
     headers = {"Authorization": f"Bearer {first['token']}"}
     profile = client.patch("/v1/auth/me", headers=headers, json={"display_name": "Avukat Ayse"})
     assert profile.status_code == 200
     assert profile.json()["user"]["display_name"] == "Avukat Ayse"
-    second = client.post("/v1/auth/login", json={"identifier": "ayar2", "password": "eski123"}).json()
+    second = client.post("/v1/auth/login", json={"identifier": "ayar2", "password": "eski123456"}).json()
     revoked = client.post("/v1/auth/sessions/revoke", headers=headers)
     assert revoked.status_code == 200
     assert revoked.json()["revoked"] >= 1

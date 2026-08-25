@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useCallback, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { InteractiveScale } from "@/components/InteractiveScale";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   loginAccount,
   registerAccount,
@@ -12,6 +13,8 @@ import {
   resetPassword,
   verifyAccount,
 } from "@/lib/api";
+import { subscribePhoneLayout } from "@/lib/phone-layout";
+import { QrEntryLink } from "@/components/QrEntryLink";
 
 type Mode = "giris" | "kayit" | "dogrula" | "unuttum" | "reset-kod" | "yeni-sifre";
 
@@ -49,14 +52,108 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [code, setCode] = useState("");
-  const [previewCode, setPreviewCode] = useState<string | null>(null);
+  const [mailOffline, setMailOffline] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const biasRef = useRef(0);
+  const rootRef = useRef<HTMLElement>(null);
+  const progressRef = useRef(0);
+  const [ready, setReady] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [narrow, setNarrow] = useState(false);
   const onBiasChange = useCallback((v: number) => {
     biasRef.current = v;
   }, []);
+
+  useEffect(() => {
+    return subscribePhoneLayout((layout) => setNarrow(layout !== "desktop"));
+  }, []);
+
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setReady(true);
+      return;
+    }
+    let inner = 0;
+    const outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => setReady(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(outer);
+      window.cancelAnimationFrame(inner);
+    };
+  }, []);
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const onMove = (event: PointerEvent) => {
+      node.style.setProperty("--mx", String(event.clientX / window.innerWidth));
+      node.style.setProperty("--my", String(event.clientY / window.innerHeight));
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  const applyProgress = useCallback((delta: number) => {
+    const next = Math.min(1, Math.max(0, progressRef.current + delta));
+    if (next === progressRef.current) return;
+    progressRef.current = next;
+    setScrollProgress(next);
+  }, []);
+
+  useEffect(() => {
+    if (narrow) return;
+
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement;
+
+    const onWheel = (event: WheelEvent) => {
+      if (typing(event.target)) return;
+      event.preventDefault();
+      applyProgress(event.deltaY / 900);
+    };
+
+    const onKey = (event: KeyboardEvent) => {
+      if (typing(event.target)) return;
+      if (event.key === "ArrowDown" || event.key === "PageDown") {
+        event.preventDefault();
+        applyProgress(event.key === "PageDown" ? 0.22 : 0.1);
+      }
+      if (event.key === "ArrowUp" || event.key === "PageUp") {
+        event.preventDefault();
+        applyProgress(event.key === "PageUp" ? -0.22 : -0.1);
+      }
+    };
+
+    let touchY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      if (typing(event.target) || (event.target as HTMLElement | null)?.closest(".login-card")) return;
+      touchY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (typing(event.target) || (event.target as HTMLElement | null)?.closest(".login-card")) return;
+      const y = event.touches[0]?.clientY ?? touchY;
+      event.preventDefault();
+      applyProgress((touchY - y) / 520);
+      touchY = y;
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", onWheel, { capture: true });
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [applyProgress, narrow]);
 
   function go(next: Mode) {
     setMode(next);
@@ -65,6 +162,7 @@ export function LoginScreen() {
     if (next === "giris" || next === "kayit" || next === "unuttum") {
       setPassword("");
       setPasswordConfirm("");
+      setMailOffline(false);
       if (next !== "unuttum") setCode("");
     }
   }
@@ -82,10 +180,14 @@ export function LoginScreen() {
         }
         const pending = await registerAccount(username.trim(), email.trim(), password, username.trim());
         setIdentifier(username.trim());
-        setPreviewCode(pending.preview_code ?? null);
-        setCode(pending.preview_code ?? "");
+        setMailOffline(!pending.mailed);
+        setCode("");
         setMode("dogrula");
-        setInfo(pending.message);
+        setInfo(
+          pending.mailed
+            ? pending.message
+            : "E-posta sunucusu bağlı değil. Kod iletilmedi.",
+        );
         return;
       }
       if (mode === "dogrula") {
@@ -95,12 +197,16 @@ export function LoginScreen() {
       }
       if (mode === "unuttum") {
         const result = await requestPasswordReset(identifier.trim());
-        setPreviewCode(result.preview_code ?? null);
-        setCode(result.preview_code ?? "");
+        setMailOffline(!result.mailed);
+        setCode("");
         setPassword("");
         setPasswordConfirm("");
         setMode("reset-kod");
-        setInfo(result.message ?? "E-postanıza gönderilen kodu girin.");
+        setInfo(
+          result.mailed
+            ? result.message ?? "E-postanıza gönderilen kodu girin."
+            : "E-posta sunucusu bağlı değil. Kod iletilmedi.",
+        );
         return;
       }
       if (mode === "reset-kod") {
@@ -120,7 +226,6 @@ export function LoginScreen() {
           return;
         }
         await resetPassword(identifier.trim(), code.trim(), password);
-        setPreviewCode(null);
         setCode("");
         setPassword("");
         setPasswordConfirm("");
@@ -150,9 +255,8 @@ export function LoginScreen() {
         mode === "reset-kod"
           ? await requestPasswordReset(identifier.trim())
           : await resendVerification(identifier.trim());
-      setPreviewCode(result.preview_code ?? null);
-      setInfo(result.mailed ? "Yeni kod e-postanıza gönderildi." : "Yeni kod oluşturuldu.");
-      if (result.preview_code) setCode(result.preview_code);
+      setMailOffline(!result.mailed);
+      setInfo(result.mailed ? "Yeni kod e-postanıza gönderildi." : "E-posta sunucusu bağlı değil. Kod iletilmedi.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kod gönderilemedi");
     } finally {
@@ -162,15 +266,15 @@ export function LoginScreen() {
 
   const title =
     mode === "kayit"
-      ? "Hesap oluştur"
+      ? "Hesap Oluştur"
       : mode === "dogrula"
-        ? "E-posta doğrulama"
+        ? "E-Posta Doğrulama"
         : mode === "unuttum"
-          ? "Şifremi unuttum"
+          ? "Şifremi Unuttum"
           : mode === "reset-kod"
-            ? "Sıfırlama kodu"
+            ? "Sıfırlama Kodu"
             : mode === "yeni-sifre"
-              ? "Yeni şifre"
+              ? "Yeni Şifre"
               : "Giriş";
   const slogan =
     mode === "kayit"
@@ -188,49 +292,60 @@ export function LoginScreen() {
   const submitLabel = loading
     ? "İşleniyor…"
     : mode === "kayit"
-      ? "Kayıt ol"
+      ? "Kayıt Ol"
       : mode === "dogrula"
-        ? "Doğrula ve gir"
+        ? "Doğrula ve Gir"
         : mode === "unuttum"
-          ? "Kod gönder"
+          ? "Kod Gönder"
           : mode === "reset-kod"
-            ? "Kodu doğrula"
+            ? "Kodu Doğrula"
             : mode === "yeni-sifre"
-              ? "Şifreyi güncelle"
-              : "Giriş yap";
+              ? "Şifreyi Güncelle"
+              : "Giriş Yap";
+
+  const deep = scrollProgress > 0.12;
 
   return (
-    <main className="login-screen cinematic">
-      <div className="login-stage">
-        <InteractiveScale onBiasChange={onBiasChange} size="hero" />
-      </div>
+    <main
+      ref={rootRef}
+      className={`login-screen cinematic${ready ? " is-ready" : ""}${narrow ? " is-narrow" : ""}`}
+      data-scroll={deep ? "deep" : "hero"}
+    >
+      <div className="login-sticky">
+        <div className="login-atmosphere" aria-hidden="true">
+          <div className="login-depth" />
+          <div className="login-vignette" />
+          <div className="login-curtain" />
+        </div>
 
-      <header className="login-titlecard">
-        <p className="login-kicker">Kaynak odaklı hukuk zekâsı</p>
-        <h1 className="login-hero-title">HÂKİM</h1>
-        <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
-      </header>
+        {narrow ? null : (
+          <div className="login-stage">
+            <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} />
+          </div>
+        )}
 
-      <section className="login-panel" aria-label="HÂKİM giriş">
+        <header className="login-brand">
+          <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
+          <span>HÂKİM</span>
+        </header>
+
+        <div className="login-titlecard">
+          <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>
+          <p className="login-hero-copy">Kodun dili, geleceğin Hakimi.</p>
+        </div>
+
+      <section className="login-panel" aria-label="HÂKİM Giriş">
         <div className="login-card">
-          <Image
-            src="/hakim-emblem.png"
-            alt="HÂKİM amblemi"
-            width={72}
-            height={72}
-            className="login-emblem"
-            priority
-          />
           <h2>{title}</h2>
           <p className="login-slogan">{slogan}</p>
 
           {mode === "giris" || mode === "kayit" ? (
-            <div className="login-mode" role="tablist">
+            <div className="login-mode" data-mode={mode} role="tablist">
               <button type="button" className={mode === "giris" ? "active" : ""} onClick={() => go("giris")}>
                 Giriş
               </button>
               <button type="button" className={mode === "kayit" ? "active" : ""} onClick={() => go("kayit")}>
-                Kayıt ol
+                Kayıt Ol
               </button>
             </div>
           ) : null}
@@ -267,7 +382,7 @@ export function LoginScreen() {
             ) : null}
             {mode === "giris" || mode === "unuttum" ? (
               <label>
-                Kullanıcı adı
+                Kullanıcı Adı
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -280,50 +395,47 @@ export function LoginScreen() {
             {mode === "dogrula" || mode === "reset-kod" ? (
               <>
                 <label>
-                  Kullanıcı adı
+                  Kullanıcı Adı
                   <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
                 </label>
                 <label>
-                  {mode === "reset-kod" ? "Sıfırlama kodu" : "Doğrulama kodu"}
+                  {mode === "reset-kod" ? "Sıfırlama Kodu" : "Doğrulama Kodu"}
                   <input
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="000000"
+                    className="login-otp"
                     required
                   />
                 </label>
-                {previewCode ? (
-                  <p className="login-code-hint">
-                    E-posta sunucusu bağlı değil. Kod: <strong>{previewCode}</strong>
-                  </p>
+                {mailOffline ? (
+                  <p className="login-code-hint">E-posta sunucusu bağlı değil. Kod iletilmedi.</p>
                 ) : null}
               </>
             ) : null}
             {mode === "giris" || mode === "kayit" || mode === "yeni-sifre" ? (
               <label>
                 Şifre
-                <input
-                  type="password"
+                <PasswordInput
                   autoComplete={mode === "giris" ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "giris" ? "Şifreniz" : "Şifrenizi oluşturun"}
+                  placeholder={mode === "giris" ? "Şifreniz" : "En Az 6 Karakter"}
                   required
-                  minLength={6}
+                  minLength={mode === "giris" ? 1 : 6}
                 />
               </label>
             ) : null}
             {mode === "kayit" || mode === "yeni-sifre" ? (
               <label>
                 Şifre Tekrarı
-                <input
-                  type="password"
+                <PasswordInput
                   autoComplete="new-password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
-                  placeholder="Şifreyi tekrar girin"
+                  placeholder="Şifreyi Tekrar Girin"
                   required
                   minLength={6}
                 />
@@ -331,7 +443,7 @@ export function LoginScreen() {
             ) : null}
             {mode === "giris" ? (
               <button type="button" className="login-forgot" onClick={() => go("unuttum")}>
-                Şifremi unuttum
+                Şifremi Unuttum
               </button>
             ) : null}
             {info ? <p className="login-info">{info}</p> : null}
@@ -342,18 +454,33 @@ export function LoginScreen() {
               </button>
               {mode === "dogrula" || mode === "reset-kod" ? (
                 <button className="btn-ghost" type="button" onClick={() => void onResend()} disabled={loading}>
-                  Kodu yeniden gönder
+                  Kodu Yeniden Gönder
                 </button>
               ) : null}
               {mode === "dogrula" || mode === "unuttum" || mode === "reset-kod" ? (
                 <button className="btn-ghost" type="button" onClick={() => go("giris")}>
-                  Girişe dön
+                  Girişe Dön
                 </button>
               ) : null}
             </div>
           </form>
+          <QrEntryLink variant="login" />
         </div>
       </section>
+
+        <p className="login-legal">HÂKİM · Kaynak odaklı hukuki araştırma</p>
+        {narrow ? null : (
+          <button
+            type="button"
+            className="login-scroll-cue"
+            aria-label="Sahneyi ilerlet"
+            onClick={() => applyProgress(scrollProgress >= 0.96 ? -1 : 0.28)}
+          >
+            <span className="login-scroll-cue-label">Kanun · Vicdan</span>
+            <span className="login-scroll-cue-chevron" aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </main>
   );
 }
