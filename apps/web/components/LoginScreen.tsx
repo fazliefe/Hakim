@@ -13,6 +13,7 @@ import {
   resetPassword,
   verifyAccount,
 } from "@/lib/api";
+import { subscribePhoneLayout } from "@/lib/phone-layout";
 
 type Mode = "giris" | "kayit" | "dogrula" | "unuttum" | "reset-kod" | "yeni-sifre";
 
@@ -59,8 +60,13 @@ export function LoginScreen() {
   const progressRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [narrow, setNarrow] = useState(false);
   const onBiasChange = useCallback((v: number) => {
     biasRef.current = v;
+  }, []);
+
+  useEffect(() => {
+    return subscribePhoneLayout((layout) => setNarrow(layout !== "desktop"));
   }, []);
 
   useEffect(() => {
@@ -98,6 +104,8 @@ export function LoginScreen() {
   }, []);
 
   useEffect(() => {
+    if (narrow) return;
+
     const typing = (target: EventTarget | null) =>
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
@@ -144,7 +152,7 @@ export function LoginScreen() {
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
     };
-  }, [applyProgress]);
+  }, [applyProgress, narrow]);
 
   function go(next: Mode) {
     setMode(next);
@@ -299,7 +307,7 @@ export function LoginScreen() {
   return (
     <main
       ref={rootRef}
-      className={ready ? "login-screen cinematic is-ready" : "login-screen cinematic"}
+      className={`login-screen cinematic${ready ? " is-ready" : ""}${narrow ? " is-narrow" : ""}`}
       data-scroll={deep ? "deep" : "hero"}
     >
       <div className="login-sticky">
@@ -309,9 +317,11 @@ export function LoginScreen() {
           <div className="login-curtain" />
         </div>
 
-        <div className="login-stage">
-          <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} />
-        </div>
+        {narrow ? null : (
+          <div className="login-stage">
+            <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} />
+          </div>
+        )}
 
         <header className="login-brand">
           <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
@@ -457,15 +467,17 @@ export function LoginScreen() {
       </section>
 
         <p className="login-legal">HÂKİM · Kaynak odaklı hukuki araştırma</p>
-        <button
-          type="button"
-          className="login-scroll-cue"
-          aria-label="Sahneyi ilerlet"
-          onClick={() => applyProgress(scrollProgress >= 0.96 ? -1 : 0.28)}
-        >
-          <span className="login-scroll-cue-label">Kanun · Vicdan</span>
-          <span className="login-scroll-cue-chevron" aria-hidden="true" />
-        </button>
+        {narrow ? null : (
+          <button
+            type="button"
+            className="login-scroll-cue"
+            aria-label="Sahneyi ilerlet"
+            onClick={() => applyProgress(scrollProgress >= 0.96 ? -1 : 0.28)}
+          >
+            <span className="login-scroll-cue-label">Kanun · Vicdan</span>
+            <span className="login-scroll-cue-chevron" aria-hidden="true" />
+          </button>
+        )}
       </div>
     </main>
   );
