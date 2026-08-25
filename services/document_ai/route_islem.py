@@ -9,6 +9,9 @@ class IslemRoute:
     title: str
     reason: str
     evidence: str
+    # Kazanan kalıbın needle-eşleşme skoruna göre ölçeklenmiş bir değer —
+    # istatistiksel kalibrasyon değil (bkz. classify.py::_confidence_from_hits
+    # ile aynı ilke). "Kalıp ne kadar net eşleşti" olarak okunmalı.
     confidence: float
 
 
@@ -76,6 +79,24 @@ def _norm(text: str) -> str:
     return " ".join(folded.lower().split())
 
 
+_ROUTE_CONFIDENCE_FLOOR = 0.15
+_ROUTE_CONFIDENCE_CEILING = 0.95
+# `best` (kazanan kalıbın needle skor toplamı) bu değerde doyar — tek bir
+# başlık-içi eşleşme (2+3) zaten neredeyse tavana yaklaşır.
+_ROUTE_CONFIDENCE_CAP = 6
+
+
+def _route_confidence(best: int) -> float:
+    """`best == 0` (hiçbir kalıp işareti yok) en düşük banda düşer — eski
+    kod bu durumu sabit 0.4'e bağlıyordu, bu da hiç eşleşmeyen bir metni
+    zayıf-ama-gerçek bir eşleşmeden (ör. best=2 → eski formülde 0.61) daha
+    "güvenilir" gösteriyordu. İstatistiksel kalibrasyon değil, bkz.
+    classify.py::_confidence_from_hits ile aynı ilke."""
+    span = _ROUTE_CONFIDENCE_CEILING - _ROUTE_CONFIDENCE_FLOOR
+    ratio = min(best, _ROUTE_CONFIDENCE_CAP) / _ROUTE_CONFIDENCE_CAP
+    return round(_ROUTE_CONFIDENCE_FLOOR + span * ratio, 2)
+
+
 def _span(text: str, needle: str) -> str:
     folded = _norm(text)
     token = _norm(needle)
@@ -116,10 +137,10 @@ def route_islem(text: str) -> IslemRoute:
             f"Dert metninde açık kalıp işareti yok; varsayılan {title}. "
             "Soldan başka kalıp seçebilirsiniz."
         )
-        confidence = 0.4
+        confidence = _route_confidence(0)
     else:
         reason = f"Anlatıya göre uygun format: {title}."
-        confidence = round(min(0.99, 0.45 + 0.08 * min(best, 6)), 2)
+        confidence = _route_confidence(best)
     return IslemRoute(
         action=winner,
         title=title,

@@ -10,9 +10,29 @@ class Classification:
     unit: str
     stage: str
     remedies: tuple[str, ...]
+    # Kaç bağımsız kural-sinyalinin (bkz. `_confidence_from_hits`) tutarlı
+    # sonuç verdiğinin ölçeklenmiş oranı — istatistiksel olarak KALİBRE
+    # EDİLMİŞ bir olasılık DEĞİLDİR (etiketli bir eval seti yok, bkz.
+    # eval/gold). "Kurallar ne kadar hemfikir" olarak okunmalı, "P(doğru
+    # sınıflandırma)" olarak değil.
     confidence: float
     evidence_span: str
     label: str
+
+
+# confidence, `hits` bağımsız sinyalin (bkz. classify_document) kaçının
+# tuttuğuna göre bu aralığa doğrusal ölçeklenir. Alt sınır 0'a yakın ama
+# sıfır değil (hiç sinyal tutmasa bile "belirsiz" etiketi zaten kendini
+# açıklıyor); üst sınır 1'e yakın ama %100 iddia etmiyor — kural motoru
+# yine de yanılabilir.
+_CONFIDENCE_SIGNALS = 6
+_CONFIDENCE_FLOOR = 0.15
+_CONFIDENCE_CEILING = 0.95
+
+
+def _confidence_from_hits(hits: int) -> float:
+    span = _CONFIDENCE_CEILING - _CONFIDENCE_FLOOR
+    return round(_CONFIDENCE_FLOOR + span * hits / _CONFIDENCE_SIGNALS, 2)
 
 
 # Şartname (yargı) + Resmî Yazışma Usulleri / EBYS kamu evrakı.
@@ -258,7 +278,7 @@ def classify_document(text: str) -> Classification:
         unit=unit,
         stage=stage,
         remedies=unique,
-        confidence=round(min(0.99, 0.32 + 0.11 * hits), 2),
+        confidence=_confidence_from_hits(hits),
         evidence_span=type_span or raw[:180],
         label=TYPE_LABELS.get(document_type, document_type),
     )

@@ -88,6 +88,20 @@ def test_catalog_covers_belirsiz() -> None:
     assert classify_document("Merhaba, toplantı notu.").document_type == "belirsiz"
 
 
+def test_confidence_is_lowest_band_when_nothing_matches() -> None:
+    # Hiçbir kural-sinyali tutmuyor (hits == 0) — en düşük banda düşmeli,
+    # eski %32'lik sabit tabandan daha düşük ve daha temkinli.
+    result = classify_document("Merhaba, toplantı notu.")
+    assert result.confidence == 0.15
+
+
+def test_confidence_scales_with_signal_count() -> None:
+    weak = classify_document("Merhaba, toplantı notu.")
+    strong = classify_document(SAMPLES["tebligat"])
+    assert weak.confidence < strong.confidence
+    assert 0.15 <= weak.confidence < strong.confidence <= 0.95
+
+
 def test_gerekceli_karar_not_iddianame_when_body_cites_indictment() -> None:
     text = (
         "T.C.\nANKARA 4. AĞIR CEZA MAHKEMESİ\nGEREKÇELİ KARAR\n\n"
