@@ -238,6 +238,16 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
         payload["writer"] = "extractive"
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    if surface == "evrak":
+        # Görev 1 (evrak özeti): "evrak" yazım modülü (data/formats/evrak.json)
+        # sınıflandırma + tespitlerden bağımsız, evrakın içeriğini anlatan kısa
+        # bir özet üretir — Sınıflandırma sekmesindeki ham alan listesinden
+        # farklı, okunabilir bir metin. API/Ollama yoksa write_module sessizce
+        # None döner; taslak üretimini (yukarıdaki) etkilemez.
+        try:
+            payload["ozet"] = write_module("evrak", {**payload, "user_text": text[:900]})
+        except Exception:
+            payload["ozet"] = None
     usage = take_usage()
     if isinstance(payload.get("observability"), dict):
         payload["observability"]["totals"] = usage_totals(usage)

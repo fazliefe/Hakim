@@ -131,6 +131,7 @@ export const FIELD_LABEL: Record<string, string> = {
 
 export const NATURE_LABEL: Record<string, string> = {
   ceza: "Ceza",
+  hukuk: "Hukuk",
   idare: "İdare",
   anayasa: "Anayasa",
   kamu: "Kamu İdaresi",
@@ -140,6 +141,7 @@ export const NATURE_LABEL: Record<string, string> = {
 export const STAGE_LABEL: Record<string, string> = {
   sorusturma: "Soruşturma",
   kovusturma: "Kovuşturma",
+  ilk_derece: "İlk Derece",
   istinaf: "İstinaf",
   temyiz: "Temyiz",
   bireysel_basvuru: "Bireysel Başvuru",

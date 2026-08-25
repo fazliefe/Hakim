@@ -7,6 +7,7 @@ from deadline.engine import (
     DurationUnit,
     LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR,
     compute_last_day,
+    compute_last_day_detail,
     religious_holiday_table_status,
 )
 
@@ -157,3 +158,41 @@ def test_religious_holiday_table_warns_once_runway_runs_out() -> None:
     )
     assert status["ok"] is False
     assert str(LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR) in status["detail"]
+
+
+def test_compute_last_day_detail_explains_adli_tatil_extension() -> None:
+    # Arayüzdeki "14 gün hesaplandı ama son gün 20 gün sonra" şikayetinin
+    # kaynağı: ham hesap (2026-08-28) adli tatile denk geliyor. Motor bunu
+    # doğru hesaplıyor (CMK m.331/4) ama önceden HİÇBİR açıklama dönmüyordu.
+    last, note = compute_last_day_detail(
+        trigger=date(2026, 8, 14),
+        duration=14,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CRIMINAL,
+    )
+    assert last == date(2026, 9, 3)
+    assert note is not None
+    assert "2026-08-28" in note
+    assert "adli tatil" in note.lower()
+
+
+def test_compute_last_day_detail_no_note_when_unaffected() -> None:
+    last, note = compute_last_day_detail(
+        trigger=date(2026, 6, 1),
+        duration=10,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CIVIL,
+    )
+    assert last == date(2026, 6, 11)
+    assert note is None
+
+
+def test_compute_last_day_still_returns_plain_date() -> None:
+    # Geriye dönük uyumluluk: compute_last_day tek bir date döner (not tuple).
+    last = compute_last_day(
+        trigger=date(2026, 8, 14),
+        duration=14,
+        unit=DurationUnit.DAY,
+        calendar=CalendarType.CRIMINAL,
+    )
+    assert last == date(2026, 9, 3)

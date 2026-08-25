@@ -547,6 +547,7 @@ export type DeadlineOut = {
   last_day: string | null;
   legal_basis: string[];
   missing: string | null;
+  adjustment_note?: string | null;
 };
 
 export type ReasoningHop = {
@@ -641,6 +642,7 @@ export type DocumentAnalysis = {
   extract_note?: string;
   text?: string;
   verdict?: string;
+  ozet?: string | null;
   legal_caveat?: string | null;
   route_reason?: string;
   route_evidence?: string;

@@ -211,8 +211,15 @@ def classify_document(text: str) -> Classification:
             stage = "temyiz"
         elif "istinaf mahkemesi" in blob or "bölge adliye" in blob or "bolge adliye" in blob:
             stage = "istinaf"
-        else:
+        elif legal_nature == "ceza":
             stage = "kovusturma"
+        else:
+            # "Kovuşturma" ceza muhakemesine özgü bir kurum — hukuk/idare/
+            # anayasa davalarında bu aşama yok. Nature-bazlı ayrılmadan önce
+            # her ilk derece kararı (nitelik ne olursa olsun) "kovuşturma"
+            # etiketi alıyordu; bir hukuk/idare kararı da yanlışlıkla ceza
+            # muhakemesi aşamasındaymış gibi gösteriliyordu.
+            stage = "ilk_derece"
 
     # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK) etiketlere
     # ayrıldı — aksi halde ikisi de aynı "istinaf"/"temyiz" etiketini

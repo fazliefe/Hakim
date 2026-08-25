@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgentRail } from "@/components/AgentRail";
 import { AppShell } from "@/components/AppShell";
@@ -22,6 +22,7 @@ const DocumentTraceGraphView = dynamic(
 
 const SIDE = [
   { id: "goruntuleme", label: "Evrak Görüntüleme" },
+  { id: "ozet", label: "Özet" },
   { id: "sinif", label: "Sınıflandırma" },
   { id: "akil", label: "Akıl yürütme" },
   { id: "usul", label: "Kanun yolu ve süreler" },
@@ -31,15 +32,6 @@ const SIDE = [
 
 const FILE_ACCEPT =
   ".pdf,.txt,.md,.docx,.doc,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-const REMEDY_LABEL: Record<string, string> = {
-  itiraz: "İtiraz",
-  istinaf: "İstinaf",
-  temyiz: "Temyiz",
-  bireysel_basvuru: "Bireysel Başvuru",
-  istinaf_idari: "İdari İstinaf",
-  sikayet: "Şikayet",
-};
 
 export function EvrakWorkbench() {
   const params = useSearchParams();
@@ -52,6 +44,7 @@ export function EvrakWorkbench() {
   const [picked, setPicked] = useState(0);
   const [surecLoading, setSurecLoading] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<number | null>(null);
+  const sourceDetailRef = useRef<HTMLDivElement>(null);
   const today = new Date().toISOString().slice(0, 10);
   const c = result?.classification;
   const deadlines = result?.deadlines ?? [];
@@ -69,6 +62,15 @@ export function EvrakWorkbench() {
       })
       .catch(() => setKalipList(KAMU_FALLBACK));
   }, []);
+
+  // Kaynak grafiğinde bir madde/atıf düğümüne tıklandığında (bkz.
+  // DocumentTraceGraphView onSelect), madde metnini gösteren detay kartı
+  // ekranın altında kalabiliyordu — tıklamanın "bir şey açtığı" görünsün diye
+  // seçim değiştiğinde detay kartına kaydırıyoruz.
+  useEffect(() => {
+    if (selectedEvidence == null || side !== "kaynak") return;
+    sourceDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedEvidence, side]);
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -118,28 +120,32 @@ export function EvrakWorkbench() {
           <h1>
             {side === "goruntuleme"
               ? "Evrak Görüntüleme"
-              : side === "sinif"
-                ? "Sınıflandırma"
-                : side === "akil"
-                  ? "Akıl Yürütme"
-                  : side === "usul"
-                    ? "Kanun yolu ve süreler"
-                    : side === "kaynak"
-                      ? "Kaynak grafiği"
-                      : "Taslaklar"}
+              : side === "ozet"
+                ? "Özet"
+                : side === "sinif"
+                  ? "Sınıflandırma"
+                  : side === "akil"
+                    ? "Akıl Yürütme"
+                    : side === "usul"
+                      ? "Kanun yolu ve süreler"
+                      : side === "kaynak"
+                        ? "Kaynak grafiği"
+                        : "Taslaklar"}
           </h1>
           <p>
             {side === "goruntuleme"
               ? "PDF, Word veya TXT yükleyin. Resmi yazışma kalıbı seçilebilir."
-              : side === "sinif"
-                ? "Türü, niteliği ve birimi."
-                : side === "akil"
-                  ? "Çözümlemeden sonra adımlar burada durur."
-                  : side === "usul"
-                    ? "Aşama, kanun yolu ve son gün — süre motoru."
-                    : side === "kaynak"
-                      ? "Taslağın hangi maddeye dayandığı — okuyucudan havaleye zincir + atıf edilen mevzuat."
-                      : "Kaynaklı taslak. Word veya PDF indirin."}
+              : side === "ozet"
+                ? "Evrağın içeriğini anlatan kısa özet."
+                : side === "sinif"
+                  ? "Türü, niteliği ve birimi."
+                  : side === "akil"
+                    ? "Çözümlemeden sonra adımlar burada durur."
+                    : side === "usul"
+                      ? "Aşama, kanun yolu ve son gün — süre motoru."
+                      : side === "kaynak"
+                        ? "Taslağın hangi maddeye dayandığı — okuyucudan havaleye zincir + atıf edilen mevzuat."
+                        : "Kaynaklı taslak. Word veya PDF indirin."}
           </p>
         </div>
         {error ? <p className="error" style={{ padding: "0 0.9rem" }}>{error}</p> : null}
@@ -219,17 +225,31 @@ export function EvrakWorkbench() {
           </div>
         ) : null}
 
+        {side === "ozet" ? (
+          result ? (
+            <div style={{ padding: "0 0.9rem 1rem" }}>
+              <article className="evrak-ozet">
+                {(result.ozet || result.verdict || "").split("\n").map((line, index) =>
+                  line.trim() ? <p key={index}>{line}</p> : <br key={index} />,
+                )}
+              </article>
+              {!result.ozet ? (
+                <p className="muted evrak-hint">
+                  Yazım servisi (API/Ollama) yapılandırılmadığı için özet, kural motorunun ürettiği kısa
+                  değerlendirmeyle sınırlı.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="muted evrak-hint">Önce evrak görüntülemeden dosya yükleyin veya çözün.</p>
+          )
+        ) : null}
+
         {side === "sinif" ? (
           c ? (
             <div className="class-grid" style={{ padding: "0 0.9rem 1rem" }}>
-              {result?.verdict ? (
-                <div className="class-card wide">
-                  <span>Ne Olduğu</span>
-                  <strong>{result.verdict}</strong>
-                </div>
-              ) : null}
               {result?.legal_caveat ? (
-                <p className="legal-caveat class-card wide">⚖ {result.legal_caveat}</p>
+                <p className="legal-caveat class-card wide">Uyarı: {result.legal_caveat}</p>
               ) : null}
               <div className="class-card">
                 <span>Tür</span>
@@ -298,13 +318,9 @@ export function EvrakWorkbench() {
                   </ol>
                 ) : null}
                 <div className="deadline-board">
-                  {(c?.remedies?.length ? c.remedies : []).map((remedy) => (
-                    <div key={remedy} className="deadline-tile">
-                      <span>Kanun Yolu</span>
-                      <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
-                      <em>{c?.label}</em>
-                    </div>
-                  ))}
+                  {deadlines.length === 0 ? (
+                    <p className="muted">Bu evrak için işleyen bir kanun yolu süresi yok.</p>
+                  ) : null}
                   {deadlines.map((item, index) => {
                     const late = Boolean(item.last_day && item.last_day < today);
                     return (
@@ -319,6 +335,7 @@ export function EvrakWorkbench() {
                         <em>
                           {item.duration} {durationUnitLabel(item.unit)}
                           {late ? " · geçti" : ""}
+                          {item.adjustment_note ? " · adli tatil uzaması" : ""}
                         </em>
                       </button>
                     );
@@ -334,6 +351,9 @@ export function EvrakWorkbench() {
                     <p>Tetikleyici: {selectedDeadline.trigger ?? "yok"}</p>
                     <p>Son gün: {formatTurkishDate(selectedDeadline.last_day)}</p>
                     {selectedDeadline.missing ? <p>Eksik: {selectedDeadline.missing}</p> : null}
+                    {selectedDeadline.adjustment_note ? (
+                      <p className="deadline-note">{selectedDeadline.adjustment_note}</p>
+                    ) : null}
                     {selectedDeadline.legal_basis.length ? (
                       <p className="muted">{selectedDeadline.legal_basis.join(" · ")}</p>
                     ) : null}
@@ -372,7 +392,7 @@ export function EvrakWorkbench() {
                     const selectedItem = result.related.find((item) => item.n === selectedEvidence);
                     if (!selectedItem) return null;
                     return (
-                      <article className="source-detail">
+                      <article className="source-detail" ref={sourceDetailRef}>
                         <div className="source-meta">
                           <span>
                             {selectedItem.law_no ? `K.${selectedItem.law_no} m.${selectedItem.article_no}` : selectedItem.title}
@@ -409,7 +429,7 @@ export function EvrakWorkbench() {
             <div style={{ padding: "0 0.9rem 1rem" }}>
               {result.legal_caveat ? (
                 <p className="legal-caveat" style={{ marginBottom: "0.7rem" }}>
-                  ⚖ {result.legal_caveat}
+                  Uyarı: {result.legal_caveat}
                 </p>
               ) : null}
               <div className="sheet-actions" style={{ marginBottom: "0.7rem" }}>

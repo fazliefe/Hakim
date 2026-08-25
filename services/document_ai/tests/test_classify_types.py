@@ -163,6 +163,22 @@ def test_hmk_hukuk_case_not_misclassified_as_ceza() -> None:
     assert "sikayet" not in result.remedies
 
 
+def test_hukuk_ilk_derece_karar_not_tagged_kovusturma() -> None:
+    """"Kovuşturma" ceza muhakemesine özgü — bir hukuk mahkemesi ilk derece
+    kararı bu aşamada değildir. Nature-bazlı ayrılmadan önce her ilk derece
+    mahkeme_karari (nitelik ne olursa olsun) "kovusturma" alıyordu."""
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca "
+        "karar verildi. İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    result = classify_document(text)
+    assert result.legal_nature == "hukuk"
+    assert result.stage == "ilk_derece"
+    assert result.stage != "kovusturma"
+
+
 def test_idare_nature_tags_idari_dava_remedy() -> None:
     """İYUK m.7 dava açma süresinin (deadline/catalog.py) devreye girmesi için
     classification.remedies 'idari_dava' taşımalı — route_islem.py/ACTION_TO_BELGE

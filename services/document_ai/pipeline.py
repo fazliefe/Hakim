@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any, Callable
 
 from deadline.catalog import DEFAULT_RULES
-from deadline.engine import DeadlineComputation, compute_last_day
+from deadline.engine import DeadlineComputation, compute_last_day_detail
 from document_ai.agents import build_reasoning, chain_status as score_chain, diagnose_chain, elapsed_ms, now, pick_yazisma_action, step
 from document_ai.answers import (
     format_havale,
@@ -23,9 +23,18 @@ from document_ai.gaps import diagnose_islem_gaps
 from document_ai.schemas import FIELD_LABELS
 
 
-STAGES = (
+STAGES_CEZA = (
     ("sorusturma", "Soruşturma"),
     ("kovusturma", "Kovuşturma (ilk derece)"),
+    ("istinaf", "İstinaf"),
+    ("temyiz", "Temyiz"),
+    ("bireysel_basvuru", "Bireysel başvuru"),
+)
+# "Kovuşturma"/"soruşturma" ceza muhakemesine özgü — hukuk/idare/anayasa
+# davalarında bu aşamalar yok, o yüzden ayrı ve daha kısa bir raylı gösterim:
+# ilk derece → istinaf → temyiz (+ anayasa'da bireysel başvuru).
+STAGES_DIGER = (
+    ("ilk_derece", "İlk derece"),
     ("istinaf", "İstinaf"),
     ("temyiz", "Temyiz"),
     ("bireysel_basvuru", "Bireysel başvuru"),
@@ -84,10 +93,11 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
         trigger = dates.get(str(rule["trigger"])) or dates.get("teblig") or dates.get("karar")
         missing = None
         last = None
+        note = None
         if trigger is None:
             missing = "Tebliğ veya karar tarihi metinde yok"
         else:
-            last = compute_last_day(
+            last, note = compute_last_day_detail(
                 trigger=trigger,
                 duration=int(rule["duration"]),
                 unit=rule["unit"],  # type: ignore[arg-type]
@@ -105,16 +115,18 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
                 last_day=last,
                 legal_basis=basis,
                 missing=missing,
+                adjustment_note=note,
             )
         )
     return out
 
 
-def _stage_map(current: str) -> list[dict[str, Any]]:
-    keys = [k for k, _ in STAGES]
-    idx = keys.index(current) if current in keys else 1
+def _stage_map(current: str, legal_nature: str) -> list[dict[str, Any]]:
+    stages = STAGES_CEZA if legal_nature == "ceza" else STAGES_DIGER
+    keys = [k for k, _ in stages]
+    idx = keys.index(current) if current in keys else 0
     rows = []
-    for i, (key, title) in enumerate(STAGES):
+    for i, (key, title) in enumerate(stages):
         if current not in keys:
             state = "idle"
         elif i < idx:
@@ -602,7 +614,7 @@ def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
         dates=work["dates"],
         findings=work["findings"],
         deadlines=work["deadlines"],
-        stages=_stage_map(classification.stage),
+        stages=_stage_map(classification.stage, classification.legal_nature),
         related=work.get("related") or [],
         fields=work["fields"],
         missing=work["missing"],
@@ -693,6 +705,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
                 "last_day": item.last_day.isoformat() if item.last_day else None,
                 "legal_basis": list(item.legal_basis),
                 "missing": item.missing,
+                "adjustment_note": item.adjustment_note,
             }
             for item in analysis.deadlines
         ],

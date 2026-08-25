@@ -2553,6 +2553,17 @@ a.source-row {
   line-height: 1.5;
 }
 
+.deadline-note {
+  margin: 0.3rem 0 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 175, 55, 0.24);
+  background: rgba(212, 175, 55, 0.06);
+  color: var(--silver-400);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1080px) {
   .login-screen.cinematic .login-panel {
     right: 50%;
@@ -3282,6 +3293,29 @@ a.source-row {
   margin: 0 0 0.5rem;
   font-size: 1rem;
   color: var(--gold-400);
+}
+
+.evrak-ozet {
+  padding: 0.9rem 1.05rem;
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  border-radius: 8px;
+  background: rgba(6, 16, 31, 0.55);
+  color: var(--silver-200);
+  line-height: 1.6;
+}
+
+.evrak-ozet p {
+  margin: 0 0 0.65rem;
+}
+
+.evrak-ozet p:first-child {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--gold-400);
+}
+
+.evrak-ozet p:last-child {
+  margin-bottom: 0;
 }
 
 .finding-stack {
