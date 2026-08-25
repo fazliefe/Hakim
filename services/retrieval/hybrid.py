@@ -54,7 +54,14 @@ def _is_exact_citation_query(query: str) -> bool:
 
 
 class HybridSearcher:
-    """BM25 + semantic → RRF (Phase 3 hybrid core)."""
+    """BM25 + semantic → RRF (Phase 3 hybrid core).
+
+    Kanun maddeleri (varsayılan `es_client`/`embedder`) ve emsal kararlar
+    (opsiyonel `decision_index`/`decision_embedder`) AYRI ES index'lerinde
+    tutulur (boyut farkı — bkz. `retrieval/mapping.py::DECISION_INDEX_NAME`).
+    `decision_index`/`decision_embedder` verilmezse davranış tamamen eskisiyle
+    aynıdır. `law_no` set edildiğinde kararlar hiç sorgulanmaz — bir madde
+    arayan kullanıcı sadece madde metnini görsün (kullanıcı kararı)."""
 
     def __init__(
         self,
@@ -65,6 +72,8 @@ class HybridSearcher:
         semantic_size: int = 50,
         rrf_k: int = 60,
         limit: int = 30,
+        decision_index: str | None = None,
+        decision_embedder: Embedder | None = None,
     ) -> None:
         self.bm25 = Bm25Searcher(es_client)
         self.semantic = SemanticSearcher(es_client, embedder)
@@ -72,6 +81,11 @@ class HybridSearcher:
         self.semantic_size = semantic_size
         self.rrf_k = rrf_k
         self.limit = limit
+        self.decision_bm25: Bm25Searcher | None = None
+        self.decision_semantic: SemanticSearcher | None = None
+        if decision_index and decision_embedder is not None:
+            self.decision_bm25 = Bm25Searcher(es_client, index_name=decision_index)
+            self.decision_semantic = SemanticSearcher(es_client, decision_embedder, index_name=decision_index)
 
     def search_bm25(
         self,
@@ -91,6 +105,16 @@ class HybridSearcher:
     ) -> list[SearchHit]:
         return self.semantic.search(query, size=self.semantic_size, law_no=law_no, at=at)
 
+    def search_decision_bm25(self, query: str, *, at: datetime | None = None) -> list[SearchHit]:
+        if self.decision_bm25 is None:
+            return []
+        return self.decision_bm25.search(query, size=self.bm25_size, at=at)
+
+    def search_decision_semantic(self, query: str, *, at: datetime | None = None) -> list[SearchHit]:
+        if self.decision_semantic is None:
+            return []
+        return self.decision_semantic.search(query, size=self.semantic_size, at=at)
+
     def fuse(
         self,
         query: str,
@@ -98,6 +122,8 @@ class HybridSearcher:
         semantic_hits: list[SearchHit] | None,
         *,
         limit: int | None = None,
+        decision_bm25_hits: list[SearchHit] | None = None,
+        decision_semantic_hits: list[SearchHit] | None = None,
     ) -> list[FusedHit]:
         top_n = limit or self.limit
         pool = max(top_n * 3, top_n)
@@ -116,11 +142,13 @@ class HybridSearcher:
             ]
             return unique_by_article(cited, limit=top_n)
 
-        fused = reciprocal_rank_fusion(
-            {"bm25": bm25_hits, "semantic": semantic_hits or []},
-            k=self.rrf_k,
-            limit=pool,
-        )
+        ranked_lists: dict[str, list[SearchHit]] = {"bm25": bm25_hits, "semantic": semantic_hits or []}
+        if decision_bm25_hits:
+            ranked_lists["bm25_decisions"] = decision_bm25_hits
+        if decision_semantic_hits:
+            ranked_lists["semantic_decisions"] = decision_semantic_hits
+
+        fused = reciprocal_rank_fusion(ranked_lists, k=self.rrf_k, limit=pool)
         article_no = extract_article_no(query)
         if article_no:
             hinted = parse_law_hint(query)
@@ -145,7 +173,19 @@ class HybridSearcher:
         if _is_exact_citation_query(query):
             return self.fuse(query, bm25_hits, [], limit=limit)
         semantic_hits = self.search_semantic(query, law_no=law_no, at=at)
-        return self.fuse(query, bm25_hits, semantic_hits, limit=limit)
+        decision_bm25_hits: list[SearchHit] = []
+        decision_semantic_hits: list[SearchHit] = []
+        if law_no is None:
+            decision_bm25_hits = self.search_decision_bm25(query, at=at)
+            decision_semantic_hits = self.search_decision_semantic(query, at=at)
+        return self.fuse(
+            query,
+            bm25_hits,
+            semantic_hits,
+            limit=limit,
+            decision_bm25_hits=decision_bm25_hits,
+            decision_semantic_hits=decision_semantic_hits,
+        )
 
 
 

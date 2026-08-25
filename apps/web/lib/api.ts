@@ -478,7 +478,7 @@ export async function getLegalSources(): Promise<SourceCatalog> {
   return response.json();
 }
 
-export async function runResearch(query: string, lawNo = "5237"): Promise<ResearchResponse> {
+export async function runResearch(query: string, lawNo: string | null = null): Promise<ResearchResponse> {
   const response = await apiFetch("/v1/arastirma", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -595,6 +595,7 @@ export type DocumentAnalysis = {
   extract_note?: string;
   text?: string;
   verdict?: string;
+  legal_caveat?: string | null;
   route_reason?: string;
   route_evidence?: string;
   route_confidence?: number;

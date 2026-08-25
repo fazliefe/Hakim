@@ -21,14 +21,23 @@ _TYPE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("tebligat", ("tebliğ mazbatası", "tebligat kanunu", "7201 sayılı", "muhataba tebliğ")),
     ("olur", ("olura arz", "olur'a arz", "makamın oluruna", "olur'unuz", "olurunuz")),
     ("genelge", ("genelge", "genelgenin")),
-    ("tutanak", ("tutanaktır", "işbu tutanak", "tutanak")),
+    # Bare "tutanak" needle kaldırıldı — canlı bir istinaf kararında "duruşma
+    # tutanaklarının yeterince irdelenmediği" gibi, belgenin KENDİSİNİ değil,
+    # dosyadaki BAŞKA bir belgeyi anan bir cümlede geçtiği için yanlışlıkla
+    # eşleşip (üstelik ilk 420 karakterlik "header" bonusunu da alıp) gerçek
+    # "mahkeme_karari" eşleşmesini (karar verildi) puanla geçmişti.
+    ("tutanak", ("tutanaktır", "işbu tutanak")),
     ("rapor", ("faaliyet raporu", "inceleme raporu", "işbu rapor", "raporudur")),
     ("cevap_yazisi", ("cevap yazısı", "yazınıza cevaben", "ilgi yazıya cevaben", "cevaben")),
     ("bilgi_yazisi", ("bilgi yazısı", "bilgilerine arz", "bilgi için")),
     ("ust_yazi", ("üst yazı", "havale olunur", "ek listesi", "dağıtım listesi")),
     ("iddianame", ("iddianame", "kamu davası açılmış", "kamu davası açılmıştır")),
     ("mahkeme_karari", ("gerekçeli karar", "mahkûmiyetine", "beraatine", "hükmün", "karar verildi")),
-    ("dilekce", ("dilekçe", "şikayetçidir", "müvekkilim adına", "arz olunur")),
+    # Bare "dilekçe" needle kaldırıldı — aynı sınıf hata (bkz. "tutanak" notu):
+    # bir mahkeme kararı, "istinaf başvuru dilekçesinde özetle..." diyerek
+    # TARAFIN dilekçesinden alıntı yapar; bu, KARARIN KENDİSİNİN bir dilekçe
+    # olduğu anlamına gelmez. Canlı doğrulandı.
+    ("dilekce", ("şikayetçidir", "müvekkilim adına", "arz olunur")),
 ]
 
 KAMU_TYPES = frozenset(
@@ -54,6 +63,30 @@ _NATURE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("ceza", ("tck", "ceza mahkemesi", "ağır ceza", "asliye ceza", "savcılık", "sanık", "mahkûmiyet", "iddianame")),
     ("anayasa", ("bireysel başvuru", "anayasa mahkemesi", "aym")),
     ("idare", ("danıştay", "idare mahkemesi", "iptal davası", "2577")),
+    (
+        "hukuk",
+        (
+            "hmk",
+            "hukuk muhakemeleri kanunu",
+            "6100 sayılı",
+            "hukuk mahkemesi",
+            "asliye hukuk",
+            "sulh hukuk",
+            "hukuk dairesi",
+            "tazminat davası",
+            "maddi tazminat",
+            "alacak davası",
+            "boşanma davası",
+            "kira tespiti",
+            "tapu iptal",
+            "aile mahkemesi",
+            "iş mahkemesi",
+            "ticaret mahkemesi",
+            "tüketici mahkemesi",
+            "davacı vekili",
+            "davalı vekili",
+        ),
+    ),
     ("kamu", ("bakanlık", "valilik", "kaymakamlık", "genel müdürlük", "daire başkanlığı", "ebys")),
 ]
 
@@ -81,6 +114,7 @@ _NATURE_UNIT: dict[str, str] = {
     "ceza": "İlgili Cumhuriyet savcılığı / ceza mahkemesi",
     "idare": "İlgili idare mahkemesi / Danıştay",
     "anayasa": "Anayasa Mahkemesi",
+    "hukuk": "İlgili hukuk mahkemesi / Yargıtay hukuk dairesi",
     "kamu": "Evrak kayıt ve havale",
 }
 
@@ -160,23 +194,45 @@ def classify_document(text: str) -> Classification:
         else:
             stage = "kovusturma"
 
+    # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK) etiketlere
+    # ayrıldı — aksi halde ikisi de aynı "istinaf"/"temyiz" etiketini
+    # paylaşıp, deadline/catalog.py'de CMK kuralları hukuk davalarına da
+    # (yanlışlıkla) uygulanıyordu — canlı bir BAM/istinaf tazminat kararıyla
+    # doğrulandı.
     remedies: list[str] = []
     if legal_nature == "ceza" and document_type in {"mahkeme_karari", "tebligat"}:
-        remedies.extend(["itiraz", "istinaf", "temyiz"])
+        remedies.extend(["itiraz", "istinaf_ceza", "temyiz_ceza"])
+    if legal_nature == "hukuk" and document_type in {"mahkeme_karari", "tebligat"}:
+        remedies.extend(["istinaf_hukuk", "temyiz_hukuk"])
     if document_type not in KAMU_TYPES:
         if "istinaf" in blob:
-            remedies.append("istinaf")
+            if legal_nature == "ceza":
+                remedies.append("istinaf_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("istinaf_hukuk")
+            elif legal_nature == "idare":
+                remedies.append("istinaf_idari")
         if "temyiz" in blob:
-            remedies.append("temyiz")
+            if legal_nature == "ceza":
+                remedies.append("temyiz_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("temyiz_hukuk")
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
         if legal_nature == "idare":
-            # "istinaf_idari" hiçbir deadline kuralına bağlı değildi (dead tag).
-            # "idari_dava" — route_islem.py/ACTION_TO_BELGE/idari_dava.json'ın
-            # zaten kullandığı isim — İYUK m.7 dava açma süresine bağlanıyor.
+            # "istinaf_idari" hiçbir deadline kuralına bağlı değil (dead tag,
+            # idari yargıda istinaf ayrı bir süre kuralı gerektirir — henüz
+            # eklenmedi). "idari_dava" — route_islem.py/ACTION_TO_BELGE/
+            # idari_dava.json'ın zaten kullandığı isim — İYUK m.7 dava açma
+            # süresine bağlanıyor.
             remedies.append("istinaf_idari")
             remedies.append("idari_dava")
-        if "şikayet" in blob or "sikayet" in blob:
+        # "şikayet" (TCK m.73, 6 aylık şikayet süresi) ceza-özgü bir
+        # kurum — hukuk davalarında (tazminat vb.) kavram olarak yok.
+        # Canlı doğrulandı: bir hukuk kararı, dosyada anılan paralel ceza
+        # yargılaması nedeniyle "şikayetçi" kelimesini içeriyordu ve
+        # yanlışlıkla TCK m.73 süresi almıştı.
+        if legal_nature != "hukuk" and ("şikayet" in blob or "sikayet" in blob):
             remedies.append("sikayet")
     unique = tuple(dict.fromkeys(remedies))
 
@@ -184,7 +240,7 @@ def classify_document(text: str) -> Classification:
     if document_type in {"mahkeme_karari", "tebligat", "iddianame"} and (
         "yargıtay" in blob or "yargitay" in blob
     ):
-        unit = "Yargıtay ilgili ceza dairesi"
+        unit = "Yargıtay ilgili hukuk dairesi" if legal_nature == "hukuk" else "Yargıtay ilgili ceza dairesi"
 
     hits = sum(
         [

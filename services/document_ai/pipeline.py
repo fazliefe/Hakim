@@ -63,6 +63,7 @@ class Analysis:
     observability: dict[str, Any] = field(default_factory=dict)
     trace_nodes: list[dict[str, Any]] = field(default_factory=list)
     trace_edges: list[dict[str, Any]] = field(default_factory=list)
+    legal_caveat: str | None = None
 
 
 def _deadlines_for(classification: Classification, dates: dict[str, date]) -> list[DeadlineComputation]:
@@ -71,7 +72,10 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
         remedy = str(rule["remedy"])
         include = remedy in classification.remedies
         if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "ceza":
-            if remedy in {"itiraz", "istinaf", "temyiz"}:
+            if remedy in {"itiraz", "istinaf_ceza", "temyiz_ceza"}:
+                include = True
+        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "hukuk":
+            if remedy in {"istinaf_hukuk", "temyiz_hukuk"}:
                 include = True
         if classification.legal_nature == "anayasa" and remedy == "bireysel_basvuru":
             include = True
@@ -128,7 +132,7 @@ def _targets(classification: Classification) -> list[dict[str, str]]:
         {"name": "UYAP Vatandaş", "url": "https://vatandas.uyap.gov.tr"},
         {"name": "mevzuat.gov.tr", "url": "https://www.mevzuat.gov.tr"},
     ]
-    if classification.legal_nature == "ceza":
+    if classification.legal_nature in {"ceza", "hukuk"}:
         rows.append({"name": "Yargıtay Karar Arama", "url": "https://karararama.yargitay.gov.tr"})
     if classification.legal_nature == "idare":
         rows.append({"name": "Danıştay Karar Arama", "url": "https://karararama.danistay.gov.tr"})
@@ -141,9 +145,39 @@ _NATURE_TR = {
     "ceza": "ceza",
     "idare": "idare",
     "anayasa": "anayasa",
+    "hukuk": "hukuk",
     "kamu": "kamu yazışması",
     "belirsiz": "nitelik belirsiz",
 }
+
+
+def _legal_interpretation_caveat(classification: Classification) -> str | None:
+    """Ceren Özkurt'un bulgusu: sistem, arşivdeki GÜNCEL kanun metnini
+    doğrudan uyguluyor. Ama gerçek hukuki sonuç lehe kanun uygulaması (TCK
+    m.7) TEK başına değil — içtihadı birleştirme kararları, zamanaşımı,
+    hâkimin takdir yetkisi gibi başka ilkelerle de bu metinden farklılaşabilir
+    (özellikle ceza hukukunda). Arşivde tarihsel versiyon olmadığı için
+    (yalnızca güncel metin var, bkz. mapping.py'deki mülga notu) bu ilkeler
+    hesaba katılamıyor — kesin bir hukuki tespit sunmuyoruz, sessizce göz ardı
+    de etmiyoruz: açıkça uyarıyoruz."""
+    if classification.document_type not in {"mahkeme_karari", "tebligat", "iddianame", "dilekce"}:
+        return None
+    if classification.legal_nature == "ceza":
+        return (
+            "Bu analiz arşivdeki güncel kanun metnine dayanır. Lehe kanun uygulaması "
+            "(TCK m.7), içtihadı birleştirme kararları, zamanaşımı, hâkimin takdir "
+            "yetkisi gibi ilkeler nedeniyle somut olaydaki gerçek hukuki sonuç bu "
+            "metinden farklılaşabilir — bu ilkeler burada ayrıca değerlendirilmemiştir. "
+            "Kesin dayanak olarak kullanmadan önce bir hukuk uzmanına danışın."
+        )
+    if classification.legal_nature in {"hukuk", "idare"}:
+        return (
+            "Bu analiz arşivdeki güncel kanun metnine dayanır. İçtihat, zamanaşımı/hak "
+            "düşürücü süre istisnaları gibi ilkeler nedeniyle somut olaydaki gerçek "
+            "hukuki sonuç bu metinden farklılaşabilir. Kesin dayanak olarak kullanmadan "
+            "önce bir hukuk uzmanına danışın."
+        )
+    return None
 
 
 def build_verdict(analysis: Analysis) -> str:
@@ -567,6 +601,7 @@ def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
     )
     analysis.verdict = build_verdict(analysis)
     analysis.draft = build_draft(analysis, quoted)
+    analysis.legal_caveat = _legal_interpretation_caveat(classification)
     _apply_citation_usage(analysis)
     taslak_summary, taslak_answer = format_taslak(action or "ust_yazi", reason)
     work["analysis"] = analysis
@@ -665,6 +700,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
         "petition": analysis.petition,
         "trace_nodes": analysis.trace_nodes,
         "trace_edges": analysis.trace_edges,
+        "legal_caveat": analysis.legal_caveat,
         "action": analysis.suggested_action,
         "belge": analysis.suggested_action,
         "observability": analysis.observability or {

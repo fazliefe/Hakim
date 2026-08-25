@@ -28,9 +28,12 @@ dev = [
     "pypdf>=5.0",
     "pytesseract>=0.3.13",
     "pymupdf>=1.28.2",
+    "huggingface_hub>=0.25",
+    "pyarrow>=17.0",
 ]
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
 testpaths = [
     "packages/legal-schema/tests",
     "apps/api/tests",
@@ -41,7 +44,6 @@ testpaths = [
     "services/retrieval/tests",
     "services/graph/tests",
     "services/deadline/tests",
-    "services/document-ai/tests",
     "services/document_ai/tests",
     "services/llm/tests",
 ]

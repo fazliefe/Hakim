@@ -17,7 +17,13 @@ export function useDocumentAnalysis(
   initialAction?: string,
   initialText?: string,
 ) {
-  const [text, setText] = useState(initialText ?? (path === "/v1/islem" ? "" : SAMPLE_EVRAK));
+  // Metin kutusu BOŞ başlar (sabit örnek otomatik doldurulmuyor) — önceden
+  // SAMPLE_EVRAK varsayılan olarak yükleniyordu, sabit bir tebliğ tarihi
+  // (14.08.2026) içeriyordu ve kullanıcılar tarihi değiştirmeden tekrar
+  // gönderince süre hesabı hep aynı (28.08.2026) çıkıyor, sanki motor
+  // hardcoded'muş gibi bir izlenim veriyordu. `SAMPLE_EVRAK` "örnek yükle"
+  // butonu için hâlâ export ediliyor.
+  const [text, setText] = useState(initialText ?? "");
   const [action, setAction] = useState(initialAction ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +49,10 @@ export function useDocumentAnalysis(
       if (path === "/v1/islem" && usedAction && data.action) setAction(data.action);
       if (path === "/v1/senaryo" && data.action) setAction(data.action);
     } catch (err) {
+      // Önceki (başarılı) sonucu ekranda bırakmak, kullanıcıya bu isteğin de
+      // aynı sonucu ürettiği izlenimini veriyordu — hata mesajının yanında
+      // eski süre/karar bilgisi görünmeye devam ediyordu.
+      setResult(null);
       setError(err instanceof Error ? err.message : "Bilinmeyen hata");
     } finally {
       setLoading(false);
@@ -59,6 +69,7 @@ export function useDocumentAnalysis(
       if (data.text) setText(data.text);
       return data;
     } catch (err) {
+      setResult(null);
       setError(err instanceof Error ? err.message : "Dosya okunamadı");
       return null;
     } finally {
@@ -79,6 +90,7 @@ export function useDocumentAnalysis(
       if (data.action) setAction(data.action);
       return true;
     } catch (err) {
+      setResult(null);
       setError(err instanceof Error ? err.message : "Senaryo çalışmadı");
       return false;
     } finally {

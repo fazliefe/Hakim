@@ -755,7 +755,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
-  align-items: end;
+  align-items: flex-end;
 }
 
 .admin-actions label {
@@ -1766,6 +1766,69 @@ a.source-row {
   font-weight: 700;
 }
 
+.emsal-karar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.1rem 1.2rem;
+}
+
+.emsal-karar-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  background: rgba(10, 22, 40, 0.45);
+  border-radius: 10px;
+  padding: 0.8rem 0.95rem;
+  color: var(--silver-200);
+  cursor: pointer;
+}
+
+.emsal-karar-card:hover,
+.emsal-karar-card.selected {
+  background: rgba(212, 175, 55, 0.08);
+  border-color: rgba(212, 175, 55, 0.32);
+}
+
+.emsal-karar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.emsal-karar-title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.emsal-karar-preview {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--silver-400);
+}
+
+.emsal-karar-nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.9rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(125, 206, 160, 0.3);
+  background: rgba(125, 206, 160, 0.08);
+  color: var(--source);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.emsal-karar-nudge:hover {
+  background: rgba(125, 206, 160, 0.16);
+}
+
 .graph-stats a {
   color: var(--gold-400);
 }
@@ -1840,6 +1903,17 @@ a.source-row {
 
 .error {
   color: var(--danger);
+}
+
+.legal-caveat {
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--silver-200);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1080px) {
@@ -2499,14 +2573,32 @@ a.source-row {
   font-size: 0.9rem;
 }
 
-.surec-input button {
+.surec-input textarea::placeholder,
+.doc-sheet textarea::placeholder {
+  color: var(--silver-400);
+  opacity: 0.75;
+}
+
+.surec-input-actions {
   align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.surec-input button {
   border: 0;
   border-radius: 8px;
   padding: 0.7rem 0.9rem;
   background: #2f6f55;
   color: #e8f6ee;
   font-weight: 700;
+}
+
+.surec-input button.btn-ghost {
+  align-self: stretch;
+  background: transparent;
+  color: var(--gold-400);
 }
 
 .surec-board {

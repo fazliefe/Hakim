@@ -45,6 +45,14 @@ class ModelsConfig:
     llm_disable_reasoning: bool
     embedding_model: str
     embedding_dims: int
+    # Emsal karar (Yargıtay/Danıştay) için AYRI embedder — kanun maddelerinin
+    # embedding_model/embedding_dims'ine (yukarıda) karışmaz, bkz. models.yaml
+    # `decision_embedding` yorumu.
+    decision_embedding_provider: str
+    decision_embedding_model: str
+    decision_embedding_dims: int
+    decision_embedding_api_url: str | None
+    decision_embedding_timeout: float
     ollama_enabled: bool
     ollama_url: str
     ollama_model: str
@@ -61,6 +69,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     llm = merged.get("llm") or {}
     ollama = merged.get("ollama") or {}
     embedding = merged.get("embedding") or {}
+    decision_embedding = merged.get("decision_embedding") or {}
     research = merged.get("research") or {}
     return ModelsConfig(
         profile=profile,
@@ -81,6 +90,13 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         llm_disable_reasoning=bool(llm.get("disable_reasoning", False)),
         embedding_model=str(embedding.get("model") or "newmindai/Mursit-Base-TR-Retrieval"),
         embedding_dims=int(embedding.get("dims") or 768),
+        decision_embedding_provider=str(decision_embedding.get("provider") or "local"),
+        decision_embedding_model=str(decision_embedding.get("model") or "newmindai/Mursit-Base-TR-Retrieval"),
+        decision_embedding_dims=int(decision_embedding.get("dims") or 768),
+        decision_embedding_api_url=(
+            str(decision_embedding["url"]).rstrip("/") if decision_embedding.get("url") else None
+        ),
+        decision_embedding_timeout=float(decision_embedding.get("timeout") or 30),
         ollama_enabled=bool(ollama.get("enabled", False)),
         ollama_url=str(ollama.get("url") or "http://127.0.0.1:11434").rstrip("/"),
         ollama_model=str(ollama.get("model") or "llama3.2:3b"),

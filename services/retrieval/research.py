@@ -935,9 +935,17 @@ class ResearchEngine:
         neo4j_driver: Any | None = None,
         *,
         evidence_limit: int = 8,
+        decision_index: str | None = None,
+        decision_embedder: Embedder | None = None,
     ) -> None:
         self.embedder = embedder or create_embedder(prefer_neural=True)
-        self.hybrid = HybridSearcher(es_client, self.embedder, limit=30)
+        self.hybrid = HybridSearcher(
+            es_client,
+            self.embedder,
+            limit=30,
+            decision_index=decision_index,
+            decision_embedder=decision_embedder,
+        )
         self.neo4j = neo4j_driver
         self.evidence_limit = evidence_limit
 
@@ -993,7 +1001,9 @@ def assemble_research_result(
                 retrievers=list(hit.sources),
                 graph_neighbors=list(neighbor_map.get(hit.chunk_id) or []),
                 used_in_answer=hit.rank <= 5,
-                mulga_warning=detect_mulga_warning(hit.hit.content),
+                mulga_warning=detect_mulga_warning(
+                    hit.hit.content, is_decision=bool((hit.hit.document_id or "").startswith("decision:"))
+                ),
             )
         )
 

@@ -11,11 +11,13 @@ from llm.render import petition_view, render_arastirma, render_belge, render_evr
 
 ACTION_TO_BELGE = {
     "istinaf": "istinaf",
+    "istinaf_hukuk": "istinaf_hukuk",
     "itiraz": "itiraz",
     "cevap": "cevap",
     "sikayet": "sikayet",
     "suc_duyurusu": "suc_duyurusu",
     "temyiz": "temyiz",
+    "temyiz_hukuk": "temyiz_hukuk",
     "katilma": "katilma",
     "bireysel_basvuru": "bireysel_basvuru",
     "idari_dava": "idari_dava",

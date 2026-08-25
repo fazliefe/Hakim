@@ -17,7 +17,7 @@ const TraceGraphView = dynamic(
   { ssr: false },
 );
 
-type Tab = "metin" | "kaynaklar" | "graf" | "iz";
+type Tab = "metin" | "kaynaklar" | "emsal" | "graf" | "iz";
 type SideView = "arastirmalar" | "gecmis" | "kaydedilen";
 type ChatTurn = { id: string; query: string; answer: string; result: ResearchResponse };
 
@@ -149,6 +149,25 @@ function sourceHeading(item: Evidence) {
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
 
+const COURT_LABELS: Record<string, string> = {
+  yargitay: "Yargıtay",
+  danistay: "Danıştay",
+  yerelhukuk: "Yerel Hukuk",
+  istinafhukuk: "İstinaf Hukuk",
+  kyb: "KYB",
+  aym: "AYM",
+};
+
+function courtLabel(item: Evidence): string {
+  const slug = item.document_id?.split(":")[1] ?? "";
+  return COURT_LABELS[slug] || "Emsal karar";
+}
+
+function contentPreview(text: string, limit = 320): string {
+  const trimmed = text.trim();
+  return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
+}
+
 function buildFollowUp(turns: ChatTurn[], userText: string): string {
   const topic = turns[0]?.query || turns[turns.length - 1]?.query || "";
   const lead = userText.trim();
@@ -186,6 +205,7 @@ export function ResearchWorkspace() {
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
   const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
+  const decisions = useMemo(() => result?.evidence.filter(isDecision) ?? [], [result]);
 
   function persistHistory(next: HistoryEntry[]) {
     setHistory(next);
@@ -354,7 +374,30 @@ export function ResearchWorkspace() {
                   observability={result.observability}
                 />
               ) : null}
-              {tab !== "graf" && tab !== "iz" ? (
+              {result && tab === "emsal" ? (
+                <div className="emsal-karar-list">
+                  {decisions.length ? (
+                    decisions.map((item) => (
+                      <button
+                        key={item.chunk_id}
+                        type="button"
+                        className={`emsal-karar-card ${selected === item.n ? "selected" : ""}`}
+                        onClick={() => openSource(item.n)}
+                      >
+                        <div className="emsal-karar-head">
+                          <span className="badge">{courtLabel(item)}</span>
+                          <span className="emsal-karar-title">{sourceHeading(item)}</span>
+                        </div>
+                        <p className="emsal-karar-preview">{contentPreview(item.content)}</p>
+                        {item.mulga_warning ? <p className="error">⚠ {item.mulga_warning}</p> : null}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="muted">Bu sorguyla ilgili emsal karar bulunamadı.</p>
+                  )}
+                </div>
+              ) : null}
+              {tab !== "graf" && tab !== "iz" && tab !== "emsal" ? (
                 <>
                   {turns.length === 0 && !error && !loading ? (
                     <div className="empty-state">
@@ -372,6 +415,11 @@ export function ResearchWorkspace() {
                           <p className="muted">Cevap metni boş döndü.</p>
                         )}
                       </article>
+                      {index === turns.length - 1 && decisions.length ? (
+                        <button type="button" className="emsal-karar-nudge" onClick={() => onTab("emsal")}>
+                          🏛 {decisions.length} ilgili emsal karar bulundu — Emsal Karar sekmesine bakın
+                        </button>
+                      ) : null}
                       {index === turns.length - 1 && result?.reasoning ? (
                         <ReasoningPanel reasoning={result.reasoning} hideSemantic={hideSemantic} collapsible />
                       ) : null}
@@ -455,6 +503,7 @@ export function ResearchWorkspace() {
               [
                 ["metin", "Metin"],
                 ["kaynaklar", "Kaynaklar"],
+                ["emsal", decisions.length ? `Emsal Karar (${decisions.length})` : "Emsal Karar"],
                 ["graf", "Bilgi grafı"],
                 ["iz", "Arama izi"],
               ] as const

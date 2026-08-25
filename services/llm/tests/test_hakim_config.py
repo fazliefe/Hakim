@@ -16,6 +16,16 @@ def test_default_profile_is_evren() -> None:
     assert cfg.llm_model == "llm-fast"
     assert cfg.embedding_model == "newmindai/Mursit-Base-TR-Retrieval"
     assert cfg.embedding_dims == 768
+    # Emsal karar (Yargıtay/Danıştay) embedder'ı AYRI bir alan seti kullanır —
+    # kanun maddelerinin (yukarıdaki embedding_model/dims) yerel modeline
+    # karışmamalı. Bu regresyon canlı yakalandı: `decision_embedding` yerine
+    # `embedding` anahtarı kullanılsaydı `_merge()` kanun index'inin
+    # embedder'ını bge-m3-embed'e (geçersiz yerel model adı) çevirirdi.
+    assert cfg.embedding_model != cfg.decision_embedding_model
+    assert cfg.decision_embedding_provider == "api"
+    assert cfg.decision_embedding_model == "bge-m3-embed"
+    assert cfg.decision_embedding_dims == 1024
+    assert cfg.decision_embedding_api_url == "https://evren-llmapi.ssyz.org.tr/v1"
     assert cfg.research_allow_ollama is False
     # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
     assert cfg.llm_input_per_million == 0.0

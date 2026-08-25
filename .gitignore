@@ -13,6 +13,7 @@ build/
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 
 .env
 .env.local
@@ -29,6 +30,8 @@ data/accounts.sqlite-*
 data/_sample_*.html
 data2/
 data/_tmp_*.json
+data/hf_cache/
+data/tessdata/
 !data/raw/.gitkeep
 
 # Local models and unrelated checkouts — not needed to run the app

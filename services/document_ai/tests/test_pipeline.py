@@ -22,9 +22,80 @@ def test_analyze_computes_istinaf_deadline() -> None:
     assert istinaf.trigger.isoformat() == "2026-08-14"
     assert istinaf.last_day is not None
     # CMK m.273/1: tebliğden itibaren iki hafta (14 gün), 7 gün değil.
-    assert istinaf.last_day.isoformat() == "2026-08-28"
+    # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
+    # penceresinin (20 Temmuz-31 Ağustos, CMK m.331) içinde kaldığından
+    # tatilin bitişinden itibaren 3 gün uzar (CMK m.331/4): 31 Ağustos + 3
+    # gün = 3 Eylül.
+    assert istinaf.last_day.isoformat() == "2026-09-03"
     assert "CMK m.273" in istinaf.legal_basis
     assert "taslak" in analysis.draft.lower()
+
+
+def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
+    """HMK m.345 (istinaf) ve m.361 (temyiz): tebliğden itibaren iki hafta
+    (14 gün) — CMK'nın ceza süreleriyle aynı rakam ama farklı kanuna
+    dayanıyor; hukuk davaları CMK m.273/291'e (ceza) yanlış bağlanmamalı
+    (canlı bir BAM/istinaf tazminat kararıyla doğrulandı)."""
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca "
+        "karar verilmiştir. İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.legal_nature == "hukuk"
+    names = {item.name for item in analysis.deadlines}
+    assert "İstinaf (hukuk)" in names
+    assert "Temyiz (hukuk)" in names
+    istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf (hukuk)")
+    assert istinaf.trigger.isoformat() == "2026-08-14"
+    # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
+    # penceresinin (20 Temmuz-31 Ağustos, HMK m.102) içinde kaldığından
+    # tatilin bitişinden itibaren bir hafta (7 gün) uzar (HMK m.104):
+    # 31 Ağustos + 7 gün = 7 Eylül.
+    assert istinaf.last_day.isoformat() == "2026-09-07"
+    assert "HMK m.345" in istinaf.legal_basis
+    # CMK'nın ceza kuralları hiç karışmamalı.
+    assert "CMK m.273" not in istinaf.legal_basis
+    assert not any("CMK" in basis for item in analysis.deadlines for basis in item.legal_basis)
+
+
+def test_ceza_analysis_carries_legal_interpretation_caveat() -> None:
+    """Ceren Özkurt'un bulgusu: sistem güncel kanun metnini uyguluyor gibi
+    görünüyor ama lehe kanun uygulaması (TCK m.7), içtihat, zamanaşımı gibi
+    ilkeler nedeniyle gerçek sonuç farklılaşabilir — bu sessizce göz ardı
+    edilmemeli, açıkça uyarılmalı."""
+    text = (
+        "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR\n"
+        "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+        "İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.legal_caveat is not None
+    assert "lehe kanun" in analysis.legal_caveat.lower()
+    assert "TCK m.7" in analysis.legal_caveat
+
+
+def test_hukuk_analysis_carries_shorter_generic_caveat() -> None:
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca "
+        "karar verilmiştir. İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.legal_caveat is not None
+    assert "çtihat" in analysis.legal_caveat
+    # Hukuk davasında "lehe kanun" (TCK m.7'ye özgü bir ceza ilkesi) geçmemeli.
+    assert "lehe kanun" not in analysis.legal_caveat.lower()
+
+
+def test_kamu_evrak_has_no_legal_interpretation_caveat() -> None:
+    analysis = analyze_document(
+        "T.C. İÇİŞLERİ BAKANLIĞI\nGENELGE\n2026/12 sayılı genelge ile taşra teşkilatına duyurulur."
+    )
+    assert analysis.legal_caveat is None
 
 
 def test_analyze_computes_idari_dava_deadline() -> None:

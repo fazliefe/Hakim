@@ -6,7 +6,7 @@ import re
 from document_ai.schemas import FIELD_LABELS, required_fields
 
 DATE_RE = re.compile(
-    r"(?P<label>tebli[gğ]\s*tarihi|karar\s*tarihi|tebli[gğ]\s*g[uü]n[uü])\s*[:\-]?\s*"
+    r"(?P<label>tebli[gğ]\s*tarihi|karar\s*tarihi|tebli[gğ]\s*g[uü]n[uü]|karar\s*verildi)\s*[.,:\-]?\s*"
     r"(?P<d>\d{1,2})[./](?P<m>\d{1,2})[./](?P<y>\d{4})",
     re.IGNORECASE,
 )
@@ -33,6 +33,15 @@ def parse_tr_date(day: str, month: str, year: str) -> date | None:
 
 
 def extract_dates(text: str) -> dict[str, date]:
+    """Süre motorunun tetikleyicisi olarak kullanılır (bkz. pipeline.py
+    `_deadlines_for`) — bu yüzden yalnızca "Tebliğ tarihi"/"Karar tarihi"
+    etiketiyle AÇIKÇA işaretlenmiş tarihleri kabul eder. Etiketsiz, metinde
+    geçen ilk tarihi (`BARE_DATE_RE`) "tebliğ tarihi" saymak — canlı
+    doğrulandı — gerçek bir Yargıtay kararında atıf yapılan eski bir kanunun
+    tarihini veya ilgisiz bir olay tarihini yakalayıp yıllar öncesine düşen
+    sahte bir son gün hesaplatabiliyordu (2003'e düşen bir istinaf süresi
+    gibi). Tarih uydurulmaz — bulunamazsa süre "Hesaplanamadı" kalır, bu
+    yanlış bir tarihten daha güvenlidir (bkz. gaps.py'nin aynı ilkesi)."""
     found: dict[str, date] = {}
     for match in DATE_RE.finditer(text):
         value = parse_tr_date(match.group("d"), match.group("m"), match.group("y"))
@@ -43,10 +52,6 @@ def extract_dates(text: str) -> dict[str, date]:
             found["teblig"] = value
         elif "karar" in label:
             found["karar"] = value
-    if "teblig" not in found:
-        bare = BARE_DATE_RE.search(text)
-        if value := (parse_tr_date(*bare.groups()) if bare else None):
-            found["teblig"] = value
     return found
 
 
@@ -76,12 +81,10 @@ def extract_fields(text: str) -> dict[str, str]:
     if "karar" in dates:
         fields.setdefault("karar", dates["karar"].isoformat())
         fields.setdefault("tarih", dates["karar"].isoformat())
-    if "tarih" not in fields:
-        bare = BARE_DATE_RE.search(text)
-        if bare:
-            value = parse_tr_date(*bare.groups())
-            if value:
-                fields["tarih"] = value.isoformat()
+    # "tarih" alanı için de etiketsiz bare-date fallback'i kaldırıldı (aynı
+    # gerekçe: extract_dates() docstring'ine bkz.) — bulunamazsa eksik alan
+    # olarak işaretlenmesi, ilgisiz bir tarihi "belge tarihi" diye göstermekten
+    # daha doğru.
     return fields
 
 

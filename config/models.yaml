@@ -81,6 +81,19 @@ profiles:
       # istek thinking açıkken 2320, kapalıyken 126 token). vLLM/Qwen3 standart
       # parametresiyle kapatılıyor.
       disable_reasoning: true
+    # Emsal karar (Yargıtay/Danıştay) semantic aramasında kullanılıyor — AYRI
+    # bir anahtar (`embedding` DEĞİL): kanun maddeleri hâlâ defaults.embedding
+    # (768 dims, yerel CPU model) kullanıyor; iki dense_vector boyutu aynı ES
+    # index'te karışamaz, bkz. retrieval/mapping.py. Bu anahtarı `embedding`
+    # yaparsan `_merge()` defaults.embedding'in üzerine yazar ve kanun
+    # index'inin embedder'ı kırılır (bge-m3-embed geçerli bir yerel
+    # sentence-transformers modeli değil) — canlı doğrulandı, tekrar yapma.
+    decision_embedding:
+      provider: api
+      url: https://evren-llmapi.ssyz.org.tr/v1
+      model: bge-m3-embed
+      dims: 1024
+      timeout: 30
     ollama:
       enabled: false
       url: http://127.0.0.1:11434

@@ -62,6 +62,12 @@ class _FakeHybrid:
         self.semantic_calls += 1
         return []
 
+    def search_decision_bm25(self, query: str, **_kwargs):
+        return []
+
+    def search_decision_semantic(self, query: str, **_kwargs):
+        return []
+
     def fuse(self, query: str, bm25_hits, semantic_hits, **_kwargs):
         return []
 

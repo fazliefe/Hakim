@@ -13,7 +13,7 @@ import { DownloadActions } from "@/components/DownloadActions";
 import { petitionToBlocks } from "@/lib/exportDocument";
 import { calendarLabel, durationUnitLabel, formatTurkishDate } from "@/lib/labels";
 import { KAMU_FALLBACK } from "@/lib/kamuSamples";
-import { FIELD_LABEL, NATURE_LABEL, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { FIELD_LABEL, NATURE_LABEL, SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const DocumentTraceGraphView = dynamic(
   () => import("@/components/graph/DocumentTraceGraphView").then((mod) => mod.DocumentTraceGraphView),
@@ -189,6 +189,14 @@ export function EvrakWorkbench() {
                     >
                       Taslak üret
                     </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      disabled={loading}
+                      onClick={() => setText(SAMPLE_EVRAK)}
+                    >
+                      Örnek metni yükle
+                    </button>
                     <DownloadActions content={downloadBody} basename={downloadName} />
                   </div>
                 </header>
@@ -196,6 +204,7 @@ export function EvrakWorkbench() {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   aria-label="Evrak metni"
+                  placeholder="Evrak metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
                   spellCheck={false}
                 />
               </form>
@@ -218,6 +227,9 @@ export function EvrakWorkbench() {
                   <span>Ne olduğu</span>
                   <strong>{result.verdict}</strong>
                 </div>
+              ) : null}
+              {result?.legal_caveat ? (
+                <p className="legal-caveat class-card wide">⚖ {result.legal_caveat}</p>
               ) : null}
               <div className="class-card">
                 <span>Tür</span>
@@ -395,6 +407,11 @@ export function EvrakWorkbench() {
         {side === "taslaklar" ? (
           result?.draft ? (
             <div style={{ padding: "0 0.9rem 1rem" }}>
+              {result.legal_caveat ? (
+                <p className="legal-caveat" style={{ marginBottom: "0.7rem" }}>
+                  ⚖ {result.legal_caveat}
+                </p>
+              ) : null}
               <div className="sheet-actions" style={{ marginBottom: "0.7rem" }}>
                 <DownloadActions
                   content={result.draft}
