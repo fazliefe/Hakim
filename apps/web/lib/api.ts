@@ -107,9 +107,15 @@ export function writerIsLlm(writer?: string | null): boolean {
   return writer === "api" || writer === "ollama";
 }
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_HAKIM_API_URL ??
-  (typeof window !== "undefined" ? "http://127.0.0.1:8000" : "/api-hakim");
+// Varsayılan HER ZAMAN göreli `/api-hakim` — next.config.js'deki rewrite bunu
+// sunucu tarafında (dev/prod, tünel arkasında fark etmez) gerçek backend'e
+// (HAKIM_API_ORIGIN ?? 127.0.0.1:8000) proxy'ler. Tarayıcı hiçbir zaman
+// backend'e DOĞRUDAN, mutlak bir localhost adresiyle gitmez — böylece jüri
+// public URL'i açtığında kendi makinesindeki 127.0.0.1:8000'e değil, sunucu
+// tarafındaki gerçek backend'e istek gider. NEXT_PUBLIC_HAKIM_API_URL yalnızca
+// bilinçli bir override için var (ör. backend'i başka bir origin'den doğrudan
+// çağırmak); production için hardcoded bir origin BURAYA yazılmaz.
+const API_BASE = process.env.NEXT_PUBLIC_HAKIM_API_URL ?? "/api-hakim";
 
 const TOKEN_KEY = "hakim-token";
 const USER_KEY = "hakim-user";

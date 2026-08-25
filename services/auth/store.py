@@ -6,6 +6,7 @@ import re
 import secrets
 import sqlite3
 import string
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SQLITE = ROOT / "data" / "accounts.sqlite"
 DEFAULT_ADMIN_EMAIL = "hukukcu@hakim.local"
 DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin1234"
 SESSION_DAYS = 14
 CODE_MINUTES = 15
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,24}$")
@@ -45,6 +45,29 @@ ACCOUNT_ACTIVITY_KINDS = frozenset(
         "admin_send_password",
     }
 )
+
+
+def _bootstrap_admin_password() -> str:
+    """İlk admin hesabı oluşturulurken kullanılacak parola. `HAKIM_ADMIN_PASSWORD`
+    set edilmişse onu kullanır; edilmemişse sabit/tahmin edilebilir bir
+    varsayılan YERİNE rastgele bir parola üretir ve tek seferlik konsola
+    yazdırır (yarışma/production'da unutulmuş bir "admin1234" riskini
+    ortadan kaldırmak için — bkz. docs/competition_deployment.md). Yalnızca
+    admin hesabı henüz YOKKEN çağrılır (bkz. `ensure_admin`); var olan bir
+    hesabın parolasını geriye dönük değiştirmez."""
+    env = os.environ.get("HAKIM_ADMIN_PASSWORD", "").strip()
+    if env:
+        return env
+    generated = secrets.token_urlsafe(12)
+    print(
+        "[hakim-auth] HAKIM_ADMIN_PASSWORD set edilmemiş; ilk admin hesabı için "
+        f"rastgele parola üretildi: {generated}\n"
+        "[hakim-auth] Bu parolayı not edin (bir daha gösterilmez) veya .env'e "
+        "HAKIM_ADMIN_PASSWORD=... ekleyip data/accounts.sqlite dosyasını silerek "
+        "yeniden başlatın.",
+        file=sys.stderr,
+    )
+    return generated
 
 
 class AuthError(Exception):
@@ -231,7 +254,7 @@ class AuthStore:
                     DEFAULT_ADMIN_EMAIL,
                     DEFAULT_ADMIN_USERNAME,
                     "Yönetici",
-                    hash_password(DEFAULT_ADMIN_PASSWORD),
+                    hash_password(_bootstrap_admin_password()),
                     _now_s(),
                 ),
             )

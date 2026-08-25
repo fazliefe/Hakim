@@ -34,6 +34,11 @@ data/hf_cache/
 data/tessdata/
 !data/raw/.gitkeep
 
+# Cloudflare Tunnel: gerçek tunnel ID / hostname / credentials makineye
+# özeldir, commit edilmez. Şablon (config.yml.example) tracked kalır.
+infra/cloudflared/config.yml
+infra/cloudflared/*.json
+
 # Local models and unrelated checkouts — not needed to run the app
 Anadolum-main/
 SPQ_LLM_Compression-main/
