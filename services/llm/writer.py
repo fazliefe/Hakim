@@ -106,6 +106,48 @@ def _messages(module_or_belge: str, engine: dict[str, Any], *, belge: bool = Fal
     return module_messages(module_or_belge, compact)
 
 
+def _correction_messages(
+    base_messages: list[dict[str, str]], raw: str, errors: list[str]
+) -> list[dict[str, str]]:
+    """Şema doğrulama hatası sonrası TEK seferlik düzeltme turu için sohbeti
+    uzatır — modelin kendi hatalı cevabını görüp aynı kaynaklara dayanarak
+    düzeltmesini ister. Hâlâ geçmezse çağıran taraf extractive fallback'e
+    düşer (bkz. main.py::_analyze except bloğu); burada ikinci bir retry
+    yok, maliyet/gecikmeyi sınırlı tutmak için tek tur yeterli kabul edildi."""
+    return base_messages + [
+        {"role": "assistant", "content": raw},
+        {
+            "role": "user",
+            "content": (
+                "Önceki cevap şemaya uymuyor: "
+                + "; ".join(errors)
+                + ". Yeni kaynak veya alan uydurma; yalnızca aynı kaynaklara dayanarak "
+                "düzeltilmiş JSON'u döndür. Açıklama, markdown veya kod çiti ekleme."
+            ),
+        },
+    ]
+
+
+def _attempt_json(
+    fn: ChatFn,
+    messages: list[dict[str, str]],
+    *,
+    build: Callable[[dict[str, Any]], dict[str, Any]],
+    validate: Callable[[dict[str, Any]], list[str]],
+) -> tuple[dict[str, Any] | None, str, list[str]]:
+    """Tek bir sohbet turu: modeli çağır, JSON ayrıştır, `build` ile son
+    hâline getir, `validate` ile şema kontrolü yap. JSON hiç ayrıştırılamazsa
+    (`parse_json_content` OllamaError fırlatırsa) da aynı "errors" sözleşmesine
+    döner — çağıran taraf hem parse hem şema hatasını aynı tek-retry yoluyla
+    (bkz. `_correction_messages`) ele alabilsin diye."""
+    raw = fn(messages)
+    try:
+        payload = build(parse_json_content(raw))
+    except OllamaError as exc:
+        return None, raw, [str(exc)]
+    return payload, raw, validate(payload)
+
+
 BELGE_FIELD_ALIASES = (
     ("sure", "sure_cumlesi"),
     ("karar", "itiraz_olunan"),
@@ -221,13 +263,23 @@ def write_module(
         return render_surec(parsed)
     if fn is None:
         return None
-    raw = fn(_messages(module_id, engine))
     spec = load_format(module_id)
-    parsed = parse_json_content(raw)
-    parsed = _merge_example(spec.get("example") or {}, parsed)
-    errors = validate_parsed(module_id, parsed)
+    example = spec.get("example") or {}
+    base_messages = _messages(module_id, engine)
+
+    def build(payload: dict[str, Any]) -> dict[str, Any]:
+        return _merge_example(example, payload)
+
+    def validate(payload: dict[str, Any]) -> list[str]:
+        return validate_parsed(module_id, payload)
+
+    parsed, raw, errors = _attempt_json(fn, base_messages, build=build, validate=validate)
     if errors:
-        raise OllamaError("; ".join(errors))
+        parsed, raw, errors = _attempt_json(
+            fn, _correction_messages(base_messages, raw, errors), build=build, validate=validate
+        )
+        if errors:
+            raise OllamaError("; ".join(errors))
     if module_id == "arastirma":
         return render_arastirma(parsed)
     if module_id == "evrak":
@@ -614,15 +666,27 @@ def compose_belge(
     allow_ollama: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     spec = load_belge(belge_id)
-    parsed = extractive_parsed(spec, engine)
+    extractive = extractive_parsed(spec, engine)
+    parsed = extractive
     fn = chat_fn or resolve_writer(allow_ollama=allow_ollama)
     if fn is not None:
-        raw = fn(_messages(belge_id, engine, belge=True))
-        parsed = _alias_belge_fields(_merge_example(parsed, parse_json_content(raw)))
-        parsed = _finalize_belge_facts(_apply_islem_gaps(parsed, engine), engine, belge_id, spec)
-        errors = validate_belge(belge_id, parsed)
+        base_messages = _messages(belge_id, engine, belge=True)
+
+        def build(payload: dict[str, Any]) -> dict[str, Any]:
+            merged = _alias_belge_fields(_merge_example(extractive, payload))
+            return _finalize_belge_facts(_apply_islem_gaps(merged, engine), engine, belge_id, spec)
+
+        def validate(payload: dict[str, Any]) -> list[str]:
+            return validate_belge(belge_id, payload)
+
+        candidate, raw, errors = _attempt_json(fn, base_messages, build=build, validate=validate)
         if errors:
-            raise OllamaError("; ".join(errors))
+            candidate, raw, errors = _attempt_json(
+                fn, _correction_messages(base_messages, raw, errors), build=build, validate=validate
+            )
+            if errors:
+                raise OllamaError("; ".join(errors))
+        parsed = candidate
     return render_belge(spec, parsed), petition_view(spec, parsed)
 
 
