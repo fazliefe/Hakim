@@ -24,10 +24,10 @@ const SIDE = [
   { id: "goruntuleme", label: "Evrak Görüntüleme" },
   { id: "ozet", label: "Özet" },
   { id: "sinif", label: "Sınıflandırma" },
-  { id: "akil", label: "Akıl yürütme" },
-  { id: "usul", label: "Kanun yolu ve süreler" },
-  { id: "kaynak", label: "Kaynak grafiği" },
-  { id: "taslaklar", label: "Taslaklar" },
+  { id: "akil", label: "Akıl Yürütme" },
+  { id: "usul", label: "Kanun Yolu ve Süreler" },
+  { id: "kaynak", label: "Kaynak Grafiği" },
+  { id: "taslaklar", label: "Taslak" },
 ];
 
 const FILE_ACCEPT =
@@ -127,10 +127,10 @@ export function EvrakWorkbench() {
                   : side === "akil"
                     ? "Akıl Yürütme"
                     : side === "usul"
-                      ? "Kanun yolu ve süreler"
+                      ? "Kanun Yolu ve Süreler"
                       : side === "kaynak"
-                        ? "Kaynak grafiği"
-                        : "Taslaklar"}
+                        ? "Kaynak Grafiği"
+                        : "Taslak"}
           </h1>
           <p>
             {side === "goruntuleme"
@@ -267,24 +267,28 @@ export function EvrakWorkbench() {
                 <span>Birim</span>
                 <strong>{c.unit}</strong>
               </div>
-              {Object.entries(result?.fields ?? {}).map(([key, value]) => (
-                <div key={key} className="class-card">
-                  <span>{FIELD_LABEL[key] ?? key}</span>
-                  <strong>{value}</strong>
-                </div>
-              ))}
+              {Object.entries(result?.fields ?? {})
+                // "tarih", teblig/karar alanlarının şablon-doğrulama için
+                // tutulan genel bir takma adı (bkz. extract.py::extract_fields)
+                // — aynı değeri "Tebliğ tarihi"/"Karar tarihi" olarak zaten
+                // gösterdiğimizde ayrıca "Tarih" diye tekrar göstermeye gerek yok.
+                .filter(([key, value]) => {
+                  if (key !== "tarih") return true;
+                  const fields = result?.fields ?? {};
+                  return value !== fields.teblig && value !== fields.karar;
+                })
+                .map(([key, value]) => (
+                  <div key={key} className="class-card">
+                    <span>{FIELD_LABEL[key] ?? key}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
               {result?.missing?.length ? (
                 <div className="class-card wide">
                   <span>Eksik Alan</span>
                   <strong>{result.missing.join(" · ")}</strong>
                 </div>
               ) : null}
-              {result?.findings.map((item) => (
-                <div key={`${item.label}-${item.value}`} className="class-card wide">
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
             </div>
           ) : (
             <p className="muted evrak-hint">Önce evrak görüntülemeden dosya yükleyin veya çözün.</p>

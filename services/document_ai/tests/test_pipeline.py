@@ -44,9 +44,13 @@ def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
     )
     analysis = analyze_document(text)
     assert analysis.classification.legal_nature == "hukuk"
+    assert analysis.classification.stage == "ilk_derece"
     names = {item.name for item in analysis.deadlines}
     assert "İstinaf (hukuk)" in names
-    assert "Temyiz (hukuk)" in names
+    # Temyiz, İLK DERECE hükmünün değil istinaf/BAM kararının tebliğinden
+    # işler (HMK m.361/1) — bu aşamada henüz gösterilmemeli, bkz.
+    # test_temyiz_hukuk_only_shows_after_istinaf_stage.
+    assert "Temyiz (hukuk)" not in names
     istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf (hukuk)")
     assert istinaf.trigger.isoformat() == "2026-08-14"
     # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
@@ -58,6 +62,24 @@ def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
     # CMK'nın ceza kuralları hiç karışmamalı.
     assert "CMK m.273" not in istinaf.legal_basis
     assert not any("CMK" in basis for item in analysis.deadlines for basis in item.legal_basis)
+
+
+def test_temyiz_hukuk_only_shows_after_istinaf_stage() -> None:
+    """Aynı HMK m.361 kuralı, dosya BAM/istinaf aşamasına geçtiğinde
+    (bölge adliye mahkemesi kararı) devreye girmeli."""
+    text = (
+        "T.C. ANKARA BÖLGE ADLİYE MAHKEMESİ 3. HUKUK DAİRESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine dair ilk derece hükmüne "
+        "karşı yapılan istinaf başvurusunun esastan reddine, HMK hükümleri "
+        "uyarınca karar verilmiştir.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.legal_nature == "hukuk"
+    assert analysis.classification.stage == "istinaf"
+    names = {item.name for item in analysis.deadlines}
+    assert "Temyiz (hukuk)" in names
+    assert "İstinaf (hukuk)" not in names
 
 
 def test_ceza_analysis_carries_legal_interpretation_caveat() -> None:

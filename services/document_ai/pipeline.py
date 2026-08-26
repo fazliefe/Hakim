@@ -75,17 +75,32 @@ class Analysis:
     legal_caveat: str | None = None
 
 
+_ILK_DERECE_STAGES = frozenset({"kovusturma", "ilk_derece"})
+
+
 def _deadlines_for(classification: Classification, dates: dict[str, date]) -> list[DeadlineComputation]:
+    """Temyiz, ilk derece hükmünün DEĞİL — istinaf/BAM kararının tebliğinden
+    işler (CMK m.291/1, HMK m.361/1); doğrudan ilk derece kararına karşı
+    temyiz yolu yok (2016 reformu sonrası istinaf zorunlu ara basamak).
+    Önceden temyiz_ceza/temyiz_hukuk, aşamaya bakılmaksızın istinaf ile aynı
+    anda ve aynı (ilk derece) tebliğ tarihinden hesaplanıyordu — kullanıcıya
+    henüz başlamamış bir süre için sahte bir son gün gösteriyordu (canlı
+    doğrulandı: itiraz/istinaf/temyiz üçü de aynı tarihe düşüyordu)."""
     out: list[DeadlineComputation] = []
+    is_karar = classification.document_type in {"mahkeme_karari", "tebligat"}
     for rule in DEFAULT_RULES:
         remedy = str(rule["remedy"])
         include = remedy in classification.remedies
-        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "ceza":
-            if remedy in {"itiraz", "istinaf_ceza", "temyiz_ceza"}:
-                include = True
-        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "hukuk":
-            if remedy in {"istinaf_hukuk", "temyiz_hukuk"}:
-                include = True
+        if is_karar and classification.legal_nature == "ceza":
+            if remedy in {"itiraz", "istinaf_ceza"}:
+                include = classification.stage in _ILK_DERECE_STAGES
+            elif remedy == "temyiz_ceza":
+                include = classification.stage == "istinaf"
+        elif is_karar and classification.legal_nature == "hukuk":
+            if remedy == "istinaf_hukuk":
+                include = classification.stage in _ILK_DERECE_STAGES
+            elif remedy == "temyiz_hukuk":
+                include = classification.stage == "istinaf"
         if classification.legal_nature == "anayasa" and remedy == "bireysel_basvuru":
             include = True
         if not include:
@@ -103,7 +118,12 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
                 unit=rule["unit"],  # type: ignore[arg-type]
                 calendar=rule["calendar"],  # type: ignore[arg-type]
             )
-        basis = (str(rule["legal_basis_label"]), *[str(x) for x in rule["legal_basis"]])  # type: ignore[misc]
+        # Yalnızca okunabilir etiket (ör. "CMK m.268") — rule["legal_basis"]
+        # (ör. "law:5271:article:268") mevzuat aramasıyla eşleştirme için
+        # kullanılan İÇSEL canonical id'dir; hiçbir tüketici (answers.py,
+        # writer.py) tuple'ın ilk elemanından fazlasını okumuyordu, geri
+        # kalanı yalnızca arayüze ham kod olarak sızıyordu.
+        basis = (str(rule["legal_basis_label"]),)
         out.append(
             DeadlineComputation(
                 rule_id=str(rule["id"]),
@@ -501,7 +521,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="done" if related else "warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -523,7 +543,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="done",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -535,7 +555,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -568,13 +588,13 @@ def step_sure(work: dict[str, Any]) -> dict[str, Any]:
     summary, answer = format_sure(deadlines)
     if not deadlines:
         work["agents"].append(
-            step("sure", "Süre", state="skip", ms=elapsed_ms(started), summary=summary, answer=answer)
+            step("sure", "Süre Hesabı", state="skip", ms=elapsed_ms(started), summary=summary, answer=answer)
         )
     elif any(item.missing for item in deadlines):
         work["agents"].append(
             step(
                 "sure",
-                "Süre",
+                "Süre Hesabı",
                 state="warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -584,7 +604,7 @@ def step_sure(work: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         work["agents"].append(
-            step("sure", "Süre", state="done", ms=elapsed_ms(started), summary=summary, answer=answer)
+            step("sure", "Süre Hesabı", state="done", ms=elapsed_ms(started), summary=summary, answer=answer)
         )
     return work
 

@@ -136,14 +136,38 @@ def build_reasoning(
 
 
 def route_yazisma(classification: Classification) -> tuple[str, str]:
-    """Görev 2: evrak türünden resmi yazı / dilekçe kalıbı."""
+    """Görev 2: evrak türünden resmi yazı / dilekçe kalıbı.
+
+    classify.py'deki stage anlamı: "istinaf" → BELGENİN KENDİSİ bir BAM/bölge
+    adliye kararı; "temyiz" → belgenin kendisi bir Yargıtay kararı (zaten
+    NİHAİ). Önceden ceza dalı stage'e hiç bakmıyordu (her zaman istinaf
+    dilekçesi öneriyordu — bir Yargıtay kararına karşı bile), hukuk dalı ise
+    tam tersini yapıyordu: stage=="temyiz" (Yargıtay kararının KENDİSİ)
+    görünce "temyiz dilekçesi" öneriyordu — oysa temyiz dilekçesi BİR ÖNCEKİ
+    aşamanın (istinaf/BAM kararı) çıktısına karşı yazılır, Yargıtay kararına
+    karşı değil (temyiz zaten o kararla sonuçlanmıştır)."""
     kind = classification.document_type
     nature = classification.legal_nature
+    stage = classification.stage
     if kind == "mahkeme_karari" and nature == "ceza":
+        if stage == "istinaf":
+            return "temyiz", "Bölge Adliye Mahkemesi (istinaf) kararı → temyiz dilekçesi (CMK m.291)."
+        if stage == "temyiz":
+            return (
+                "bireysel_basvuru",
+                "Yargıtay kararı → olağan kanun yolları tüketildi; Anayasa Mahkemesi'ne "
+                "bireysel başvuru yolu açık (6216 s.K. m.45).",
+            )
         return "istinaf", "İlk derece ceza hükmü → istinaf dilekçesi (CMK m.273)."
     if kind == "mahkeme_karari" and nature == "hukuk":
-        if classification.stage == "temyiz":
+        if stage == "istinaf":
             return "temyiz_hukuk", "Bölge Adliye Mahkemesi (istinaf) kararı → temyiz dilekçesi (HMK m.361)."
+        if stage == "temyiz":
+            return (
+                "bireysel_basvuru",
+                "Yargıtay kararı → olağan kanun yolları tüketildi; Anayasa Mahkemesi'ne "
+                "bireysel başvuru yolu açık (6216 s.K. m.45).",
+            )
         return "istinaf_hukuk", "İlk derece hukuk hükmü → istinaf dilekçesi (HMK m.345)."
     if kind == "iddianame":
         return "cevap", "İddianame → cevap dilekçesi."
@@ -182,11 +206,7 @@ def mark_writer(agents: list[dict[str, Any]], *, writer: str, ms: int, error: st
         if error:
             item["state"] = "error"
             item["summary"] = f"Yazıcı hata: {error[:160]}"
-        else:
-            base = str(item.get("summary") or "Kalıp")
-            if "Yazıcı:" not in base:
-                item["summary"] = f"{base} · Yazıcı: {writer}"
-            if item.get("state") != "warn":
-                item["state"] = "done"
+        elif item.get("state") != "warn":
+            item["state"] = "done"
         break
     diagnose_chain(agents)

@@ -207,9 +207,24 @@ def classify_document(text: str) -> Classification:
     if document_type == "iddianame" and stage in {"belirsiz", "istinaf", "temyiz"}:
         stage = "sorusturma"
     if document_type == "mahkeme_karari":
-        if "yargıtay" in blob or "yargitay" in blob:
+        # "Yargıtay" ve "bölge adliye" ikisi de aynı belgede geçebilir — bir
+        # BAM kararı genelde "...Yargıtay'a temyiz yolu açıktır" diye bitip
+        # bir sonraki mercii anar; bir Yargıtay kararı da genelde bozduğu/
+        # onadığı "...Bölge Adliye Mahkemesi kararının..." diye başlar. Hangi
+        # mahkemenin KARARIN KENDİSİNİ verdiği, metinde HANGİSİNİN ÖNCE
+        # geçtiğiyle daha güvenilir ayırt ediliyor (resmi karar formatında
+        # kararı veren mahkeme en başta anılır) — sadece "hangisi var" bakmak
+        # canlı doğrulandı: bir BAM kararını (istinaf başvurusunu reddeden,
+        # temyiz yolu Yargıtay'a açık) yanlışlıkla "temyiz" (Yargıtay kararı)
+        # aşamasına atıyordu.
+        yargitay_idx = next((blob.find(n) for n in ("yargıtay", "yargitay") if n in blob), -1)
+        bam_idx = next(
+            (blob.find(n) for n in ("istinaf mahkemesi", "bölge adliye", "bolge adliye") if n in blob),
+            -1,
+        )
+        if yargitay_idx >= 0 and (bam_idx < 0 or yargitay_idx < bam_idx):
             stage = "temyiz"
-        elif "istinaf mahkemesi" in blob or "bölge adliye" in blob or "bolge adliye" in blob:
+        elif bam_idx >= 0:
             stage = "istinaf"
         elif legal_nature == "ceza":
             stage = "kovusturma"
