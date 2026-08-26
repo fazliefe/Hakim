@@ -123,3 +123,9 @@ infra/            docker-compose + Postgres göçleri
 ## OCR (isteğe bağlı)
 
 Dijital PDF: metin katmanı (`pypdf`). Taranmış PDF: PaddleOCR. Colab notu: `COLAB_OCR.md`, `notebooks/paddle_ocr_colab.ipynb`.
+
+## Lisans
+
+Bu depo [MIT Lisansı](LICENSE) ile paylaşılmıştır.
+
+İstisna: `tools/evolver/` — [EvoMap/evolver](https://github.com/EvoMap/evolver) (GPL-3.0) kaynaklı, ayrı bir yardımcı araç olarak sidecar şeklinde tutulur; `apps/api`/`services` altına paket olarak girmez, ana uygulamanın çalışma zamanına bağlanmaz. Kullanım: `python tools/evolver/cli.py --belge <tür> --text-file <dosya>`.
