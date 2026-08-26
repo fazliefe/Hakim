@@ -6,7 +6,7 @@ import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
 import { AppShell, InspectorMode } from "@/components/AppShell";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { RESEARCH_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
-import { lawPrefix } from "@/components/graph/layout";
+import { lawPrefix, shortLabel } from "@/components/graph/layout";
 
 const LegalGraphView = dynamic(
   () => import("@/components/graph/LegalGraphView").then((mod) => mod.LegalGraphView),
@@ -151,7 +151,7 @@ function isDecision(item: Evidence) {
 
 function sourceHeading(item: Evidence) {
   if (isDecision(item)) {
-    return item.title || item.document_id || "Mahkeme Kararı";
+    return shortLabel(item.title || item.document_id || "Mahkeme Kararı", 90);
   }
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
@@ -170,7 +170,7 @@ function courtLabel(item: Evidence): string {
   return COURT_LABELS[slug] || "Emsal karar";
 }
 
-function contentPreview(text: string, limit = 320): string {
+function contentPreview(text: string, limit = 180): string {
   const trimmed = text.trim();
   return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
 }
@@ -419,11 +419,6 @@ export function ResearchWorkspace() {
               ) : null}
               {tab !== "graf" && tab !== "iz" && tab !== "emsal" ? (
                 <>
-                  {turns.length === 0 && !error && !loading ? (
-                    <div className="empty-state">
-                      <p className="muted">Sorunuzu yazın. Atıflar kaynağı açar. Cevaptan sonra sohbet devam eder.</p>
-                    </div>
-                  ) : null}
                   {turns.map((turn, index) => (
                     <div key={turn.id} className="chat-turn">
                       <p className="chat-q">{turn.query}</p>

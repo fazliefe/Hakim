@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import lru_cache
@@ -215,14 +216,51 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             payload.get("dates") or {},
         )
     started = now()
-    try:
-        draft = None
-        if surface == "surec":
-            draft = write_module(surface, {**payload, "user_text": text[:900]})
-        else:
+
+    def _make_draft() -> tuple[str | None, Any, Exception | None]:
+        try:
+            if surface == "surec":
+                return write_module(surface, {**payload, "user_text": text[:900]}), None, None
             draft, petition = compose_islem(
                 action_id, {**payload, "action": action_id, "user_text": text[:900]}
             )
+            return draft, petition, None
+        except Exception as exc:  # noqa: BLE001 - taşınıp aşağıda işleniyor
+            return None, None, exc
+
+    def _make_ozet() -> str | None:
+        # Görev 1 (evrak özeti): "evrak" yazım modülü (data/formats/evrak.json)
+        # sınıflandırma + tespitlerden bağımsız, evrakın içeriğini anlatan kısa
+        # bir özet üretir — Sınıflandırma sekmesindeki ham alan listesinden
+        # farklı, okunabilir bir metin. API/Ollama yoksa write_module sessizce
+        # None döner; taslak üretimini etkilemez.
+        try:
+            return write_module("evrak", {**payload, "action": action_id, "user_text": text[:900]})
+        except Exception:
+            return None
+
+    # Taslak (compose_islem/write_module) ve özet (write_module("evrak", ...))
+    # birbirinin çıktısına ihtiyaç duymaz — iki ayrı LLM çağrısını art arda değil
+    # PARALEL çalıştırıyoruz (ikisi de I/O-bound HTTP isteği). Toplam süreyi
+    # ~yarıya indirir; llm/usage.py'daki kullanım sayaçları thread-safe
+    # (paylaşılan bucket'a append), writer_name()/mark_writer() saf/durumsuz
+    # fonksiyonlar olduğu için sonuçlar iki iş de bittikten sonra ana thread'de
+    # sırayla işleniyor.
+    if surface == "evrak":
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            draft_future = pool.submit(_make_draft)
+            ozet_future = pool.submit(_make_ozet)
+            draft, petition, exc = draft_future.result()
+            payload["ozet"] = ozet_future.result()
+    else:
+        draft, petition, exc = _make_draft()
+
+    if exc is not None:
+        payload["writer"] = "extractive"
+        payload["writer_error"] = str(exc)[:280]
+        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    else:
+        if surface != "surec":
             payload["petition"] = petition
             payload["action"] = action_id
             payload["belge"] = ACTION_TO_BELGE.get(action_id) or action_id
@@ -234,20 +272,6 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
                 from document_ai.gaps import merge_placeholder_gaps
 
                 payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
-    except Exception as exc:
-        payload["writer"] = "extractive"
-        payload["writer_error"] = str(exc)[:280]
-        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
-    if surface == "evrak":
-        # Görev 1 (evrak özeti): "evrak" yazım modülü (data/formats/evrak.json)
-        # sınıflandırma + tespitlerden bağımsız, evrakın içeriğini anlatan kısa
-        # bir özet üretir — Sınıflandırma sekmesindeki ham alan listesinden
-        # farklı, okunabilir bir metin. API/Ollama yoksa write_module sessizce
-        # None döner; taslak üretimini (yukarıdaki) etkilemez.
-        try:
-            payload["ozet"] = write_module("evrak", {**payload, "user_text": text[:900]})
-        except Exception:
-            payload["ozet"] = None
     usage = take_usage()
     if isinstance(payload.get("observability"), dict):
         payload["observability"]["totals"] = usage_totals(usage)

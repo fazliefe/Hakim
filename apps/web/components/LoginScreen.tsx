@@ -446,8 +446,9 @@ export function LoginScreen() {
                 Şifremi Unuttum
               </button>
             ) : null}
-            {info ? <p className="login-info">{info}</p> : null}
-            {error ? <p className="login-error">{error}</p> : null}
+            <div className="login-status-slot">
+              {error ? <p className="login-error">{error}</p> : info ? <p className="login-info">{info}</p> : null}
+            </div>
             <div className="login-actions">
               <button className="btn-gold" type="submit" disabled={loading}>
                 {submitLabel}

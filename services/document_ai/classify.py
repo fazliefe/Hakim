@@ -189,12 +189,26 @@ def classify_document(text: str) -> Classification:
     header = blob[:420]
     document_type, type_span, type_score = _best_label(blob, header, raw, _TYPE_RULES)
     legal_nature, _, nature_score = _best_label(blob, header, raw, _NATURE_RULES)
+    embed_confidence: float | None = None
     if document_type == "belirsiz":
         from document_ai.extract import looks_like_resmi_yazi
 
         if looks_like_resmi_yazi(raw):
             document_type = "ust_yazi"
             type_span = type_span or "Sayı / Konu"
+    if document_type == "belirsiz":
+        # Hiçbir needle/regex kuralı tutmadı — kural motorunun kapsamı dışında
+        # kalan bir ifade biçimi olabilir. İkincil, embedding-tabanlı bir
+        # öneri katmanı dene (bkz. prototype_classifier.py); o da bir şey
+        # bulamazsa (model yok / eşik geçilmedi) "belirsiz" olarak kalır.
+        from document_ai.prototype_classifier import create_prototype_classifier
+
+        classifier = create_prototype_classifier()
+        if classifier is not None:
+            guess = classifier.classify(raw)
+            if guess is not None:
+                document_type, embed_confidence = guess
+                type_span = f"(embedding benzerliğiyle önerildi, benzerlik %{round(embed_confidence * 100)})"
     if document_type in KAMU_TYPES and legal_nature == "belirsiz":
         legal_nature = "kamu"
 
@@ -294,13 +308,17 @@ def classify_document(text: str) -> Classification:
             nature_score >= 5 or document_type in KAMU_TYPES,
         ]
     )
+    # embed_confidence doluysa (prototype fallback devredeyse) kosinüs
+    # benzerlik skoru GERÇEK bir sayıdır — kural-eşleşme sayımına
+    # (_confidence_from_hits) dayalı, kalibre edilmemiş orana değil.
+    confidence = embed_confidence if embed_confidence is not None else _confidence_from_hits(hits)
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,
         unit=unit,
         stage=stage,
         remedies=unique,
-        confidence=_confidence_from_hits(hits),
+        confidence=confidence,
         evidence_span=type_span or raw[:180],
         label=TYPE_LABELS.get(document_type, document_type),
     )

@@ -7,10 +7,10 @@ Gelen metni okur, türünü ve eksiklerini gösterir, ilgili mevzuata bağlar, s
 | Ekran | Adres | Ne işe yarar |
 | --- | --- | --- |
 | Araştırma | `/arastirma` | Kanun maddesi / kavram sorgusu, kaynaklı gerekçe |
-| Evrak | `/evrak` | PDF/TXT oku, sınıflandır, ajan zinciri |
-| Kamu | `/kamu` | 2646 üst yazı / olur / bilgi / cevap taslağı |
-| Süreç | `/surec` | Aşama + kanun yolu + son gün (kural motoru) |
+| Evrak | `/evrak` | PDF/Word/TXT oku, sınıflandır, özetle, kanun yolu/süre hesapla, taslak üret |
 | İşlem | `/islem` | Şikayet, istinaf, tahliye vb. dilekçe taslağı |
+
+`/kamu` ve `/surec` artık ayrı ekran değil — Evrak modülünün ilgili sekmelerine (Taslak; Kanun Yolu ve Süreler) yönlendiriyor; eski linkler kırılmasın diye redirect olarak bırakıldı.
 
 ---
 

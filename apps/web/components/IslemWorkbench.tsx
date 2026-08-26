@@ -382,8 +382,7 @@ export function IslemWorkbench() {
             </select>
           ) : guess ? (
             <p className="islem-guess" aria-live="polite">
-              Bu bir <strong>{guess.title}</strong>
-              {guess.confidence ? ` · %${Math.round(guess.confidence * 100)}` : ""}.
+              Bu bir <strong>{guess.title}</strong>.
               {guess.reason ? ` ${guess.reason}` : ""}
             </p>
           ) : (

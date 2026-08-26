@@ -56,6 +56,13 @@ class ModelsConfig:
     rerank_enabled: bool
     rerank_model: str
     rerank_batch_size: int
+    # document_ai/prototype_classifier.py — kural motorunun ("belirsiz")
+    # hiçbir needle'a çarpmadığı azınlık vakalarda devreye giren, embedding
+    # tabanlı ikincil sınıflandırma önerisi. rerank'ten farklı olarak
+    # varsayılan KAPALI: yeni/deneysel bir özellik, mevcut kurulumların/
+    # testlerin sınıflandırma davranışını sessizce değiştirmemesi için açıkça
+    # config'den (veya HAKIM_CLASSIFICATION_FALLBACK=1 ile) açılması gerekir.
+    classification_fallback_enabled: bool
     ollama_enabled: bool
     ollama_url: str
     ollama_model: str
@@ -102,6 +109,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     embedding = merged.get("embedding") or {}
     decision_embedding = merged.get("decision_embedding") or {}
     rerank = merged.get("rerank") or {}
+    classification_fallback = merged.get("classification_fallback") or {}
     research = merged.get("research") or {}
     cfg = ModelsConfig(
         profile=profile,
@@ -132,6 +140,10 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         rerank_enabled=bool(rerank.get("enabled", True)),
         rerank_model=str(rerank.get("model") or "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"),
         rerank_batch_size=int(rerank.get("batch_size") or 16),
+        classification_fallback_enabled=bool(
+            os.environ.get("HAKIM_CLASSIFICATION_FALLBACK", "").strip() == "1"
+            or classification_fallback.get("enabled", False)
+        ),
         ollama_enabled=bool(ollama.get("enabled", False)),
         ollama_url=str(ollama.get("url") or "http://127.0.0.1:11434").rstrip("/"),
         ollama_model=str(ollama.get("model") or "llama3.2:3b"),

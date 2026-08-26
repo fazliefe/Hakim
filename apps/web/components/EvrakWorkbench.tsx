@@ -31,7 +31,7 @@ const SIDE = [
 ];
 
 const FILE_ACCEPT =
-  ".pdf,.txt,.md,.docx,.doc,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  ".pdf,.txt,.md,.docx,.doc,.udf,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function EvrakWorkbench() {
   const params = useSearchParams();
