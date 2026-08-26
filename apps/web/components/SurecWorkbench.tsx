@@ -95,10 +95,10 @@ export function SurecWorkbench() {
           />
           <div className="surec-input-actions">
             <button type="submit" disabled={loading || text.trim().length < 8}>
-              {loading ? "Hesaplanıyor…" : "Süreleri hesapla"}
+              {loading ? "Hesaplanıyor…" : "Süreleri Hesapla"}
             </button>
             <button type="button" className="btn-ghost" onClick={() => setText(SAMPLE_EVRAK)} disabled={loading}>
-              Örnek metni yükle
+              Örnek Metni Yükle
             </button>
           </div>
         </form>

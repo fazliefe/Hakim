@@ -237,7 +237,7 @@ export function EvrakWorkbench() {
                       disabled={loading}
                       onClick={() => setText(SAMPLE_EVRAK)}
                     >
-                      Örnek metni yükle
+                      Örnek Metni Yükle
                     </button>
                     <DownloadActions content={downloadBody} basename={downloadName} />
                   </div>
