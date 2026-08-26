@@ -323,13 +323,27 @@ def neighborhood_decision(driver: Any, decision_id: str, *, depth: int = 1) -> d
         }
 
 
-def dump_graph(driver: Any) -> dict[str, Any]:
-    """Return the full Neo4j legal graph for visualization."""
+def dump_graph(driver: Any, *, node_limit: int = 2000) -> dict[str, Any]:
+    """Return the codified-law backbone (kanun + madde + mahkeme) for the
+    "Bilgi grafı" background context — NOT the emsal karar archive.
+
+    Canlı doğrulandı: bu sorgu eskiden `WHERE n.id IS NOT NULL` ile filtresiz
+    çalışıyordu ve arşivdeki ~50.000 Decision (emsal karar) düğümünü de
+    LegalGraphView'a dump ediyordu; tarayıcı bunu vis-network'ün fizik
+    motoruyla çizmeye çalışırken tam anlamıyla kilitleniyordu (30+ saniye,
+    sayfa yenilemeden kurtulamadı). Decision düğümleri zaten AYRI ve
+    sorguya-özel bir yoldan geliyor (LegalGraphView.tsx'teki `evidence` +
+    `graph_neighbors`, bkz. o dosyadaki useMemo) — buradaki "arka plan"
+    grafiği yalnızca Article/Law/Court'tan (mevcut arşivde ~860 düğüm)
+    oluşsun yeterli; rastgele, sorguyla ilgisiz binlerce karar arka planda
+    hiçbir okunabilirlik katmıyordu, yalnızca performansı öldürüyordu.
+    `node_limit` yine de gelecekte bu düğüm türleri de büyürse bir güvenlik
+    tavanı olarak kalıyor."""
     with driver.session() as session:
         node_rows = session.run(
             """
             MATCH (n)
-            WHERE n.id IS NOT NULL
+            WHERE n.id IS NOT NULL AND NOT n:Decision
             RETURN n.id AS id,
                    labels(n) AS labels,
                    n.article_no AS article_no,
@@ -337,7 +351,9 @@ def dump_graph(driver: Any) -> dict[str, Any]:
                    n.decision_no AS decision_no,
                    n.number AS number,
                    n.name AS name
-            """
+            LIMIT $node_limit
+            """,
+            node_limit=node_limit,
         )
         nodes: list[dict[str, Any]] = []
         for rec in node_rows:
@@ -377,8 +393,11 @@ def dump_graph(driver: Any) -> dict[str, Any]:
             """
             MATCH (a)-[r]->(b)
             WHERE a.id IS NOT NULL AND b.id IS NOT NULL
+                AND NOT a:Decision AND NOT b:Decision
             RETURN a.id AS source, b.id AS target, type(r) AS type
-            """
+            LIMIT $edge_limit
+            """,
+            edge_limit=node_limit * 4,
         )
         edges = [
             {"source": rec["source"], "target": rec["target"], "label": rec["type"]}

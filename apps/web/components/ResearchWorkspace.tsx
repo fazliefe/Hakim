@@ -233,6 +233,12 @@ export function ResearchWorkspace() {
 
   function onTab(next: Tab) {
     setTab(next);
+    // "Kaynaklar" sekmesi kendi içeriğini göstermiyor — asıl kaynak listesi
+    // AppShell'in sağ "inspector" paneli (bkz. openSource ile aynı mekanizma,
+    // atıf [n] tıklanınca açılan panel). Sekmeye tıklamak önceden hiçbir şey
+    // yapmıyordu; panel varsayılan olarak kapalı (`inspectorMode: "collapsed"`)
+    // olduğu için "Kaynaklar" tıklaması görünürde ölü bir buton gibi duruyordu.
+    if (next === "kaynaklar") setInspectorMode("open");
   }
 
   async function runQuery(text: string, opts?: { followUp?: boolean; replace?: boolean }) {

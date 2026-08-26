@@ -41,6 +41,12 @@ type Props = {
   onNodeClick?: (id: string, evidenceN?: number) => void;
 };
 
+// barnesHut fiziği bu eşiğin üzerinde tarayıcıyı kilitleyebiliyor (bkz. asıl
+// donma vakası: sunucudan filtresiz dönen ~50k düğüm). Backend artık
+// kaynağında sınırlıyor (graph/projector.py::dump_graph), bu yalnızca
+// istemci tarafı bir güvenlik tavanı.
+const NO_PHYSICS_NODE_COUNT = 600;
+
 const baseOptions: Options = {
   nodes: {
     shape: "dot",
@@ -136,21 +142,33 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
               smooth: { enabled: true, type: "cubicBezier", forceDirection: "horizontal", roundness: 0.38 },
             },
           }
-      : {
-          ...baseOptions,
-          layout: { improvedLayout: nodes.length < 120, hierarchical: { enabled: false } },
-          physics: {
-            enabled: true,
-            stabilization: { iterations: nodes.length > 200 ? 200 : 140, fit: true },
-            barnesHut: {
-              gravitationalConstant: nodes.length > 80 ? -28000 : -12000,
-              centralGravity: nodes.length > 80 ? 0.08 : 0.18,
-              springLength: nodes.length > 80 ? 70 : 160,
-              springConstant: 0.03,
-              damping: 0.16,
+      : nodes.length > NO_PHYSICS_NODE_COUNT
+        ? {
+            // Güvenlik tavanı: sunucu tarafı sınırlaması (bkz. graph/projector.py
+            // dump_graph, node_limit) atlanır/büyürse bile, barnesHut fiziği
+            // yüzlerce+ düğümde tarayıcı sekmesini tamamen kilitleyebiliyordu
+            // (canlı doğrulandı — 50k düğümde 30+ saniye donma). Bu eşiğin
+            // üzerinde fizik simülasyonu hiç başlatılmaz, statik bir düzen
+            // kullanılır — yavaş ama asla donmaz.
+            ...baseOptions,
+            layout: { improvedLayout: true, hierarchical: { enabled: false } },
+            physics: { enabled: false },
+          }
+        : {
+            ...baseOptions,
+            layout: { improvedLayout: nodes.length < 120, hierarchical: { enabled: false } },
+            physics: {
+              enabled: true,
+              stabilization: { iterations: nodes.length > 200 ? 200 : 140, fit: true },
+              barnesHut: {
+                gravitationalConstant: nodes.length > 80 ? -28000 : -12000,
+                centralGravity: nodes.length > 80 ? 0.08 : 0.18,
+                springLength: nodes.length > 80 ? 70 : 160,
+                springConstant: 0.03,
+                damping: 0.16,
+              },
             },
-          },
-        };
+          };
 
     let network: Network;
     try {
