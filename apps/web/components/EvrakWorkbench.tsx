@@ -5,6 +5,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgentRail } from "@/components/AgentRail";
 import { AppShell } from "@/components/AppShell";
+import { DocumentViewer } from "@/components/document/DocumentViewer";
 import { PetitionPreview } from "@/components/PetitionPreview";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { EVRAK_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
@@ -31,12 +32,27 @@ const SIDE = [
 ];
 
 const FILE_ACCEPT =
-  ".pdf,.txt,.md,.docx,.doc,.udf,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  ".pdf,.txt,.md,.docx,.doc,.udf,.jpg,.jpeg,.png,.webp,.tif,.tiff,application/pdf,text/plain,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+const REMEDY_LABEL: Record<string, string> = {
+  itiraz: "İtiraz",
+  istinaf: "İstinaf",
+  istinaf_ceza: "İstinaf (ceza)",
+  istinaf_hukuk: "İstinaf (hukuk)",
+  istinaf_idari: "İdari İstinaf",
+  temyiz: "Temyiz",
+  temyiz_ceza: "Temyiz (ceza)",
+  temyiz_hukuk: "Temyiz (hukuk)",
+  temyiz_idari: "İdari Temyiz",
+  bireysel_basvuru: "Bireysel Başvuru",
+  sikayet: "Şikayet",
+  idari_dava: "İdari Dava Açma",
+};
 
 export function EvrakWorkbench() {
   const params = useSearchParams();
   const initialSide = SIDE.some((item) => item.id === params.get("bolum")) ? params.get("bolum")! : "goruntuleme";
-  const { text, setText, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName } =
+  const { text, setText, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName, structured } =
     useDocumentAnalysis("/v1/evrak");
   const [side, setSide] = useState(initialSide);
   const [kalipList, setKalipList] = useState<BelgeKalip[]>(KAMU_FALLBACK);
@@ -112,7 +128,9 @@ export function EvrakWorkbench() {
           ? "Evrak Okunuyor…"
           : result
             ? `${result.classification.label} · ${result.deadlines.length} süre`
-            : "Evrak Bekleniyor"
+            : structured
+              ? `${structured.document_type} · görüntü`
+              : "Evrak Bekleniyor"
       }
     >
       <section className="main-pane evrak-pane">
@@ -134,7 +152,7 @@ export function EvrakWorkbench() {
           </h1>
           <p>
             {side === "goruntuleme"
-              ? "PDF, Word veya TXT yükleyin. Resmi yazışma kalıbı seçilebilir."
+              ? "Solda belge, sağda VLM’in yazıya çevirdiği metin. PDF/Word hâlâ tek metin kutusu."
               : side === "ozet"
                 ? "Evrağın içeriğini anlatan kısa özet."
                 : side === "sinif"
@@ -153,10 +171,19 @@ export function EvrakWorkbench() {
 
         {side === "goruntuleme" ? (
           <>
-            <div className="evrak-desk single">
-              <form className="doc-sheet" onSubmit={submit}>
+            <div className={`evrak-desk ${structured ? "photo-split" : "single"}`}>
+              {structured ? (
+                <section className="doc-sheet photo-pane" aria-label="Yüklenen belge">
+                  <header className="sheet-head">
+                    <span>Belge</span>
+                    <em className="muted">{fileName}</em>
+                  </header>
+                  <DocumentViewer document={structured} focused={null} onFocus={() => undefined} showOverlay={false} />
+                </section>
+              ) : null}
+              <form className="doc-sheet text-pane" onSubmit={submit}>
                 <header className="sheet-head">
-                  <span>{fileName ? fileName : "Asıl Metin"}</span>
+                  <span>{structured ? "Yazıya çevrilmiş" : fileName ? fileName : "Asıl Metin"}</span>
                   <div className="sheet-actions">
                     <select
                       className="kalip-select"
@@ -176,6 +203,15 @@ export function EvrakWorkbench() {
                       <input
                         type="file"
                         accept={FILE_ACCEPT}
+                        onChange={onFile}
+                        disabled={loading}
+                      />
+                    </label>
+                    <label className="file-btn">
+                      Fotoğrafı yazıya çevir
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/tiff,.jpg,.jpeg,.png,.webp,.tif,.tiff"
                         onChange={onFile}
                         disabled={loading}
                       />
@@ -210,9 +246,16 @@ export function EvrakWorkbench() {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   aria-label="Evrak metni"
-                  placeholder="Evrak metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
+                  placeholder="Fotoğraf yüklerseniz tüm sayfa sağda yazılır. PDF/Word de yükleyebilir, metni yapıştırabilirsiniz…"
                   spellCheck={false}
                 />
+                {structured?.warnings?.length ? (
+                  <ul className="evrak-checks" aria-label="Kontrol notları">
+                    {structured.warnings.map((item, index) => (
+                      <li key={`${item.code}-${index}`}>{item.message}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </form>
             </div>
           </>
@@ -248,6 +291,12 @@ export function EvrakWorkbench() {
         {side === "sinif" ? (
           c ? (
             <div className="class-grid" style={{ padding: "0 0.9rem 1rem" }}>
+              {result?.verdict ? (
+                <div className="class-card wide">
+                  <span>Ne Olduğu</span>
+                  <strong>{result.verdict}</strong>
+                </div>
+              ) : null}
               {result?.legal_caveat ? (
                 <p className="legal-caveat class-card wide">Uyarı: {result.legal_caveat}</p>
               ) : null}
@@ -325,6 +374,13 @@ export function EvrakWorkbench() {
                   {deadlines.length === 0 ? (
                     <p className="muted">Bu evrak için işleyen bir kanun yolu süresi yok.</p>
                   ) : null}
+                  {(c?.remedies?.length ? c.remedies : []).map((remedy) => (
+                    <div key={remedy} className="deadline-tile">
+                      <span>Kanun Yolu</span>
+                      <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
+                      <em>{c?.label}</em>
+                    </div>
+                  ))}
                   {deadlines.map((item, index) => {
                     const late = Boolean(item.last_day && item.last_day < today);
                     return (

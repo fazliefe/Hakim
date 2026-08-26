@@ -1,0 +1,19 @@
+default:
+  trusted: 0.90
+  review: 0.70
+
+notification_date:
+  trusted: 0.95
+  review: 0.80
+
+case_no:
+  trusted: 0.95
+  review: 0.85
+
+decision_no:
+  trusted: 0.95
+  review: 0.85
+
+document_no:
+  trusted: 0.93
+  review: 0.80

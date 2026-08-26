@@ -26,9 +26,7 @@ Thumbs.db
 tools/evolver/gep/events.jsonl
 tools/evolver/memory/
 
-data/raw/
 data/minio/
-data/accounts.sqlite
 data/accounts.sqlite-*
 data/tunnel-url.txt
 data/_sample_*.html
@@ -37,6 +35,13 @@ data/_tmp_*.json
 data/hf_cache/
 data/tessdata/
 !data/raw/.gitkeep
+
+# Include legal archive, accounts DB, and service dumps in the repo
+!data/raw/
+!data/raw/**
+!data/accounts.sqlite
+!data/dumps/
+!data/dumps/**
 
 # Cloudflare Tunnel: gerçek tunnel ID / hostname / credentials makineye
 # özeldir, commit edilmez. Şablon (config.yml.example) tracked kalır.

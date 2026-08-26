@@ -1,0 +1,15 @@
+{
+  "document_id": "law:2004",
+  "law_no": "2004",
+  "title": "İCRA VE İFLAS KANUNU12",
+  "source_file": "icra kanunu.pdf",
+  "content_hash": "b7c0a14888871177f0984d9a1b2ab69959a1574babf5f9ee7fe5025d89c1006d",
+  "extract_method": "ocr",
+  "pages": 171,
+  "note": "paddleocr-gpu pages all from icra-kanunu",
+  "chunk_count": 504,
+  "article_chunks": 504,
+  "retrieved_at": "2026-08-20T16:17:38.786035+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

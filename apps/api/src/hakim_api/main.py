@@ -58,11 +58,23 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def _cors_origins() -> list[str]:
+    """Demo günü farklı bir host/IP gerekirse kod değişmeden HAKIM_CORS_ORIGINS ile açılsın."""
+    raw = os.environ.get("HAKIM_CORS_ORIGINS", "").strip()
+    if not raw:
+        return DEFAULT_CORS_ORIGINS
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or DEFAULT_CORS_ORIGINS
+
+
 app = FastAPI(title="HAKİM API", version=SCHEMA_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,  # frontend credentials/çerez göndermiyor; wildcard/çoklu origin ile de uyumlu kalsın
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -128,6 +140,14 @@ class ResearchResponse(BaseModel):
 class DocumentRequest(BaseModel):
     text: str = Field(min_length=8)
     action: str | None = None
+
+
+class BundleRequest(BaseModel):
+    documents: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RedactRequest(BaseModel):
+    text: str = ""
 
 
 @lru_cache(maxsize=1)
@@ -637,6 +657,71 @@ async def evrak_dosya(file: UploadFile = File(...), user=Depends(optional_user))
         f"Dosya: {extracted.filename} ({label})",
         {"filename": extracted.filename, "label": label},
     )
+    return payload
+
+
+@app.post("/v1/evrak/analyze")
+async def evrak_analyze(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
+    """StructuredDocument: kalite → VLM alanları → güven bandı. Hukuki hüküm yok. Yalnız fotoğraf."""
+    from document_ai.vision.analyzer import VisionUploadError, analyze_bytes
+    from llm.client import OllamaError
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Dosya boş.")
+    try:
+        document = analyze_bytes(file.filename or "evrak", data)
+    except VisionUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OllamaError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Görüntü analiz edilemedi: {exc}") from exc
+    payload = document.model_dump()
+    _record_activity(
+        user,
+        "evrak",
+        f"VLM analiz: {document.filename} ({document.document_type})",
+        {"document_id": document.document_id, "document_type": document.document_type},
+    )
+    return payload
+
+
+@app.post("/v1/evrak/bundle")
+def evrak_bundle(body: BundleRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Compare already-analyzed documents. Empty list is valid. No VLM call."""
+    from document_ai.bundle.analyzer import analyze_bundle
+    from hakim_legal_schema.document import StructuredDocument
+
+    docs = []
+    for raw in body.documents:
+        try:
+            docs.append(StructuredDocument.model_validate(raw))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Evrak paketi geçersiz: {exc}") from exc
+    bundle = analyze_bundle(docs)
+    _record_activity(
+        user,
+        "evrak",
+        f"Paket: {len(docs)} evrak",
+        {"bundle_id": bundle.bundle_id, "conflicts": len(bundle.conflicts)},
+    )
+    return bundle.model_dump()
+
+
+@app.post("/v1/evrak/redact")
+def evrak_redact(body: RedactRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Mask TCKN/phone/IBAN/email in text. Does not change the original document."""
+    from document_ai.privacy.pii_detector import detect_pii, redact_text
+
+    text = body.text or ""
+    regions = detect_pii(text)
+    payload = {
+        "redacted": redact_text(text),
+        "count": len(regions),
+        "kinds": sorted({item.type for item in regions}),
+    }
+    _record_activity(user, "evrak", "Gizleme", {"count": payload["count"]})
     return payload
 
 

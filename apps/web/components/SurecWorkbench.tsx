@@ -20,6 +20,7 @@ const REMEDY_LABEL: Record<string, string> = {
   temyiz: "Temyiz",
   temyiz_ceza: "Temyiz (ceza)",
   temyiz_hukuk: "Temyiz (hukuk)",
+  temyiz_idari: "İdari Temyiz",
   bireysel_basvuru: "Bireysel Başvuru",
   sikayet: "Şikayet",
   idari_dava: "İdari Dava Açma",

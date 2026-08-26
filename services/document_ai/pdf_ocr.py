@@ -18,6 +18,12 @@ OCR_VENV_PY = ROOT / ".venv-ocr" / ("Scripts" if os.name == "nt" else "bin") / (
 # repo içinde yazılabilir bir tessdata klasörü tutuyoruz (eng+osd+tur).
 REPO_TESSDATA_DIR = ROOT / "data" / "tessdata"
 
+# Bozuk/ağır bir PDF, OCR alt-sürecini süresiz kilitlemesin. Yerel CPU'da PaddleOCR
+# ~4 dk/sayfa olabiliyor (bkz. COLAB_OCR.md); varsayılan geniş tutuldu, gerekirse
+# HAKIM_OCR_TIMEOUT_SECONDS ile büyütülebilir.
+OCR_SUBPROCESS_TIMEOUT_SECONDS = float(os.environ.get("HAKIM_OCR_TIMEOUT_SECONDS", "900"))
+TESSERACT_PAGE_TIMEOUT_SECONDS = float(os.environ.get("HAKIM_TESSERACT_PAGE_TIMEOUT_SECONDS", "60"))
+
 
 @dataclass(frozen=True, slots=True)
 class PdfExtractResult:
@@ -142,7 +148,7 @@ def extract_pdf_ocr_paddle(
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=None,
+            timeout=OCR_SUBPROCESS_TIMEOUT_SECONDS,
             check=False,
         )
         if work_dir is not None:
@@ -153,6 +159,11 @@ def extract_pdf_ocr_paddle(
             err = (proc.stderr or proc.stdout or "paddleocr failed").strip()
             raise RuntimeError(err[:800])
         return (proc.stdout or "").strip()
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"PaddleOCR {OCR_SUBPROCESS_TIMEOUT_SECONDS:.0f} sn içinde bitmedi; "
+            "HAKIM_OCR_TIMEOUT_SECONDS ile süreyi artırabilir veya daha az sayfa deneyebilirsiniz."
+        ) from exc
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
@@ -186,11 +197,26 @@ def extract_pdf_ocr_tesseract(
             page = doc.load_page(i)
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            # Prefer tur+eng; fall back to eng if Turkish data missing
+            # Prefer tur+eng; fall back to eng if Turkish data missing. timeout=
+            # tek bir bozuk sayfanın tüm isteği süresiz kilitlemesini önler.
             try:
-                parts.append(pytesseract.image_to_string(image, lang=lang, config=config) or "")
+                parts.append(
+                    pytesseract.image_to_string(
+                        image, lang=lang, config=config, timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
+                    )
+                    or ""
+                )
             except pytesseract.TesseractError:
-                parts.append(pytesseract.image_to_string(image, lang="eng", config=config) or "")
+                parts.append(
+                    pytesseract.image_to_string(
+                        image, lang="eng", config=config, timeout=TESSERACT_PAGE_TIMEOUT_SECONDS
+                    )
+                    or ""
+                )
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"Tesseract sayfa {i + 1}: {TESSERACT_PAGE_TIMEOUT_SECONDS:.0f} sn içinde bitmedi."
+                ) from exc
         return "\n".join(parts).strip()
     finally:
         doc.close()

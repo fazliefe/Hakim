@@ -38,6 +38,8 @@ def test_default_profile_is_evren() -> None:
     # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
     assert cfg.llm_input_per_million == 0.0
     assert cfg.llm_output_per_million == 0.0
+    assert cfg.vision_model == "llm-fast"
+    assert cfg.vision_max_images == 2
 
 
 def test_profile_env_switches_to_ollama(monkeypatch) -> None:

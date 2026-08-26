@@ -24,7 +24,7 @@ export function PetitionPreview({
     <article className={`petition-sheet ${layout}`} data-layout={layout} data-family={family}>
       <header>
         <span>{headerLabel(layout, petition?.title)}</span>
-        <span className="badge">{badge || petition?.title}</span>
+        <span className="badge">{petition?.title || badge}</span>
       </header>
       {actions ? <div className="petition-toolbar">{actions}</div> : null}
       {layout === "resmi" || !petition ? (

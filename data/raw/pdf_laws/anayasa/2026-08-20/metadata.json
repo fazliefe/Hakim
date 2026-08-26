@@ -1,0 +1,15 @@
+{
+  "document_id": "law:2709",
+  "law_no": "2709",
+  "title": "TÜRKIYE CUMHURIYETI ANAYASASI 1 2 3 4",
+  "source_file": "Anayasa.pdf",
+  "content_hash": "1a318f19733ec0093ea2e9e66fb9d853a822bdba7552a39aed7f342031f59d3e",
+  "extract_method": "ocr",
+  "pages": 75,
+  "note": "paddleocr-gpu pages all from anayasa",
+  "chunk_count": 207,
+  "article_chunks": 207,
+  "retrieved_at": "2026-08-20T16:17:38.737694+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

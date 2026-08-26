@@ -32,6 +32,8 @@ function tunnelHosts() {
 
 const nextConfig = {
   reactStrictMode: false,
+  // Sol alt köşedeki Next.js dev-mode rozeti demo sırasında sahnede görünmesin.
+  // Üretim build'inde (next build && next start) zaten çıkmaz; dev'de de kapalı olsun.
   devIndicators: false,
   allowedDevOrigins: [...lanHosts(), ...tunnelHosts()],
   transpilePackages: [

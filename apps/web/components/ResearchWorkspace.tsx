@@ -27,13 +27,6 @@ const SIDE_ITEMS = [
   { id: "kaydedilen", label: "Kaydedilen Maddeler" },
 ];
 
-const RESEARCH_TABS: Array<[Tab, string]> = [
-  ["metin", "Metin"],
-  ["kaynaklar", "Kaynaklar"],
-  ["graf", "Bilgi Grafı"],
-  ["iz", "Arama İzi"],
-];
-
 const HISTORY_KEY = "hakim-research-history";
 const SAVED_KEY = "hakim-saved-articles";
 
@@ -170,7 +163,7 @@ function courtLabel(item: Evidence): string {
   return COURT_LABELS[slug] || "Emsal karar";
 }
 
-function contentPreview(text: string, limit = 180): string {
+function contentPreview(text: string, limit = 320): string {
   const trimmed = text.trim();
   return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
 }
@@ -368,7 +361,7 @@ export function ResearchWorkspace() {
             </div>
           ) : tab !== "graf" && tab !== "iz" && turns.length === 0 ? (
             <div className="pane-hero">
-              <h1>Hukuki araştırma</h1>
+              <h1>Hukuki Araştırma</h1>
               <p>Sorunuzu yazın. Cevaptan sonra aynı sohbette devam edebilirsiniz.</p>
             </div>
           ) : null}
@@ -493,7 +486,7 @@ export function ResearchWorkspace() {
                             setReadingId(null);
                           }}
                         >
-                          Kayıttan çıkar
+                          Kayıttan Çıkar
                         </button>
                       </article>
                     ) : (
@@ -501,7 +494,7 @@ export function ResearchWorkspace() {
                     )}
                   </>
                 ) : (
-                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
+                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi Kaydet» deyin.</p>
                 )
               ) : null}
             </div>
@@ -520,10 +513,10 @@ export function ResearchWorkspace() {
               placeholder={
                 turns.length ? "Devam sorunuzu yazın…" : "Hukuki sorunuzu yazın… örn. Madde 158"
               }
-              aria-label={turns.length ? "Devam sorusu" : "Hukuki soru"}
+              aria-label={turns.length ? "Devam Sorusu" : "Hukuki Soru"}
             />
             <button type="submit" disabled={loading || query.trim().length < 2}>
-              {loading ? "Aranıyor…" : turns.length ? "Devam et" : "Araştır"}
+              {loading ? "Kaynaklar Tartılıyor…" : turns.length ? "Devam Et" : "Araştır"}
             </button>
           </form>
         ) : null}
@@ -534,8 +527,8 @@ export function ResearchWorkspace() {
                 ["metin", "Metin"],
                 ["kaynaklar", "Kaynaklar"],
                 ["emsal", decisions.length ? `Emsal Karar (${decisions.length})` : "Emsal Karar"],
-                ["graf", "Bilgi grafı"],
-                ["iz", "Arama izi"],
+                ["graf", "Bilgi Grafı"],
+                ["iz", "Arama İzi"],
               ] as const
             ).map(([id, label]) => (
               <button

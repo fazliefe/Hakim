@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { DocumentAnalysis, analyzeEvrakFile, analyzeWorkspace } from "@/lib/api";
+import { DocumentAnalysis, StructuredDocument, analyzeEvrakFile, analyzeEvrakVision, analyzeWorkspace, visionFile } from "@/lib/api";
 
 export const SAMPLE_EVRAK = `T.C.
 ANKARA 4. AĞIR CEZA MAHKEMESİ
@@ -30,6 +30,7 @@ export function useDocumentAnalysis(
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
 
   const [fileName, setFileName] = useState<string | null>(null);
+  const [structured, setStructured] = useState<StructuredDocument | null>(null);
 
   async function submit(event?: FormEvent, nextAction?: string, nextText?: string) {
     event?.preventDefault();
@@ -39,6 +40,7 @@ export function useDocumentAnalysis(
     if (nextText) setText(nextText);
     setLoading(true);
     setError(null);
+    setStructured(null);
     try {
       const data = await analyzeWorkspace(
         path,
@@ -59,10 +61,45 @@ export function useDocumentAnalysis(
     }
   }
 
-  async function submitFile(file: File) {
+  async function submitFile(file: File, _opts?: { vision?: boolean }) {
     setLoading(true);
     setError(null);
+    setStructured(null);
     try {
+      if (visionFile(file)) {
+        const vision = await analyzeEvrakVision(file);
+        setFileName(vision.filename || file.name);
+        if (vision.quality?.status === "unusable") {
+          setStructured(null);
+          setResult(null);
+          setError("Görüntü kullanılamaz. Daha net, düz ve aydınlık bir fotoğraf çekin.");
+          return null;
+        }
+        setStructured(vision);
+        const fromText = (vision.raw_text || "").replace(/\[okunamadı\]/g, " ").replace(/[ \t]+\n/g, "\n").trim();
+        const fromFields = (vision.fields || [])
+          .filter((field) => field.value && field.value !== "[okunamadı]")
+          .map((field) => `${field.label}: ${field.value}`)
+          .join("\n");
+        const textOut = fromText.length >= 8 ? fromText : fromFields;
+        if (textOut.length < 8) {
+          setResult(null);
+          setError("Fotoğraftan yeterli metin okunamadı. Daha net çekin veya PDF yükleyin.");
+          return null;
+        }
+        setText(textOut);
+        const data = await analyzeWorkspace(
+          path,
+          textOut,
+          path === "/v1/islem" || path === "/v1/senaryo" ? action || undefined : undefined,
+        );
+        data.source_filename = vision.filename || file.name;
+        data.source_kind = "image";
+        data.extract_note = "Evren görüntü";
+        data.text = textOut;
+        setResult(data);
+        return data;
+      }
       const data = await analyzeEvrakFile(file);
       setResult(data);
       setFileName(data.source_filename || file.name);
@@ -70,6 +107,7 @@ export function useDocumentAnalysis(
       return data;
     } catch (err) {
       setResult(null);
+      setStructured(null);
       setError(err instanceof Error ? err.message : "Dosya okunamadı");
       return null;
     } finally {
@@ -98,7 +136,7 @@ export function useDocumentAnalysis(
     }
   }
 
-  return { text, setText, action, setAction, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName, setFileName };
+  return { text, setText, action, setAction, loading, error, result, setResult, submit, submitFile, submitSenaryo, fileName, setFileName, structured };
 }
 
 export const TYPE_LABEL: Record<string, string> = {
@@ -146,4 +184,24 @@ export const STAGE_LABEL: Record<string, string> = {
   temyiz: "Temyiz",
   bireysel_basvuru: "Bireysel Başvuru",
   belirsiz: "Belirsiz",
+};
+
+// backend: services/llm/answers.py::BELGE_TITLE — belge/action id'sini arayüzde
+// ham (snake_case) göstermemek için.
+export const BELGE_LABEL: Record<string, string> = {
+  istinaf: "İstinaf dilekçesi",
+  temyiz: "Temyiz dilekçesi",
+  itiraz: "İtiraz dilekçesi",
+  cevap: "Cevap dilekçesi",
+  sikayet: "Şikayet dilekçesi",
+  suc_duyurusu: "Suç duyurusu",
+  katilma: "Davaya katılma talebi",
+  bireysel_basvuru: "Bireysel başvuru dilekçesi",
+  idari_dava: "İdari dava dilekçesi",
+  tahliye: "Tahliye talebi",
+  adli_kontrol_itiraz: "Adli kontrol / tutuklama itirazı",
+  ust_yazi: "Üst yazı",
+  bilgi_yazisi: "Bilgi yazısı",
+  olur: "Olur yazısı",
+  cevap_yazisi: "Cevap yazısı",
 };

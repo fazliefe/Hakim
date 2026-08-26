@@ -1,0 +1,15 @@
+{
+  "document_id": "law:4721",
+  "law_no": "4721",
+  "title": "TÜRK MEDENİ KANUNU",
+  "source_file": "türk medeni kanunu.pdf",
+  "content_hash": "8446dead64d8708600bcfb934bf453d49dcc4e75ca3eeed8fff0d4393fd4bc4f",
+  "extract_method": "ocr",
+  "pages": 206,
+  "note": "paddleocr-gpu pages all from tu-rk-medeni-kanunu",
+  "chunk_count": 1032,
+  "article_chunks": 1032,
+  "retrieved_at": "2026-08-20T16:17:38.816087+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

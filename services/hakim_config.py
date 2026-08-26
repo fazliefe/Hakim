@@ -68,6 +68,12 @@ class ModelsConfig:
     ollama_model: str
     ollama_keep_alive: str
     research_allow_ollama: bool
+    # Evren `vlm` alias is video-only. Stills/handwriting use llm-fast|llm-large
+    # (max 2 images per request). See config/models.yaml `vision`.
+    vision_model: str
+    vision_max_images: int
+    vision_timeout: float
+    vision_max_tokens: int
 
 
 class ModelsConfigError(ValueError):
@@ -111,6 +117,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     rerank = merged.get("rerank") or {}
     classification_fallback = merged.get("classification_fallback") or {}
     research = merged.get("research") or {}
+    vision = merged.get("vision") or {}
     cfg = ModelsConfig(
         profile=profile,
         writer=str(merged.get("writer") or "api"),
@@ -149,6 +156,10 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         ollama_model=str(ollama.get("model") or "llama3.2:3b"),
         ollama_keep_alive=str(ollama.get("keep_alive") or "30m"),
         research_allow_ollama=bool(research.get("allow_ollama", False)),
+        vision_model=str(vision.get("model") or llm.get("model") or "llm-fast"),
+        vision_max_images=int(vision.get("max_images") or 2),
+        vision_timeout=float(vision.get("timeout") or 120),
+        vision_max_tokens=int(vision.get("max_tokens") or 4096),
     )
     _validate(cfg)
     return cfg

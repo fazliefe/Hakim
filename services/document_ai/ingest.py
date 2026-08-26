@@ -5,8 +5,18 @@ import zipfile
 from dataclasses import dataclass
 from xml.etree import ElementTree
 
+from llm.client import OllamaError
+
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MIN_TEXT_CHARS = 8
+IMAGE_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+}
 
 
 class UploadError(ValueError):
@@ -68,6 +78,25 @@ def _extract_udf(data: bytes) -> str:
     return (node.text or "").strip() if node is not None else ""
 
 
+def _vlm_note(model: str) -> str:
+    return f"Evren {model} (görüntü / el yazısı)."
+
+
+def _transcribe_image(mime: str, data: bytes) -> str:
+    from document_ai.vlm_ocr import transcribe_images
+
+    try:
+        text = transcribe_images([(mime, data)]).strip()
+    except OllamaError as exc:
+        raise UploadError(
+            "Fotoğraf okunamadı. Evren görüntü servisi yanıt vermedi "
+            f"({exc}). HAKIM_LLM_API_KEY ve ağı kontrol edin."
+        ) from exc
+    if len(text) < MIN_TEXT_CHARS:
+        raise UploadError("Görüntüden yeterli metin çıkmadı.")
+    return text
+
+
 def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
     name = (filename or "evrak").strip() or "evrak"
     lower = name.lower()
@@ -88,8 +117,8 @@ def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
             raise UploadError("PDF okunamadı. Bozuk dosya veya taranmış sayfa olabilir.") from exc
         if len(text) < MIN_TEXT_CHARS:
             raise UploadError(
-                "PDF’den metin çıkmadı. Taranmış sayfa olabilir; Tesseract OCR kurun "
-                "veya metin-PDF / TXT yükleyin."
+                "PDF’den metin çıkmadı. Metin katmanlı PDF yükleyin, yerel OCR kurun "
+                "veya sayfa fotoğrafı (JPG/PNG) kullanın."
             )
         note = (
             "PDF metin katmanından okundu."
@@ -97,6 +126,24 @@ def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
             else f"PDF OCR ile okundu ({extracted.note})."
         )
         return ExtractedEvrak(text=text, filename=name, kind="pdf", note=note)
+
+    suffix = "." + lower.rsplit(".", 1)[-1] if "." in lower else ""
+    from document_ai.vlm_ocr import look_like_image
+
+    mime = IMAGE_EXT.get(suffix)
+    sniffed = look_like_image(data)
+    if mime or sniffed:
+        if sniffed is None:
+            raise UploadError("Görüntü dosyası bozuk veya tanınmadı.")
+        from hakim_config import get_models
+
+        text = _transcribe_image(sniffed, data)
+        return ExtractedEvrak(
+            text=text,
+            filename=name,
+            kind="image",
+            note=_vlm_note(get_models().vision_model),
+        )
 
     if lower.endswith((".txt", ".md")):
         text = _decode_text(data).strip()
@@ -119,4 +166,4 @@ def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
     if lower.endswith(".doc"):
         raise UploadError("Eski .doc yerine .docx, PDF veya TXT yükleyin.")
 
-    raise UploadError("Yalnızca PDF, Word (.docx), UDF veya TXT kabul edilir.")
+    raise UploadError("Yalnızca PDF, Word (.docx), UDF, TXT veya görüntü (JPG/PNG/WebP) kabul edilir.")

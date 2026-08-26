@@ -1,0 +1,15 @@
+{
+  "document_id": "law:6216",
+  "law_no": "6216",
+  "title": "ANAYASA MAHKEMESÍNÍN KURULUŞU VE YARGILAMA",
+  "source_file": "aym.pdf",
+  "content_hash": "c31d2377a4a1d22a6afdca18649aaa99418ae481f967f04fa345c599bbc59735",
+  "extract_method": "ocr",
+  "pages": 38,
+  "note": "paddleocr-gpu pages all from aym",
+  "chunk_count": 82,
+  "article_chunks": 82,
+  "retrieved_at": "2026-08-20T16:17:38.715514+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +25,8 @@ class Classification:
 # tuttuğuna göre bu aralığa doğrusal ölçeklenir. Alt sınır 0'a yakın ama
 # sıfır değil (hiç sinyal tutmasa bile "belirsiz" etiketi zaten kendini
 # açıklıyor); üst sınır 1'e yakın ama %100 iddia etmiyor — kural motoru
-# yine de yanılabilir.
+# yine de yanılabilir. LLM yedeği (classify_document_llm_assist) bu
+# ölçeği atlayıp kendi sabit `confidence_override` değerini kullanır.
 _CONFIDENCE_SIGNALS = 6
 _CONFIDENCE_FLOOR = 0.15
 _CONFIDENCE_CEILING = 0.95
@@ -209,6 +211,41 @@ def classify_document(text: str) -> Classification:
             if guess is not None:
                 document_type, embed_confidence = guess
                 type_span = f"(embedding benzerliğiyle önerildi, benzerlik %{round(embed_confidence * 100)})"
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=type_span,
+        type_score=type_score,
+        nature_score=nature_score,
+        embed_confidence=embed_confidence,
+    )
+
+
+# Kural motoru belirsiz/düşük güvenli kaldığında LLM'in seçebileceği kapalı liste.
+_NATURE_CHOICES = ("ceza", "idare", "anayasa", "hukuk", "kamu", "belirsiz")
+
+
+def _finalize(
+    raw: str,
+    blob: str,
+    document_type: str,
+    legal_nature: str,
+    *,
+    type_span: str = "",
+    type_score: int = 0,
+    nature_score: int = 0,
+    confidence_override: float | None = None,
+    embed_confidence: float | None = None,
+) -> Classification:
+    """document_type/legal_nature'dan stage, remedies, unit, confidence türetir.
+
+    Hem kural motoru hem LLM yedeği (classify_document_llm_assist) bu tek fonksiyonu
+    kullanır: LLM sadece hangi kategori olduğuna karar verir, gerisi (birim, aşama,
+    kanun yolu, süre) her zaman aynı deterministik tablolardan gelir — LLM'e madde
+    veya süre uydurma yetkisi verilmez.
+    """
     if document_type in KAMU_TYPES and legal_nature == "belirsiz":
         legal_nature = "kamu"
 
@@ -250,8 +287,8 @@ def classify_document(text: str) -> Classification:
             # muhakemesi aşamasındaymış gibi gösteriliyordu.
             stage = "ilk_derece"
 
-    # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK) etiketlere
-    # ayrıldı — aksi halde ikisi de aynı "istinaf"/"temyiz" etiketini
+    # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK, idare→İYUK)
+    # etiketlere ayrıldı — aksi halde hepsi aynı "istinaf"/"temyiz" etiketini
     # paylaşıp, deadline/catalog.py'de CMK kuralları hukuk davalarına da
     # (yanlışlıkla) uygulanıyordu — canlı bir BAM/istinaf tazminat kararıyla
     # doğrulandı.
@@ -273,15 +310,16 @@ def classify_document(text: str) -> Classification:
                 remedies.append("temyiz_ceza")
             elif legal_nature == "hukuk":
                 remedies.append("temyiz_hukuk")
+        if legal_nature == "idare" and ("temyiz" in blob or "danıştay" in blob or "danistay" in blob):
+            remedies.append("temyiz_idari")
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
         if legal_nature == "idare":
-            # "istinaf_idari" hiçbir deadline kuralına bağlı değil (dead tag,
-            # idari yargıda istinaf ayrı bir süre kuralı gerektirir — henüz
-            # eklenmedi). "idari_dava" — route_islem.py/ACTION_TO_BELGE/
-            # idari_dava.json'ın zaten kullandığı isim — İYUK m.7 dava açma
-            # süresine bağlanıyor.
-            remedies.append("istinaf_idari")
+            # İYUK m.7 dava açma süresine bağlanıyor (bkz. deadline/catalog.py).
+            # İstinaf/temyiz_idari yukarıda yalnızca blob'da gerçekten
+            # geçiyorsa eklenir — her idare evrakına spekülatif olarak
+            # İYUK m.45/46 süresi eklenmesin diye (route_islem.py/
+            # ACTION_TO_BELGE/idari_dava.json "idari_dava" adını kullanıyor).
             remedies.append("idari_dava")
         # "şikayet" (TCK m.73, 6 aylık şikayet süresi) ceza-özgü bir
         # kurum — hukuk davalarında (tazminat vb.) kavram olarak yok.
@@ -311,7 +349,12 @@ def classify_document(text: str) -> Classification:
     # embed_confidence doluysa (prototype fallback devredeyse) kosinüs
     # benzerlik skoru GERÇEK bir sayıdır — kural-eşleşme sayımına
     # (_confidence_from_hits) dayalı, kalibre edilmemiş orana değil.
-    confidence = embed_confidence if embed_confidence is not None else _confidence_from_hits(hits)
+    if embed_confidence is not None:
+        confidence = embed_confidence
+    elif confidence_override is not None:
+        confidence = round(min(0.99, max(0.0, confidence_override)), 2)
+    else:
+        confidence = _confidence_from_hits(hits)
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,
@@ -321,4 +364,73 @@ def classify_document(text: str) -> Classification:
         confidence=confidence,
         evidence_span=type_span or raw[:180],
         label=TYPE_LABELS.get(document_type, document_type),
+    )
+
+
+def _llm_prompt(raw: str) -> list[dict[str, str]]:
+    types = ", ".join(key for key in TYPE_LABELS if key != "belirsiz")
+    natures = ", ".join(_NATURE_CHOICES)
+    system = (
+        "Sen bir evrak türü sınıflandırıcısısın. Kural motoru bu metnin türünü kesin "
+        "olarak belirleyemedi; sana yalnızca kapalı bir liste içinden seçim yapman için "
+        "danışılıyor.\n"
+        f"document_type YALNIZCA şu listeden seçilir: {types}, belirsiz\n"
+        f"legal_nature YALNIZCA şu listeden seçilir: {natures}\n"
+        "Listede olmayan bir değer, yeni bir tür veya madde numarası UYDURMA. Emin "
+        'değilsen ilgili alan için "belirsiz" döndür.\n'
+        "evidence alanı metinden BİREBİR alıntı olmalı (en fazla 160 karakter); metinde "
+        "yoksa boş bırak.\n"
+        "Yalnızca şu JSON şemasıyla cevap ver: "
+        '{"document_type": "...", "legal_nature": "...", "evidence": "..."}'
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": raw[:1500]},
+    ]
+
+
+def classify_document_llm_assist(
+    text: str,
+    base: Classification,
+    *,
+    chat_fn: Callable[[list[dict[str, str]]], str],
+) -> Classification | None:
+    """Kural motoru "belirsiz" veya düşük güvenle kaldığında tek seferlik LLM yedeği.
+
+    LLM yalnızca document_type/legal_nature için kapalı listeden seçim yapar; stage,
+    remedies, unit, süre kuralları her zaman _finalize() üzerinden aynı deterministik
+    tablolardan türetilir — LLM'e yeni madde veya süre uydurma yetkisi verilmez.
+    JSON bozuksa, liste dışı bir değer dönerse veya kural motorundan farklı bir sonuç
+    çıkmazsa None döner; çağıran taraf kural motorunun sonucunu aynen korur.
+    """
+    raw = text.strip()
+    if not raw:
+        return None
+    try:
+        from llm.client import parse_json_content
+
+        payload = parse_json_content(chat_fn(_llm_prompt(raw)))
+    except Exception:
+        return None
+
+    llm_type = str(payload.get("document_type") or "").strip().lower()
+    llm_nature = str(payload.get("legal_nature") or "").strip().lower()
+    if llm_type not in TYPE_LABELS or llm_nature not in _NATURE_CHOICES:
+        return None
+
+    document_type = llm_type if llm_type != "belirsiz" else base.document_type
+    legal_nature = llm_nature if llm_nature != "belirsiz" else base.legal_nature
+    if document_type == base.document_type and legal_nature == base.legal_nature:
+        return None  # LLM de kural motorundan farklı bir şey söylemedi
+
+    evidence = str(payload.get("evidence") or "").strip()
+    span = evidence if evidence and evidence.lower() in raw.lower() else ""
+    blob = _norm(raw)
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=span,
+        confidence_override=0.6,
     )

@@ -1,0 +1,15 @@
+{
+  "document_id": "law:7201",
+  "law_no": "7201",
+  "title": "TEBLIGAT KANUNU1",
+  "source_file": "tebligat kanunu.pdf",
+  "content_hash": "76d27deba87ecd394e0e8c805005054a72bd740d0958a217add2811b3ed10148",
+  "extract_method": "ocr",
+  "pages": 19,
+  "note": "paddleocr-gpu pages all from tebligat-kanunu",
+  "chunk_count": 73,
+  "article_chunks": 73,
+  "retrieved_at": "2026-08-20T16:17:38.702076+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

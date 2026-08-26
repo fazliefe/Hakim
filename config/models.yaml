@@ -112,6 +112,13 @@ profiles:
       model: bge-m3-embed
       dims: 1024
       timeout: 30
+    # Evren `vlm` alias görüntü kabul etmez (video). El yazısı / fotoğraf:
+    # llm-fast veya llm-large, istek başına en fazla 2 görüntü.
+    vision:
+      model: llm-fast
+      max_images: 2
+      timeout: 120
+      max_tokens: 4096
     ollama:
       enabled: false
       url: http://127.0.0.1:11434

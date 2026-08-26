@@ -17,7 +17,12 @@ from document_ai.answers import (
     format_sure,
     format_taslak,
 )
-from document_ai.classify import Classification, KAMU_TYPES, classify_document
+from document_ai.classify import (
+    Classification,
+    KAMU_TYPES,
+    classify_document,
+    classify_document_llm_assist,
+)
 from document_ai.extract import extract_dates, extract_fields, missing_fields
 from document_ai.gaps import diagnose_islem_gaps
 from document_ai.schemas import FIELD_LABELS
@@ -90,6 +95,10 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
     is_karar = classification.document_type in {"mahkeme_karari", "tebligat"}
     for rule in DEFAULT_RULES:
         remedy = str(rule["remedy"])
+        rule_nature = str(rule.get("nature") or "")
+        # Nature eşleşmezse hiç bakma: ceza kuralı idare metnine, idare kuralı ceza metnine sızmasın.
+        if rule_nature and classification.legal_nature != rule_nature:
+            continue
         include = remedy in classification.remedies
         if is_karar and classification.legal_nature == "ceza":
             if remedy in {"itiraz", "istinaf_ceza"}:
@@ -395,6 +404,19 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
     started = now()
     quoted = str(work.get("quoted") or "")
     classification = classify_document(quoted)
+    llm_assist_writer: str | None = None
+    if classification.document_type == "belirsiz" or classification.confidence < 0.55:
+        from llm.writer import resolve_writer, writer_name
+
+        chat_fn = resolve_writer()
+        if chat_fn is not None:
+            try:
+                assisted = classify_document_llm_assist(quoted, classification, chat_fn=chat_fn)
+            except Exception:
+                assisted = None
+            if assisted is not None:
+                classification = assisted
+                llm_assist_writer = writer_name()
     dates = extract_dates(quoted)
     fields = extract_fields(quoted)
     missing = missing_fields(classification.document_type, fields)
@@ -414,6 +436,11 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
         findings.append(Finding(f"{key} tarihi", value.isoformat(), 0.9, value.isoformat(), "evrak metni"))
     sinif_warn = classification.confidence < 0.55 or classification.document_type == "belirsiz"
     summary, answer = format_sinif(classification, fields, missing)
+    llm_assist_note: str | None = None
+    if llm_assist_writer:
+        llm_assist_note = f"Kural motoru belirsiz kaldı; LLM ile doğrulandı (yazıcı: {llm_assist_writer})."
+        summary = f"{summary} · LLM doğrulamalı"
+        answer = f"{answer}\n{llm_assist_note}"
     work["classification"] = classification
     work["dates"] = dates
     work["fields"] = fields
@@ -428,7 +455,7 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
             summary=summary,
             answer=answer,
             confidence=classification.confidence,
-            note="Tür belirsiz veya düşük güven." if sinif_warn else None,
+            note=llm_assist_note or ("Tür belirsiz veya düşük güven." if sinif_warn else None),
         )
     )
     return work
