@@ -275,7 +275,11 @@ GRAPH_EDGES = (
     ("sure", "taslak"),
     ("taslak", "havale"),
 )
-MEVZUAT_RETRY_ELIGIBLE = frozenset({"ceza", "idare", "anayasa"})
+# "hukuk" — HMK (6100 sayılı Kanun) artık arşivde/index'te (bkz.
+# scripts/ingest_law.py --mevzuat-no 6100), Yargıtay hukuk daireleri kararları
+# da hakim-court-decisions index'inde zaten var; önceden bilgi tabanı boş
+# olduğu için burada dışlanmıştı (bkz. YARIN.md "HMK ingest" notu).
+MEVZUAT_RETRY_ELIGIBLE = frozenset({"ceza", "idare", "anayasa", "hukuk"})
 
 _TRACE_KIND = {
     "okuyucu": "query",

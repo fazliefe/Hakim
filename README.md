@@ -95,9 +95,9 @@ Sabit bir domain (adresin restart’ta değişmemesi) için named Cloudflare tun
 Kopyala-yapıştır seti: [`data/demo/zorlayici/TUM_ORNEKLER.txt`](data/demo/zorlayici/TUM_ORNEKLER.txt)
 
 Kısa evraklar: `data/demo/*.txt`  
-Evrak ve Kamu ekranlarına `.txt` / `.pdf` yüklenebilir. Araştırma, Süreç, İşlem yalnızca yapıştırma kabul eder.
+Evrak ekranına `.txt` / `.pdf` / `.docx` / `.udf` yüklenebilir. Araştırma ve İşlem yalnızca yapıştırma kabul eder.
 
-Doğru ekran: kamu üst yazısı → `/kamu`; gerekçeli karar + tebliğ → `/surec` veya `/evrak`.
+Kamu üst yazısı, gerekçeli karar + tebliğ — hepsi tek ekrana gider: `/evrak` (ilgili sekmesi: Taslak; Kanun Yolu ve Süreler).
 
 ## Repo
 

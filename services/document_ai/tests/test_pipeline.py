@@ -164,6 +164,42 @@ def test_mevzuat_retrieve_uses_full_document_not_type_span() -> None:
     assert analysis.related[0]["article_no"] == "158"
 
 
+def test_mevzuat_retrieve_runs_for_hukuk_nature() -> None:
+    """Regresyon: MEVZUAT_RETRY_ELIGIBLE bir zamanlar yalnızca
+    {"ceza","idare","anayasa"} idi — HMK (6100 sayılı Kanun) arşive
+    alınmadan önce "hukuk" davalar için bilgi tabanı zaten boş döneceğinden
+    dışlanmıştı. HMK artık indekste (bkz. scripts/ingest_law.py --mevzuat-no
+    6100); bu test retrieve'in hukuk nitelikli belgeler için de gerçekten
+    çağrıldığını doğrular — canlı doğrulandı, HMK ingest sonrası bu olmadan
+    hukuk davalarında "İlgili kaynak" hiç görünmüyordu."""
+    seen: list[str] = []
+
+    def retrieve(query: str, at=None):
+        seen.append(query)
+        return [
+            {
+                "n": 1,
+                "title": "İstinaf yoluna başvurulabilen kararlar",
+                "article_no": "341",
+                "law_no": "6100",
+                "document_type": "law",
+                "document_id": "law:6100",
+                "content": "Madde 341",
+            }
+        ]
+
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ GEREKÇELİ KARAR "
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca karar verildi. "
+        "İstinaf yolu açıktır. Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text, retrieve=retrieve)
+    assert seen
+    assert analysis.classification.legal_nature == "hukuk"
+    ids = {item.get("document_id") for item in analysis.related}
+    assert "law:6100" in ids
+
+
 def test_mevzuat_second_query_fetches_topic_court() -> None:
     seen: list[str] = []
 

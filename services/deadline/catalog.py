@@ -84,8 +84,10 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "trigger": "teblig",
         # HMK m.345/1: "İstinaf yoluna başvuru süresi, ilamın... tebliğiyle
         # işlemeye başlar... aksine kanun hükmü bulunmadıkça iki haftadır."
-        # HMK arşive henüz alınmadı (sadece TCK/CMK/İYUK/6216 var) — bu yüzden
-        # canonical law: id yok, sadece okunabilir atıf (bkz. dosya başı notu).
+        # 6100 sayılı Kanun artık arşivde (bkz. scripts/ingest_law.py
+        # --mevzuat-no 6100 + scripts/index_legal_chunks.py) — canonical id
+        # kullanılabilir; "İlgili kaynak" retrieval'i (step_mevzuat) artık
+        # gerçek HMK madde metnini bulup gösterebiliyor.
         # CalendarType.CIVIL kullanıldı (AYM m.47 kuralıyla aynı grup); HMK
         # m.93 (resmi tatil erteleme) ve m.102/104 (adli tatil + 7 gün uzama)
         # CIVIL takvimi için deadline/engine.py::compute_last_day() içinde
@@ -93,7 +95,7 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "duration": 14,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.CIVIL,
-        "legal_basis": ("HMK m.345",),
+        "legal_basis": ("law:6100:article:345",),
         "legal_basis_label": "HMK m.345",
     },
     {
@@ -107,7 +109,7 @@ DEFAULT_RULES: list[dict[str, object]] = [
         "duration": 14,
         "unit": DurationUnit.DAY,
         "calendar": CalendarType.CIVIL,
-        "legal_basis": ("HMK m.361",),
+        "legal_basis": ("law:6100:article:361",),
         "legal_basis_label": "HMK m.361",
     },
     {
