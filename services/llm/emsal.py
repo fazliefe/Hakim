@@ -268,7 +268,13 @@ def merge_emsal_hits(related: list[Any], extra: list[Any], *, limit: int = EMSAL
         added += 1
         if added >= limit:
             break
-    return out
+    # `extra`, kendi retrieve() çağrısından n=1,2,3... diye numaralanmış
+    # gelir — `related`'e olduğu gibi eklenirse aynı sıra no'lar iki kez
+    # görünür (canlı doğrulandı: Kaynak grafiğinde iki ayrı karar "[1]"
+    # rozetiyle listeleniyordu, atıf tıklaması yanlış maddeyi açıyordu).
+    # Birleşmiş listeyi tek, sıralı bir numaralamaya geçiriyoruz (yeni
+    # dict'ler — çağıranın elindeki orijinal nesneleri mutasyona uğratmadan).
+    return [{**hit, "n": index} if isinstance(hit, dict) else hit for index, hit in enumerate(out, start=1)]
 
 
 def attach_emsal_hits(

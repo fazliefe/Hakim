@@ -1,0 +1,46 @@
+{
+  "hakim-legal-chunks": {
+    "settings": {
+      "index": {
+        "routing": {
+          "allocation": {
+            "include": {
+              "_tier_preference": "data_content"
+            }
+          }
+        },
+        "number_of_shards": "1",
+        "provided_name": "hakim-legal-chunks",
+        "creation_date": "1786930216479",
+        "analysis": {
+          "filter": {
+            "turkish_stemmer": {
+              "type": "stemmer",
+              "language": "turkish"
+            },
+            "turkish_stop": {
+              "type": "stop",
+              "stopwords": "_turkish_"
+            }
+          },
+          "analyzer": {
+            "hakim_turkish": {
+              "filter": [
+                "lowercase",
+                "turkish_stop",
+                "turkish_stemmer",
+                "asciifolding"
+              ],
+              "tokenizer": "standard"
+            }
+          }
+        },
+        "number_of_replicas": "0",
+        "uuid": "y2lqgqTdSLihGaNYMkvw2w",
+        "version": {
+          "created": "8512000"
+        }
+      }
+    }
+  }
+}

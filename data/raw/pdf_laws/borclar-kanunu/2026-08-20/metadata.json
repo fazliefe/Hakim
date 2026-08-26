@@ -1,0 +1,15 @@
+{
+  "document_id": "law:6098",
+  "law_no": "6098",
+  "title": "TÜRK BORÇLAR KANUNU",
+  "source_file": "borçlar kanunu.pdf",
+  "content_hash": "c59340496312a416acf27c7d9e2ff2c360ec78d2c68478ed08921e2fb8e9a61c",
+  "extract_method": "ocr",
+  "pages": 135,
+  "note": "paddleocr-gpu pages all from borc-lar-kanunu",
+  "chunk_count": 654,
+  "article_chunks": 654,
+  "retrieved_at": "2026-08-20T16:17:38.758940+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

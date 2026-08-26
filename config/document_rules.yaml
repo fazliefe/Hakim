@@ -1,0 +1,75 @@
+# Belge türüne göre beklenen alanlar. VLM ne gördüğünü söyler; validator ne
+# olması gerektiğini kontrol eder. Hukuki hüküm üretmez.
+
+official_letter:
+  required:
+    - date
+    - document_no
+    - subject
+    - recipient
+    - signature
+  optional:
+    - reference_section
+    - attachment_section
+    - distribution_section
+    - sender
+
+ust_yazi:
+  required:
+    - date
+    - document_no
+    - subject
+    - recipient
+    - signature
+  optional:
+    - reference_section
+    - attachment_section
+    - distribution_section
+
+tebligat:
+  required:
+    - notification_date
+    - recipient
+    - case_no
+  optional:
+    - document_no
+    - person_name
+    - institution
+    - stamp
+    - signature
+
+mahkeme_karari:
+  required:
+    - date
+    - decision_no
+    - case_no
+  optional:
+    - person_name
+    - institution
+    - signature
+    - stamp
+
+olur:
+  required:
+    - date
+    - subject
+    - signature
+  optional:
+    - document_no
+    - sender
+
+dilekce:
+  required:
+    - subject
+    - recipient
+  optional:
+    - person_name
+    - date
+    - signature
+
+belirsiz:
+  required: []
+  optional:
+    - date
+    - subject
+    - document_no

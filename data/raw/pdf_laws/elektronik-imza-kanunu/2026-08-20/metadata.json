@@ -1,0 +1,15 @@
+{
+  "document_id": "law:5070",
+  "law_no": "5070",
+  "title": "ELEKTRONÍK İMZA KANUNU1",
+  "source_file": "elektronik imza kanunu.pdf",
+  "content_hash": "9abe1305deb7e6b918df0b0494ecdd4265131888855082d320e4e0b0d304e96a",
+  "extract_method": "ocr",
+  "pages": 10,
+  "note": "paddleocr-gpu pages all from elektronik-imza-kanunu",
+  "chunk_count": 28,
+  "article_chunks": 28,
+  "retrieved_at": "2026-08-20T16:17:38.709369+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

@@ -7,7 +7,7 @@ import { AgentRail } from "@/components/AgentRail";
 import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
-import { BelgeKalip, getBelgeler, getKamuSablon, KamuSablon, writerLabel } from "@/lib/api";
+import { BelgeKalip, getBelgeler, getKamuSablon, KamuSablon, visionFile, writerLabel } from "@/lib/api";
 import { KAMU_FALLBACK, KAMU_SAMPLES, SABLON_BLOCK_LABELS } from "@/lib/kamuSamples";
 import { titleCaseLabel } from "@/lib/labels";
 import { FIELD_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
@@ -67,10 +67,10 @@ export function KamuWorkbench() {
     event.target.value = "";
     if (!file) return;
     void submitFile(file).then((data) => {
-      if (data?.text) {
-        const kalip = side === "sablon" || side === "kaynaklar" ? "ust_yazi" : side;
-        void submitSenaryo(kalip, data.text);
-      }
+      if (!data?.text) return;
+      if (visionFile(file)) return;
+      const kalip = side === "sablon" || side === "kaynaklar" ? "ust_yazi" : side;
+      void submitSenaryo(kalip, data.text);
     });
   }
 
@@ -238,7 +238,7 @@ export function KamuWorkbench() {
                     Evrak yükle
                     <input
                       type="file"
-                      accept=".pdf,.txt,.md,application/pdf,text/plain"
+                      accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp"
                       onChange={onFile}
                       disabled={loading}
                     />

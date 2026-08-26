@@ -6,6 +6,7 @@ import { CSSProperties, PointerEvent, ReactNode, useEffect, useRef, useState } f
 import { useRouter } from "next/navigation";
 import { SystemStatus, getStoredUser, getSystemStatus, isLiveCheck, logoutAccount, type AuthUser } from "@/lib/api";
 import { HakimTheme, applyTheme, readTheme } from "@/lib/theme";
+import { QrEntryLink } from "@/components/QrEntryLink";
 
 const OFFLINE_STATUS: SystemStatus = {
   status: "kapalı",
@@ -208,6 +209,7 @@ export function AppShell({
               );
             })}
           </div>
+          <QrEntryLink />
           <button
             type="button"
             className="theme-toggle"
@@ -369,6 +371,17 @@ export function AppShell({
           <span>{footer ?? ""}</span>
         </footer>
       )}
+      <nav className="mobile-modulenav" aria-label="Modüller">
+        {MODULES.map((item) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            className={module === item.id ? "active" : ""}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

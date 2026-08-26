@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { writerLabel } from "@/lib/api";
-import { SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { NATURE_LABEL, SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 const SIDE = [
   { id: "asama", label: "Aşama" },
@@ -14,16 +14,16 @@ const SIDE = [
 const REMEDY_LABEL: Record<string, string> = {
   itiraz: "İtiraz",
   istinaf: "İstinaf",
-  temyiz: "Temyiz",
-  istinaf_ceza: "İstinaf",
-  temyiz_ceza: "Temyiz",
-  istinaf_hukuk: "İstinaf (Hukuk)",
-  temyiz_hukuk: "Temyiz (Hukuk)",
-  bireysel_basvuru: "Bireysel Başvuru",
-  idari_dava: "İdari Dava",
+  istinaf_ceza: "İstinaf (ceza)",
+  istinaf_hukuk: "İstinaf (hukuk)",
   istinaf_idari: "İdari İstinaf",
+  temyiz: "Temyiz",
+  temyiz_ceza: "Temyiz (ceza)",
+  temyiz_hukuk: "Temyiz (hukuk)",
   temyiz_idari: "İdari Temyiz",
+  bireysel_basvuru: "Bireysel Başvuru",
   sikayet: "Şikayet",
+  idari_dava: "İdari Dava Açma",
 };
 
 export function SurecWorkbench() {
@@ -64,6 +64,7 @@ export function SurecWorkbench() {
                 <span>Hesaplanamadı — {selected.missing}</span>
               )}
             </p>
+            {selected.adjustment_note ? <p className="deadline-note">{selected.adjustment_note}</p> : null}
             <p className="muted">{selected.legal_basis.join(" · ")}</p>
           </div>
         ) : (
@@ -87,7 +88,7 @@ export function SurecWorkbench() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            aria-label="Karar veya Tebligat Metni"
+            aria-label="Karar veya tebligat metni"
             placeholder="Karar veya tebligat metnini buraya yapıştırın (tebliğ/karar tarihi dahil)…"
             rows={4}
             spellCheck={false}
@@ -104,7 +105,7 @@ export function SurecWorkbench() {
         {error ? <p className="error">{error}</p> : null}
         {result?.legal_caveat ? (
           <p className="legal-caveat" style={{ margin: "0 0.9rem 0.9rem" }}>
-            ⚖ {result.legal_caveat}
+            Uyarı: {result.legal_caveat}
           </p>
         ) : null}
         {result?.draft ? (
@@ -133,7 +134,7 @@ export function SurecWorkbench() {
               <div key={remedy} className="deadline-tile">
                 <span>Kanun Yolu</span>
                 <strong>{REMEDY_LABEL[remedy] ?? remedy}</strong>
-                <em>{result.classification.label}</em>
+                <em>{NATURE_LABEL[result.classification.legal_nature] ?? result.classification.legal_nature}</em>
               </div>
             ))}
           </div>

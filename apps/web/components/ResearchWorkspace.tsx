@@ -6,7 +6,7 @@ import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
 import { AppShell, InspectorMode } from "@/components/AppShell";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { RESEARCH_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
-import { lawPrefix } from "@/components/graph/layout";
+import { lawPrefix, shortLabel } from "@/components/graph/layout";
 
 const LegalGraphView = dynamic(
   () => import("@/components/graph/LegalGraphView").then((mod) => mod.LegalGraphView),
@@ -144,7 +144,7 @@ function isDecision(item: Evidence) {
 
 function sourceHeading(item: Evidence) {
   if (isDecision(item)) {
-    return item.title || item.document_id || "Mahkeme kararı";
+    return shortLabel(item.title || item.document_id || "Mahkeme Kararı", 90);
   }
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
@@ -188,6 +188,7 @@ export function ResearchWorkspace() {
   const [saved, setSaved] = useState<SavedArticle[]>([]);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("collapsed");
   const threadEnd = useRef<HTMLDivElement>(null);
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
@@ -204,6 +205,7 @@ export function ResearchWorkspace() {
   }, [result, selected]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const reading = saved.find((item) => item.id === readingId) ?? null;
   const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
   const decisions = useMemo(() => result?.evidence.filter(isDecision) ?? [], [result]);
 
@@ -224,6 +226,11 @@ export function ResearchWorkspace() {
 
   function onTab(next: Tab) {
     setTab(next);
+    // "Kaynaklar" sekmesi kendi içeriğini göstermiyor — asıl kaynak listesi
+    // AppShell'in sağ "inspector" paneli (bkz. openSource ile aynı mekanizma,
+    // atıf [n] tıklanınca açılan panel). Sekmeye tıklamak önceden hiçbir şey
+    // yapmıyordu; panel varsayılan olarak kapalı (`inspectorMode: "collapsed"`)
+    // olduğu için "Kaynaklar" tıklaması görünürde ölü bir buton gibi duruyordu.
     if (next === "kaynaklar") setInspectorMode("open");
   }
 
@@ -328,7 +335,13 @@ export function ResearchWorkspace() {
       sidebarTitle="Hukuki Araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
-      onSidebarSelect={(id) => setSide(id as SideView)}
+      onSidebarSelect={(id) => {
+        const next = id as SideView;
+        setSide(next);
+        if (next === "kaydedilen" && saved[0] && !saved.some((item) => item.id === readingId)) {
+          setReadingId(saved[0].id);
+        }
+      }}
       inspectorTitle="Kaynak"
       inspector={inspector}
       inspectorMode={inspectorMode}
@@ -399,11 +412,6 @@ export function ResearchWorkspace() {
               ) : null}
               {tab !== "graf" && tab !== "iz" && tab !== "emsal" ? (
                 <>
-                  {turns.length === 0 && !error && !loading ? (
-                    <div className="empty-state">
-                      <p className="muted">Sorunuzu yazın. Atıflar kaynağı açar. Cevaptan sonra sohbet devam eder.</p>
-                    </div>
-                  ) : null}
                   {turns.map((turn, index) => (
                     <div key={turn.id} className="chat-turn">
                       <p className="chat-q">{turn.query}</p>
@@ -455,21 +463,36 @@ export function ResearchWorkspace() {
               ) : null}
               {side === "kaydedilen" ? (
                 saved.length ? (
-                  saved.map((item) => (
-                    <article key={item.id} className="saved-article">
-                      <div className="saved-article-head">
-                        <strong>{item.heading}</strong>
+                  <>
+                    {saved.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`source-row ${readingId === item.id ? "selected" : ""}`}
+                        onClick={() => setReadingId(item.id)}
+                      >
+                        {item.heading}
+                      </button>
+                    ))}
+                    {reading ? (
+                      <article className="source-detail">
+                        <div className="source-title">{reading.heading}</div>
+                        <p className="source-content">{reading.content}</p>
                         <button
                           type="button"
-                          className="text-btn"
-                          onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
+                          className="side-action"
+                          onClick={() => {
+                            persistSaved(saved.filter((row) => row.id !== reading.id));
+                            setReadingId(null);
+                          }}
                         >
                           Kayıttan Çıkar
                         </button>
-                      </div>
-                      <p>{item.content}</p>
-                    </article>
-                  ))
+                      </article>
+                    ) : (
+                      <p className="muted">Bir madde seçin.</p>
+                    )}
+                  </>
                 ) : (
                   <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi Kaydet» deyin.</p>
                 )

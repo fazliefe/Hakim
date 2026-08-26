@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import lru_cache
@@ -141,6 +142,14 @@ class DocumentRequest(BaseModel):
     action: str | None = None
 
 
+class BundleRequest(BaseModel):
+    documents: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RedactRequest(BaseModel):
+    text: str = ""
+
+
 @lru_cache(maxsize=1)
 def _engine():
     from graph.neo4j_client import create_neo4j_driver
@@ -227,14 +236,51 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             payload.get("dates") or {},
         )
     started = now()
-    try:
-        draft = None
-        if surface == "surec":
-            draft = write_module(surface, {**payload, "user_text": text[:900]})
-        else:
+
+    def _make_draft() -> tuple[str | None, Any, Exception | None]:
+        try:
+            if surface == "surec":
+                return write_module(surface, {**payload, "user_text": text[:900]}), None, None
             draft, petition = compose_islem(
                 action_id, {**payload, "action": action_id, "user_text": text[:900]}
             )
+            return draft, petition, None
+        except Exception as exc:  # noqa: BLE001 - taşınıp aşağıda işleniyor
+            return None, None, exc
+
+    def _make_ozet() -> str | None:
+        # Görev 1 (evrak özeti): "evrak" yazım modülü (data/formats/evrak.json)
+        # sınıflandırma + tespitlerden bağımsız, evrakın içeriğini anlatan kısa
+        # bir özet üretir — Sınıflandırma sekmesindeki ham alan listesinden
+        # farklı, okunabilir bir metin. API/Ollama yoksa write_module sessizce
+        # None döner; taslak üretimini etkilemez.
+        try:
+            return write_module("evrak", {**payload, "action": action_id, "user_text": text[:900]})
+        except Exception:
+            return None
+
+    # Taslak (compose_islem/write_module) ve özet (write_module("evrak", ...))
+    # birbirinin çıktısına ihtiyaç duymaz — iki ayrı LLM çağrısını art arda değil
+    # PARALEL çalıştırıyoruz (ikisi de I/O-bound HTTP isteği). Toplam süreyi
+    # ~yarıya indirir; llm/usage.py'daki kullanım sayaçları thread-safe
+    # (paylaşılan bucket'a append), writer_name()/mark_writer() saf/durumsuz
+    # fonksiyonlar olduğu için sonuçlar iki iş de bittikten sonra ana thread'de
+    # sırayla işleniyor.
+    if surface == "evrak":
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            draft_future = pool.submit(_make_draft)
+            ozet_future = pool.submit(_make_ozet)
+            draft, petition, exc = draft_future.result()
+            payload["ozet"] = ozet_future.result()
+    else:
+        draft, petition, exc = _make_draft()
+
+    if exc is not None:
+        payload["writer"] = "extractive"
+        payload["writer_error"] = str(exc)[:280]
+        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    else:
+        if surface != "surec":
             payload["petition"] = petition
             payload["action"] = action_id
             payload["belge"] = ACTION_TO_BELGE.get(action_id) or action_id
@@ -246,10 +292,6 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
                 from document_ai.gaps import merge_placeholder_gaps
 
                 payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
-    except Exception as exc:
-        payload["writer"] = "extractive"
-        payload["writer_error"] = str(exc)[:280]
-        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
     usage = take_usage()
     if isinstance(payload.get("observability"), dict):
         payload["observability"]["totals"] = usage_totals(usage)
@@ -615,6 +657,71 @@ async def evrak_dosya(file: UploadFile = File(...), user=Depends(optional_user))
         f"Dosya: {extracted.filename} ({label})",
         {"filename": extracted.filename, "label": label},
     )
+    return payload
+
+
+@app.post("/v1/evrak/analyze")
+async def evrak_analyze(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
+    """StructuredDocument: kalite → VLM alanları → güven bandı. Hukuki hüküm yok. Yalnız fotoğraf."""
+    from document_ai.vision.analyzer import VisionUploadError, analyze_bytes
+    from llm.client import OllamaError
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Dosya boş.")
+    try:
+        document = analyze_bytes(file.filename or "evrak", data)
+    except VisionUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OllamaError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Görüntü analiz edilemedi: {exc}") from exc
+    payload = document.model_dump()
+    _record_activity(
+        user,
+        "evrak",
+        f"VLM analiz: {document.filename} ({document.document_type})",
+        {"document_id": document.document_id, "document_type": document.document_type},
+    )
+    return payload
+
+
+@app.post("/v1/evrak/bundle")
+def evrak_bundle(body: BundleRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Compare already-analyzed documents. Empty list is valid. No VLM call."""
+    from document_ai.bundle.analyzer import analyze_bundle
+    from hakim_legal_schema.document import StructuredDocument
+
+    docs = []
+    for raw in body.documents:
+        try:
+            docs.append(StructuredDocument.model_validate(raw))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Evrak paketi geçersiz: {exc}") from exc
+    bundle = analyze_bundle(docs)
+    _record_activity(
+        user,
+        "evrak",
+        f"Paket: {len(docs)} evrak",
+        {"bundle_id": bundle.bundle_id, "conflicts": len(bundle.conflicts)},
+    )
+    return bundle.model_dump()
+
+
+@app.post("/v1/evrak/redact")
+def evrak_redact(body: RedactRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Mask TCKN/phone/IBAN/email in text. Does not change the original document."""
+    from document_ai.privacy.pii_detector import detect_pii, redact_text
+
+    text = body.text or ""
+    regions = detect_pii(text)
+    payload = {
+        "redacted": redact_text(text),
+        "count": len(regions),
+        "kinds": sorted({item.type for item in regions}),
+    }
+    _record_activity(user, "evrak", "Gizleme", {"count": payload["count"]})
     return payload
 
 

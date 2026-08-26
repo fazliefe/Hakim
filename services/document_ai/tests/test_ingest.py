@@ -27,11 +27,82 @@ def test_extract_docx_keeps_turkish() -> None:
     assert "Gerekçeli" in out.text
 
 
+def test_extract_udf_keeps_turkish() -> None:
+    import io
+    import zipfile
+
+    content_xml = (
+        '<?xml version="1.0" encoding="UTF-8" ?>'
+        '<template format_id="1.8">'
+        "<content><![CDATA[Gerekçeli karar. Tebliğ tarihi: 14.08.2026]]></content>"
+        '<elements resolver="hvl-default">'
+        '<paragraph Alignment="N" resolver="hvl-default">'
+        '<content Alignment="N" resolver="hvl-default" bold="false" size="12" '
+        'family="Times New Roman" foreground="-16777216" background="-1" '
+        'startOffset="0" length="42" />'
+        "</paragraph>"
+        "</elements>"
+        "</template>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("content.xml", content_xml)
+    out = extract_upload("karar.udf", buffer.getvalue())
+    assert out.kind == "udf"
+    assert "Gerekçeli" in out.text
+    assert "startOffset" not in out.text
+
+
+def test_extract_png_uses_vlm(monkeypatch) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082"
+    )
+    monkeypatch.setattr(
+        "document_ai.vlm_ocr.transcribe_images",
+        lambda _images: "El yazısı tutanak. Tarih 14.08.2026.",
+    )
+    out = extract_upload("tutanak.png", png)
+    assert out.kind == "image"
+    assert "El yazısı" in out.text
+    assert "Evren" in out.note or "görüntü" in out.note.lower() or "vlm" in out.note.lower() or "llm-fast" in out.note
+
+
+def test_extract_rejects_broken_image() -> None:
+    try:
+        extract_upload("scan.png", b"not-an-image")
+    except UploadError as exc:
+        msg = str(exc).lower()
+        assert "görüntü" in msg or "resim" in msg or "foto" in msg
+    else:
+        raise AssertionError("expected UploadError")
+
+
 def test_extract_rejects_unknown_extension() -> None:
     try:
-        extract_upload("scan.png", b"not-a-pdf")
+        extract_upload("virus.exe", b"MZ")
     except UploadError as exc:
-        assert "PDF" in str(exc) or "TXT" in str(exc)
+        assert "PDF" in str(exc) or "TXT" in str(exc) or "görüntü" in str(exc).lower()
+    else:
+        raise AssertionError("expected UploadError")
+
+
+def test_extract_pdf_without_text_does_not_use_vlm(monkeypatch) -> None:
+    from document_ai.pdf_ocr import PdfExtractResult
+
+    monkeypatch.setattr(
+        "document_ai.pdf_ocr.extract_pdf_bytes",
+        lambda *_a, **_k: PdfExtractResult(text="", method="empty", pages=1, note="ocr_too_short"),
+    )
+
+    def boom(_data):
+        raise AssertionError("PDF must not call VLM")
+
+    monkeypatch.setattr("document_ai.vlm_ocr.transcribe_pdf_bytes", boom)
+    try:
+        extract_upload("tarama.pdf", b"%PDF-1.4 scanned")
+    except UploadError as exc:
+        assert "PDF" in str(exc) or "metin" in str(exc).lower()
     else:
         raise AssertionError("expected UploadError")
 

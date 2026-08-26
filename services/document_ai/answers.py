@@ -10,6 +10,7 @@ from document_ai.schemas import FIELD_LABELS
 STAGE_TR = {
     "sorusturma": "Soruşturma",
     "kovusturma": "Kovuşturma (ilk derece)",
+    "ilk_derece": "İlk derece",
     "istinaf": "İstinaf",
     "temyiz": "Temyiz",
     "bireysel_basvuru": "Bireysel başvuru",

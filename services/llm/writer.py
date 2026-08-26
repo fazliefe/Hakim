@@ -214,16 +214,25 @@ def extractive_surec(engine: dict[str, Any]) -> dict[str, Any]:
     stage = str(cls.get("stage") or "belirsiz")
     stage_tr = STAGE_TR.get(stage, stage)
     asama = f"Evrak {stage_tr} aşamasındadır."
-    if stage == "kovusturma":
+    if stage in {"kovusturma", "ilk_derece"}:
         asama += " İstinaf yolu açıktır; dosya henüz istinaf mahkemesinde değildir."
+    # remedies (classify.py::classify_document) artık nitelik-bazlı ayrı
+    # etiketler taşıyor (istinaf_ceza/istinaf_hukuk, temyiz_ceza/temyiz_hukuk)
+    # — bu harita eskisi gibi düz "istinaf"/"temyiz" bekleseydi, eşleşmeyen
+    # anahtar ham kod olarak ("istinaf_ceza bu hüküm için işletilebilir.")
+    # üretilen anlatıya sızardı.
     labels = {
         "itiraz": "İtiraz",
         "istinaf": "İstinaf",
+        "istinaf_ceza": "İstinaf",
+        "istinaf_hukuk": "İstinaf",
+        "istinaf_idari": "İdari istinaf",
         "temyiz": "Temyiz",
+        "temyiz_ceza": "Temyiz",
+        "temyiz_hukuk": "Temyiz",
         "bireysel_basvuru": "Bireysel başvuru",
         "sikayet": "Şikayet",
-        "idari_dava": "İdari dava",
-        "istinaf_idari": "İdari istinaf",
+        "idari_dava": "İdari dava açma",
         "temyiz_idari": "İdari temyiz",
     }
     kanun = [

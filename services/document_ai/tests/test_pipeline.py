@@ -85,9 +85,13 @@ def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
     )
     analysis = analyze_document(text)
     assert analysis.classification.legal_nature == "hukuk"
+    assert analysis.classification.stage == "ilk_derece"
     names = {item.name for item in analysis.deadlines}
     assert "İstinaf (hukuk)" in names
-    assert "Temyiz (hukuk)" in names
+    # Temyiz, İLK DERECE hükmünün değil istinaf/BAM kararının tebliğinden
+    # işler (HMK m.361/1) — bu aşamada henüz gösterilmemeli, bkz.
+    # test_temyiz_hukuk_only_shows_after_istinaf_stage.
+    assert "Temyiz (hukuk)" not in names
     istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf (hukuk)")
     assert istinaf.trigger.isoformat() == "2026-08-14"
     # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
@@ -99,6 +103,24 @@ def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
     # CMK'nın ceza kuralları hiç karışmamalı.
     assert "CMK m.273" not in istinaf.legal_basis
     assert not any("CMK" in basis for item in analysis.deadlines for basis in item.legal_basis)
+
+
+def test_temyiz_hukuk_only_shows_after_istinaf_stage() -> None:
+    """Aynı HMK m.361 kuralı, dosya BAM/istinaf aşamasına geçtiğinde
+    (bölge adliye mahkemesi kararı) devreye girmeli."""
+    text = (
+        "T.C. ANKARA BÖLGE ADLİYE MAHKEMESİ 3. HUKUK DAİRESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine dair ilk derece hükmüne "
+        "karşı yapılan istinaf başvurusunun esastan reddine, HMK hükümleri "
+        "uyarınca karar verilmiştir.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.legal_nature == "hukuk"
+    assert analysis.classification.stage == "istinaf"
+    names = {item.name for item in analysis.deadlines}
+    assert "Temyiz (hukuk)" in names
+    assert "İstinaf (hukuk)" not in names
 
 
 def test_ceza_analysis_carries_legal_interpretation_caveat() -> None:
@@ -181,6 +203,42 @@ def test_mevzuat_retrieve_uses_full_document_not_type_span() -> None:
     assert seen
     assert "nitelikli dolandırıcılık" in seen[0].lower()
     assert analysis.related[0]["article_no"] == "158"
+
+
+def test_mevzuat_retrieve_runs_for_hukuk_nature() -> None:
+    """Regresyon: MEVZUAT_RETRY_ELIGIBLE bir zamanlar yalnızca
+    {"ceza","idare","anayasa"} idi — HMK (6100 sayılı Kanun) arşive
+    alınmadan önce "hukuk" davalar için bilgi tabanı zaten boş döneceğinden
+    dışlanmıştı. HMK artık indekste (bkz. scripts/ingest_law.py --mevzuat-no
+    6100); bu test retrieve'in hukuk nitelikli belgeler için de gerçekten
+    çağrıldığını doğrular — canlı doğrulandı, HMK ingest sonrası bu olmadan
+    hukuk davalarında "İlgili kaynak" hiç görünmüyordu."""
+    seen: list[str] = []
+
+    def retrieve(query: str, at=None):
+        seen.append(query)
+        return [
+            {
+                "n": 1,
+                "title": "İstinaf yoluna başvurulabilen kararlar",
+                "article_no": "341",
+                "law_no": "6100",
+                "document_type": "law",
+                "document_id": "law:6100",
+                "content": "Madde 341",
+            }
+        ]
+
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ GEREKÇELİ KARAR "
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca karar verildi. "
+        "İstinaf yolu açıktır. Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text, retrieve=retrieve)
+    assert seen
+    assert analysis.classification.legal_nature == "hukuk"
+    ids = {item.get("document_id") for item in analysis.related}
+    assert "law:6100" in ids
 
 
 def test_mevzuat_second_query_fetches_topic_court() -> None:

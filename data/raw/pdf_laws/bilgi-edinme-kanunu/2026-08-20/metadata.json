@@ -1,0 +1,15 @@
+{
+  "document_id": "law:4982",
+  "law_no": "4982",
+  "title": "BÍLGI EDİNME HAKKI KANUNU",
+  "source_file": "bilgi edinme kanunu.pdf",
+  "content_hash": "c6e72072386fef64e7cc97bfe17d40b4ae48c5040a6a3675dd6fb4a335533f14",
+  "extract_method": "ocr",
+  "pages": 8,
+  "note": "paddleocr-gpu pages all from bilgi-edinme-kanunu",
+  "chunk_count": 33,
+  "article_chunks": 33,
+  "retrieved_at": "2026-08-20T16:17:38.694546+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

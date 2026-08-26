@@ -167,3 +167,51 @@ def test_projector_writes_decisions_and_cites() -> None:
     asserting = [n for n in neigh["neighbors"] if n.get("kind") == "decision"]
     assert asserting
     assert asserting[0]["id"] == "decision:yargitay:2023:2023/1:2023/2"
+
+
+class _DumpGraphSession:
+    """Minimal fake for dump_graph()'s two plain `session.run(...)` calls —
+    kayıt eder ve boş sonuç döner; asıl amaç sorgu metnini denetlemek."""
+
+    def __init__(self) -> None:
+        self.queries: list[tuple[str, dict]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def run(self, query: str, **params):
+        self.queries.append((" ".join(query.split()), params))
+        return []
+
+
+class _DumpGraphDriver:
+    def __init__(self) -> None:
+        self.session_obj = _DumpGraphSession()
+
+    def session(self):
+        return self.session_obj
+
+
+def test_dump_graph_excludes_decisions_and_caps_size() -> None:
+    """Regresyon: dump_graph() eskiden filtresizdi ve arşivdeki ~50.000
+    Decision (emsal karar) düğümünü de "Bilgi grafı" arka planına dump
+    ediyordu — vis-network'ün fizik motoru bu kadar düğümle tarayıcı
+    sekmesini tamamen kilitliyordu (canlı doğrulandı). Arka plan grafiği
+    artık yalnızca kodifiye hukuk iskeletini (Article/Law/Court) içeriyor;
+    Decision'lar sorguya özel yoldan (LegalGraphView.tsx'teki evidence/
+    graph_neighbors) ayrıca geliyor."""
+    from graph.projector import dump_graph
+
+    driver = _DumpGraphDriver()
+    dump_graph(driver, node_limit=123)
+    node_query, node_params = driver.session_obj.queries[0]
+    edge_query, edge_params = driver.session_obj.queries[1]
+    assert "NOT n:Decision" in node_query
+    assert "LIMIT $node_limit" in node_query
+    assert node_params == {"node_limit": 123}
+    assert "NOT a:Decision AND NOT b:Decision" in edge_query
+    assert "LIMIT $edge_limit" in edge_query
+    assert edge_params == {"edge_limit": 123 * 4}

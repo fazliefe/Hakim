@@ -191,12 +191,26 @@ def classify_document(text: str) -> Classification:
     header = blob[:420]
     document_type, type_span, type_score = _best_label(blob, header, raw, _TYPE_RULES)
     legal_nature, _, nature_score = _best_label(blob, header, raw, _NATURE_RULES)
+    embed_confidence: float | None = None
     if document_type == "belirsiz":
         from document_ai.extract import looks_like_resmi_yazi
 
         if looks_like_resmi_yazi(raw):
             document_type = "ust_yazi"
             type_span = type_span or "Sayı / Konu"
+    if document_type == "belirsiz":
+        # Hiçbir needle/regex kuralı tutmadı — kural motorunun kapsamı dışında
+        # kalan bir ifade biçimi olabilir. İkincil, embedding-tabanlı bir
+        # öneri katmanı dene (bkz. prototype_classifier.py); o da bir şey
+        # bulamazsa (model yok / eşik geçilmedi) "belirsiz" olarak kalır.
+        from document_ai.prototype_classifier import create_prototype_classifier
+
+        classifier = create_prototype_classifier()
+        if classifier is not None:
+            guess = classifier.classify(raw)
+            if guess is not None:
+                document_type, embed_confidence = guess
+                type_span = f"(embedding benzerliğiyle önerildi, benzerlik %{round(embed_confidence * 100)})"
     return _finalize(
         raw,
         blob,
@@ -205,6 +219,7 @@ def classify_document(text: str) -> Classification:
         type_span=type_span,
         type_score=type_score,
         nature_score=nature_score,
+        embed_confidence=embed_confidence,
     )
 
 
@@ -222,6 +237,7 @@ def _finalize(
     type_score: int = 0,
     nature_score: int = 0,
     confidence_override: float | None = None,
+    embed_confidence: float | None = None,
 ) -> Classification:
     """document_type/legal_nature'dan stage, remedies, unit, confidence türetir.
 
@@ -242,12 +258,34 @@ def _finalize(
     if document_type == "iddianame" and stage in {"belirsiz", "istinaf", "temyiz"}:
         stage = "sorusturma"
     if document_type == "mahkeme_karari":
-        if "yargıtay" in blob or "yargitay" in blob:
+        # "Yargıtay" ve "bölge adliye" ikisi de aynı belgede geçebilir — bir
+        # BAM kararı genelde "...Yargıtay'a temyiz yolu açıktır" diye bitip
+        # bir sonraki mercii anar; bir Yargıtay kararı da genelde bozduğu/
+        # onadığı "...Bölge Adliye Mahkemesi kararının..." diye başlar. Hangi
+        # mahkemenin KARARIN KENDİSİNİ verdiği, metinde HANGİSİNİN ÖNCE
+        # geçtiğiyle daha güvenilir ayırt ediliyor (resmi karar formatında
+        # kararı veren mahkeme en başta anılır) — sadece "hangisi var" bakmak
+        # canlı doğrulandı: bir BAM kararını (istinaf başvurusunu reddeden,
+        # temyiz yolu Yargıtay'a açık) yanlışlıkla "temyiz" (Yargıtay kararı)
+        # aşamasına atıyordu.
+        yargitay_idx = next((blob.find(n) for n in ("yargıtay", "yargitay") if n in blob), -1)
+        bam_idx = next(
+            (blob.find(n) for n in ("istinaf mahkemesi", "bölge adliye", "bolge adliye") if n in blob),
+            -1,
+        )
+        if yargitay_idx >= 0 and (bam_idx < 0 or yargitay_idx < bam_idx):
             stage = "temyiz"
-        elif "istinaf mahkemesi" in blob or "bölge adliye" in blob or "bolge adliye" in blob:
+        elif bam_idx >= 0:
             stage = "istinaf"
-        else:
+        elif legal_nature == "ceza":
             stage = "kovusturma"
+        else:
+            # "Kovuşturma" ceza muhakemesine özgü bir kurum — hukuk/idare/
+            # anayasa davalarında bu aşama yok. Nature-bazlı ayrılmadan önce
+            # her ilk derece kararı (nitelik ne olursa olsun) "kovuşturma"
+            # etiketi alıyordu; bir hukuk/idare kararı da yanlışlıkla ceza
+            # muhakemesi aşamasındaymış gibi gösteriliyordu.
+            stage = "ilk_derece"
 
     # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK, idare→İYUK)
     # etiketlere ayrıldı — aksi halde hepsi aynı "istinaf"/"temyiz" etiketini
@@ -308,11 +346,15 @@ def _finalize(
             nature_score >= 5 or document_type in KAMU_TYPES,
         ]
     )
-    confidence = (
-        _confidence_from_hits(hits)
-        if confidence_override is None
-        else round(min(0.99, max(0.0, confidence_override)), 2)
-    )
+    # embed_confidence doluysa (prototype fallback devredeyse) kosinüs
+    # benzerlik skoru GERÇEK bir sayıdır — kural-eşleşme sayımına
+    # (_confidence_from_hits) dayalı, kalibre edilmemiş orana değil.
+    if embed_confidence is not None:
+        confidence = embed_confidence
+    elif confidence_override is not None:
+        confidence = round(min(0.99, max(0.0, confidence_override)), 2)
+    else:
+        confidence = _confidence_from_hits(hits)
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,

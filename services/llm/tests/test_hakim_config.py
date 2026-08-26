@@ -31,10 +31,15 @@ def test_default_profile_is_evren() -> None:
     assert cfg.rerank_enabled is True
     assert cfg.rerank_model == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     assert cfg.rerank_batch_size == 16
+    # Deneysel özellik — mevcut kurulumların sınıflandırma davranışını
+    # sessizce değiştirmemesi için varsayılan kapalı (bkz. prototype_classifier.py).
+    assert cfg.classification_fallback_enabled is False
     assert cfg.research_allow_ollama is False
     # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
     assert cfg.llm_input_per_million == 0.0
     assert cfg.llm_output_per_million == 0.0
+    assert cfg.vision_model == "llm-fast"
+    assert cfg.vision_max_images == 2
 
 
 def test_profile_env_switches_to_ollama(monkeypatch) -> None:

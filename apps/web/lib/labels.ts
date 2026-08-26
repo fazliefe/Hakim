@@ -33,6 +33,13 @@ export function durationUnitLabel(unit?: string | null): string {
 }
 
 export function calendarLabel(calendar?: string | null): string {
+  // Backend'in deadline/engine.py::CalendarType değerleri (civil/
+  // administrative/criminal) — "business"/"calendar" hiç üretilmiyor,
+  // eski/farklı bir sözlüktü; eşleşmeyince ham İngilizce değer ("criminal")
+  // arayüze sızıyordu.
+  if (calendar === "criminal") return "Ceza Takvimi";
+  if (calendar === "civil") return "Hukuk Takvimi";
+  if (calendar === "administrative") return "İdari Takvim";
   if (calendar === "business") return "İş Günü";
   if (calendar === "calendar") return "Takvim Günü";
   return calendar || "";

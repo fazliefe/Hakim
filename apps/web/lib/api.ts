@@ -115,7 +115,30 @@ export function writerIsLlm(writer?: string | null): boolean {
 // tarafındaki gerçek backend'e istek gider. NEXT_PUBLIC_HAKIM_API_URL yalnızca
 // bilinçli bir override için var (ör. backend'i başka bir origin'den doğrudan
 // çağırmak); production için hardcoded bir origin BURAYA yazılmaz.
-const API_BASE = process.env.NEXT_PUBLIC_HAKIM_API_URL ?? "/api-hakim";
+//
+// apiBase() ayrıca tarayıcıda çalışırken loopback/tünel uyuşmazlığını
+// (ör. NEXT_PUBLIC_HAKIM_API_URL yanlışlıkla 127.0.0.1'e işaret ediyorsa ama
+// sayfa tünel üzerinden public bir origin'den açıldıysa) tespit edip yine
+// göreli `/api-hakim`'e düşer.
+const CONFIGURED_API_BASE = (process.env.NEXT_PUBLIC_HAKIM_API_URL ?? "/api-hakim").replace(/\/$/, "");
+
+function apiBase(): string {
+  const configured = CONFIGURED_API_BASE;
+  if (typeof window === "undefined") return configured;
+  try {
+    const target = new URL(configured, window.location.origin);
+    const loopback = target.hostname === "127.0.0.1" || target.hostname === "localhost";
+    const pageLoopback =
+      window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+    if (loopback && !pageLoopback) return "/api-hakim";
+    if (window.location.protocol === "https:" && target.protocol === "http:" && loopback) {
+      return "/api-hakim";
+    }
+  } catch {
+    return "/api-hakim";
+  }
+  return configured;
+}
 
 const TOKEN_KEY = "hakim-token";
 const USER_KEY = "hakim-user";
@@ -192,7 +215,15 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${API_BASE}${path}`, { ...init, headers, cache: init?.cache ?? "no-store" });
+  try {
+    return await fetch(`${apiBase()}${path}`, { ...init, headers, cache: init?.cache ?? "no-store" });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : "";
+    if (/load failed|failed to fetch|networkerror|network request failed/i.test(raw)) {
+      throw new Error("Sunucuya bağlanılamadı.");
+    }
+    throw err;
+  }
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {
@@ -523,6 +554,7 @@ export type DeadlineOut = {
   last_day: string | null;
   legal_basis: string[];
   missing: string | null;
+  adjustment_note?: string | null;
 };
 
 export type ReasoningHop = {
@@ -573,9 +605,9 @@ export type PetitionView = {
   meta?: PetitionMeta[];
   sections?: PetitionSection[];
   closing?: string;
+  onay_notu?: string;
   signature?: { role?: string; name?: string } | null;
   cited_ns?: number[];
-  onay_notu?: string;
   evolver?: {
     ok: boolean;
     score: number;
@@ -617,6 +649,7 @@ export type DocumentAnalysis = {
   extract_note?: string;
   text?: string;
   verdict?: string;
+  ozet?: string | null;
   legal_caveat?: string | null;
   route_reason?: string;
   route_evidence?: string;
@@ -746,6 +779,103 @@ export async function analyzeWorkspace(
       detail = "API bu uç noktayı tanımıyor. HÂKİM API sunucusunu yeniden başlatın.";
     }
     throw new Error(detail);
+  }
+  return response.json();
+}
+
+export type ConfidenceBand = "trusted" | "review" | "uncertain";
+
+export type StructuredField = {
+  name: string;
+  label: string;
+  value: string;
+  normalized_value?: string | null;
+  page: number;
+  bbox: number[];
+  confidence: number;
+  source: string;
+  band: ConfidenceBand;
+};
+
+export type QualityIssue = {
+  type: string;
+  severity: "low" | "medium" | "high";
+  page: number;
+  message: string;
+};
+
+export type QualityReport = {
+  quality_score: number;
+  status: "good" | "warning" | "unusable";
+  issues: QualityIssue[];
+};
+
+export type StructuredWarning = {
+  code: string;
+  message: string;
+  severity?: "info" | "warning" | "error";
+  field?: string | null;
+  page?: number | null;
+};
+
+export type StructuredPage = {
+  page: number;
+  width?: number | null;
+  height?: number | null;
+  preview_jpeg?: string | null;
+  quality?: QualityReport | null;
+};
+
+export type StructuredDocument = {
+  document_id: string;
+  document_type: string;
+  document_type_confidence: number;
+  filename: string;
+  pages: StructuredPage[];
+  fields: StructuredField[];
+  quality: QualityReport;
+  attachments?: Array<{ name?: string; status?: string }>;
+  visual_evidence: Array<{
+    field_name: string;
+    page: number;
+    bbox: number[];
+    caption: string;
+    confidence: number;
+  }>;
+  sensitive_regions?: Array<{
+    type: string;
+    page: number;
+    bbox: number[];
+    confidence: number;
+  }>;
+  suspicious_regions?: Array<{
+    type: string;
+    page: number;
+    bbox: number[];
+    reason: string;
+    confidence: number;
+  }>;
+  warnings: StructuredWarning[];
+  raw_text?: string;
+};
+
+export function visionFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  const type = (file.type || "").toLowerCase();
+  return type.startsWith("image/") || /\.(jpe?g|png|webp|tiff?)$/i.test(name);
+}
+
+/** Overlay / structured VLM: photos only. PDF/Word/TXT stay on OCR-text ingest. */
+export function needsVisionOverlay(file: File, data?: DocumentAnalysis): boolean {
+  return visionFile(file) || data?.source_kind === "image";
+}
+
+export async function analyzeEvrakVision(file: File): Promise<StructuredDocument> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await apiFetch("/v1/evrak/analyze", { method: "POST", body });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Görüntü analiz edilemedi"));
   }
   return response.json();
 }

@@ -4,8 +4,9 @@ import Image from "next/image";
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getAuthToken, getCurrentUser, getStoredUser } from "@/lib/api";
+import { subscribePhoneLayout } from "@/lib/phone-layout";
 
-const PUBLIC_PATHS = new Set(["/", "/giris"]);
+const PUBLIC_PATHS = new Set(["/", "/giris", "/qr"]);
 
 export function SessionSplash({ message = "Oturum Kontrol Ediliyor…" }: { message?: string }) {
   return (
@@ -23,6 +24,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [ready, setReady] = useState(PUBLIC_PATHS.has(pathname));
+
+  useEffect(() => {
+    return subscribePhoneLayout(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (PUBLIC_PATHS.has(pathname)) {
