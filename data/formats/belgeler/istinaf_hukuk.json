@@ -1,0 +1,41 @@
+{
+  "id": "istinaf_hukuk",
+  "title": "İstinaf dilekçesi (hukuk)",
+  "family": "hukuk",
+  "makam": "Bölge Adliye Mahkemesi ilgili hukuk dairesi",
+  "legal_basis": ["HMK m.341", "HMK m.345", "HMK m.353"],
+  "deadline_rule_id": "deadline:istinaf_hukuk:hmk345",
+  "when": "İlk derece hukuk mahkemesi hükmüne karşı.",
+  "sections": [
+    { "id": "ust_yazi", "label": "BAM hukuk dairesi / ilk derece mahkemesi aracılığıyla" },
+    { "id": "hukum", "label": "İstinaf olunan hüküm" },
+    { "id": "sure", "label": "Süre (HMK m.345)" },
+    { "id": "sebepler", "label": "İstinaf sebepleri" },
+    { "id": "hukuki_nitelendirme", "label": "HMK dayanak" },
+    { "id": "talep", "label": "Hükmün kaldırılması / yeniden yargılama" }
+  ],
+  "parsed": {
+    "required": ["makam", "hukum", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "hukum": "string",
+      "sure_cumlesi": "string — 14 gün (iki hafta) tebliğden, last_day veya eksik",
+      "sebepler": ["string — olgu, hukuka aykırılık ayrı ayrı"],
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string"
+    }
+  },
+  "writing": {
+    "tone": "İstinaf dilekçesi (hukuk davası). CMK/ceza terimleri kullanma; sanık/mağdur değil davacı/davalı.",
+    "must": ["HMK m.345 süre", "Sebepleri numaralandır", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
+    "must_not": ["Yargıtay’a hitap", "BAM daire no uydurmak", "CMK/TCK madde uydurmak"]
+  },
+  "example": {
+    "makam": "Bölge Adliye Mahkemesi ilgili hukuk dairesi",
+    "hukum": "İlk derece mahkemesinin davanın reddine ilişkin hükmü",
+    "sure_cumlesi": "İstinaf süresi HMK m.345 uyarınca tebliğden itibaren iki hafta içindedir.",
+    "sebepler": ["Hükmün hukuka aykırılığı"],
+    "hukuki_nitelendirme": [],
+    "talep": "Hükmün kaldırılması talep olunur."
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,9 +11,30 @@ class Classification:
     unit: str
     stage: str
     remedies: tuple[str, ...]
+    # Kaç bağımsız kural-sinyalinin (bkz. `_confidence_from_hits`) tutarlı
+    # sonuç verdiğinin ölçeklenmiş oranı — istatistiksel olarak KALİBRE
+    # EDİLMİŞ bir olasılık DEĞİLDİR (etiketli bir eval seti yok, bkz.
+    # eval/gold). "Kurallar ne kadar hemfikir" olarak okunmalı, "P(doğru
+    # sınıflandırma)" olarak değil.
     confidence: float
     evidence_span: str
     label: str
+
+
+# confidence, `hits` bağımsız sinyalin (bkz. classify_document) kaçının
+# tuttuğuna göre bu aralığa doğrusal ölçeklenir. Alt sınır 0'a yakın ama
+# sıfır değil (hiç sinyal tutmasa bile "belirsiz" etiketi zaten kendini
+# açıklıyor); üst sınır 1'e yakın ama %100 iddia etmiyor — kural motoru
+# yine de yanılabilir. LLM yedeği (classify_document_llm_assist) bu
+# ölçeği atlayıp kendi sabit `confidence_override` değerini kullanır.
+_CONFIDENCE_SIGNALS = 6
+_CONFIDENCE_FLOOR = 0.15
+_CONFIDENCE_CEILING = 0.95
+
+
+def _confidence_from_hits(hits: int) -> float:
+    span = _CONFIDENCE_CEILING - _CONFIDENCE_FLOOR
+    return round(_CONFIDENCE_FLOOR + span * hits / _CONFIDENCE_SIGNALS, 2)
 
 
 # Şartname (yargı) + Resmî Yazışma Usulleri / EBYS kamu evrakı.
@@ -21,14 +43,23 @@ _TYPE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("tebligat", ("tebliğ mazbatası", "tebligat kanunu", "7201 sayılı", "muhataba tebliğ")),
     ("olur", ("olura arz", "olur'a arz", "makamın oluruna", "olur'unuz", "olurunuz")),
     ("genelge", ("genelge", "genelgenin")),
-    ("tutanak", ("tutanaktır", "işbu tutanak", "tutanak")),
+    # Bare "tutanak" needle kaldırıldı — canlı bir istinaf kararında "duruşma
+    # tutanaklarının yeterince irdelenmediği" gibi, belgenin KENDİSİNİ değil,
+    # dosyadaki BAŞKA bir belgeyi anan bir cümlede geçtiği için yanlışlıkla
+    # eşleşip (üstelik ilk 420 karakterlik "header" bonusunu da alıp) gerçek
+    # "mahkeme_karari" eşleşmesini (karar verildi) puanla geçmişti.
+    ("tutanak", ("tutanaktır", "işbu tutanak")),
     ("rapor", ("faaliyet raporu", "inceleme raporu", "işbu rapor", "raporudur")),
     ("cevap_yazisi", ("cevap yazısı", "yazınıza cevaben", "ilgi yazıya cevaben", "cevaben")),
     ("bilgi_yazisi", ("bilgi yazısı", "bilgilerine arz", "bilgi için")),
     ("ust_yazi", ("üst yazı", "havale olunur", "ek listesi", "dağıtım listesi")),
     ("iddianame", ("iddianame", "kamu davası açılmış", "kamu davası açılmıştır")),
     ("mahkeme_karari", ("gerekçeli karar", "mahkûmiyetine", "beraatine", "hükmün", "karar verildi")),
-    ("dilekce", ("dilekçe", "şikayetçidir", "müvekkilim adına", "arz olunur")),
+    # Bare "dilekçe" needle kaldırıldı — aynı sınıf hata (bkz. "tutanak" notu):
+    # bir mahkeme kararı, "istinaf başvuru dilekçesinde özetle..." diyerek
+    # TARAFIN dilekçesinden alıntı yapar; bu, KARARIN KENDİSİNİN bir dilekçe
+    # olduğu anlamına gelmez. Canlı doğrulandı.
+    ("dilekce", ("şikayetçidir", "müvekkilim adına", "arz olunur")),
 ]
 
 KAMU_TYPES = frozenset(
@@ -54,6 +85,30 @@ _NATURE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("ceza", ("tck", "ceza mahkemesi", "ağır ceza", "asliye ceza", "savcılık", "sanık", "mahkûmiyet", "iddianame")),
     ("anayasa", ("bireysel başvuru", "anayasa mahkemesi", "aym")),
     ("idare", ("danıştay", "idare mahkemesi", "iptal davası", "2577")),
+    (
+        "hukuk",
+        (
+            "hmk",
+            "hukuk muhakemeleri kanunu",
+            "6100 sayılı",
+            "hukuk mahkemesi",
+            "asliye hukuk",
+            "sulh hukuk",
+            "hukuk dairesi",
+            "tazminat davası",
+            "maddi tazminat",
+            "alacak davası",
+            "boşanma davası",
+            "kira tespiti",
+            "tapu iptal",
+            "aile mahkemesi",
+            "iş mahkemesi",
+            "ticaret mahkemesi",
+            "tüketici mahkemesi",
+            "davacı vekili",
+            "davalı vekili",
+        ),
+    ),
     ("kamu", ("bakanlık", "valilik", "kaymakamlık", "genel müdürlük", "daire başkanlığı", "ebys")),
 ]
 
@@ -81,6 +136,7 @@ _NATURE_UNIT: dict[str, str] = {
     "ceza": "İlgili Cumhuriyet savcılığı / ceza mahkemesi",
     "idare": "İlgili idare mahkemesi / Danıştay",
     "anayasa": "Anayasa Mahkemesi",
+    "hukuk": "İlgili hukuk mahkemesi / Yargıtay hukuk dairesi",
     "kamu": "Evrak kayıt ve havale",
 }
 
@@ -141,6 +197,39 @@ def classify_document(text: str) -> Classification:
         if looks_like_resmi_yazi(raw):
             document_type = "ust_yazi"
             type_span = type_span or "Sayı / Konu"
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=type_span,
+        type_score=type_score,
+        nature_score=nature_score,
+    )
+
+
+# Kural motoru belirsiz/düşük güvenli kaldığında LLM'in seçebileceği kapalı liste.
+_NATURE_CHOICES = ("ceza", "idare", "anayasa", "hukuk", "kamu", "belirsiz")
+
+
+def _finalize(
+    raw: str,
+    blob: str,
+    document_type: str,
+    legal_nature: str,
+    *,
+    type_span: str = "",
+    type_score: int = 0,
+    nature_score: int = 0,
+    confidence_override: float | None = None,
+) -> Classification:
+    """document_type/legal_nature'dan stage, remedies, unit, confidence türetir.
+
+    Hem kural motoru hem LLM yedeği (classify_document_llm_assist) bu tek fonksiyonu
+    kullanır: LLM sadece hangi kategori olduğuna karar verir, gerisi (birim, aşama,
+    kanun yolu, süre) her zaman aynı deterministik tablolardan gelir — LLM'e madde
+    veya süre uydurma yetkisi verilmez.
+    """
     if document_type in KAMU_TYPES and legal_nature == "belirsiz":
         legal_nature = "kamu"
 
@@ -160,23 +249,46 @@ def classify_document(text: str) -> Classification:
         else:
             stage = "kovusturma"
 
+    # "istinaf"/"temyiz" nitelik-bazlı (ceza→CMK, hukuk→HMK, idare→İYUK)
+    # etiketlere ayrıldı — aksi halde hepsi aynı "istinaf"/"temyiz" etiketini
+    # paylaşıp, deadline/catalog.py'de CMK kuralları hukuk davalarına da
+    # (yanlışlıkla) uygulanıyordu — canlı bir BAM/istinaf tazminat kararıyla
+    # doğrulandı.
     remedies: list[str] = []
     if legal_nature == "ceza" and document_type in {"mahkeme_karari", "tebligat"}:
-        remedies.extend(["itiraz", "istinaf", "temyiz"])
+        remedies.extend(["itiraz", "istinaf_ceza", "temyiz_ceza"])
+    if legal_nature == "hukuk" and document_type in {"mahkeme_karari", "tebligat"}:
+        remedies.extend(["istinaf_hukuk", "temyiz_hukuk"])
     if document_type not in KAMU_TYPES:
         if "istinaf" in blob:
-            remedies.append("istinaf")
+            if legal_nature == "ceza":
+                remedies.append("istinaf_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("istinaf_hukuk")
+            elif legal_nature == "idare":
+                remedies.append("istinaf_idari")
         if "temyiz" in blob:
-            remedies.append("temyiz")
+            if legal_nature == "ceza":
+                remedies.append("temyiz_ceza")
+            elif legal_nature == "hukuk":
+                remedies.append("temyiz_hukuk")
+        if legal_nature == "idare" and ("temyiz" in blob or "danıştay" in blob or "danistay" in blob):
+            remedies.append("temyiz_idari")
         if legal_nature == "anayasa":
             remedies.append("bireysel_basvuru")
         if legal_nature == "idare":
-            # "istinaf_idari" hiçbir deadline kuralına bağlı değildi (dead tag).
-            # "idari_dava" — route_islem.py/ACTION_TO_BELGE/idari_dava.json'ın
-            # zaten kullandığı isim — İYUK m.7 dava açma süresine bağlanıyor.
-            remedies.append("istinaf_idari")
+            # İYUK m.7 dava açma süresine bağlanıyor (bkz. deadline/catalog.py).
+            # İstinaf/temyiz_idari yukarıda yalnızca blob'da gerçekten
+            # geçiyorsa eklenir — her idare evrakına spekülatif olarak
+            # İYUK m.45/46 süresi eklenmesin diye (route_islem.py/
+            # ACTION_TO_BELGE/idari_dava.json "idari_dava" adını kullanıyor).
             remedies.append("idari_dava")
-        if "şikayet" in blob or "sikayet" in blob:
+        # "şikayet" (TCK m.73, 6 aylık şikayet süresi) ceza-özgü bir
+        # kurum — hukuk davalarında (tazminat vb.) kavram olarak yok.
+        # Canlı doğrulandı: bir hukuk kararı, dosyada anılan paralel ceza
+        # yargılaması nedeniyle "şikayetçi" kelimesini içeriyordu ve
+        # yanlışlıkla TCK m.73 süresi almıştı.
+        if legal_nature != "hukuk" and ("şikayet" in blob or "sikayet" in blob):
             remedies.append("sikayet")
     unique = tuple(dict.fromkeys(remedies))
 
@@ -184,7 +296,7 @@ def classify_document(text: str) -> Classification:
     if document_type in {"mahkeme_karari", "tebligat", "iddianame"} and (
         "yargıtay" in blob or "yargitay" in blob
     ):
-        unit = "Yargıtay ilgili ceza dairesi"
+        unit = "Yargıtay ilgili hukuk dairesi" if legal_nature == "hukuk" else "Yargıtay ilgili ceza dairesi"
 
     hits = sum(
         [
@@ -196,13 +308,87 @@ def classify_document(text: str) -> Classification:
             nature_score >= 5 or document_type in KAMU_TYPES,
         ]
     )
+    confidence = (
+        _confidence_from_hits(hits)
+        if confidence_override is None
+        else round(min(0.99, max(0.0, confidence_override)), 2)
+    )
     return Classification(
         document_type=document_type,
         legal_nature=legal_nature,
         unit=unit,
         stage=stage,
         remedies=unique,
-        confidence=round(min(0.99, 0.32 + 0.11 * hits), 2),
+        confidence=confidence,
         evidence_span=type_span or raw[:180],
         label=TYPE_LABELS.get(document_type, document_type),
+    )
+
+
+def _llm_prompt(raw: str) -> list[dict[str, str]]:
+    types = ", ".join(key for key in TYPE_LABELS if key != "belirsiz")
+    natures = ", ".join(_NATURE_CHOICES)
+    system = (
+        "Sen bir evrak türü sınıflandırıcısısın. Kural motoru bu metnin türünü kesin "
+        "olarak belirleyemedi; sana yalnızca kapalı bir liste içinden seçim yapman için "
+        "danışılıyor.\n"
+        f"document_type YALNIZCA şu listeden seçilir: {types}, belirsiz\n"
+        f"legal_nature YALNIZCA şu listeden seçilir: {natures}\n"
+        "Listede olmayan bir değer, yeni bir tür veya madde numarası UYDURMA. Emin "
+        'değilsen ilgili alan için "belirsiz" döndür.\n'
+        "evidence alanı metinden BİREBİR alıntı olmalı (en fazla 160 karakter); metinde "
+        "yoksa boş bırak.\n"
+        "Yalnızca şu JSON şemasıyla cevap ver: "
+        '{"document_type": "...", "legal_nature": "...", "evidence": "..."}'
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": raw[:1500]},
+    ]
+
+
+def classify_document_llm_assist(
+    text: str,
+    base: Classification,
+    *,
+    chat_fn: Callable[[list[dict[str, str]]], str],
+) -> Classification | None:
+    """Kural motoru "belirsiz" veya düşük güvenle kaldığında tek seferlik LLM yedeği.
+
+    LLM yalnızca document_type/legal_nature için kapalı listeden seçim yapar; stage,
+    remedies, unit, süre kuralları her zaman _finalize() üzerinden aynı deterministik
+    tablolardan türetilir — LLM'e yeni madde veya süre uydurma yetkisi verilmez.
+    JSON bozuksa, liste dışı bir değer dönerse veya kural motorundan farklı bir sonuç
+    çıkmazsa None döner; çağıran taraf kural motorunun sonucunu aynen korur.
+    """
+    raw = text.strip()
+    if not raw:
+        return None
+    try:
+        from llm.client import parse_json_content
+
+        payload = parse_json_content(chat_fn(_llm_prompt(raw)))
+    except Exception:
+        return None
+
+    llm_type = str(payload.get("document_type") or "").strip().lower()
+    llm_nature = str(payload.get("legal_nature") or "").strip().lower()
+    if llm_type not in TYPE_LABELS or llm_nature not in _NATURE_CHOICES:
+        return None
+
+    document_type = llm_type if llm_type != "belirsiz" else base.document_type
+    legal_nature = llm_nature if llm_nature != "belirsiz" else base.legal_nature
+    if document_type == base.document_type and legal_nature == base.legal_nature:
+        return None  # LLM de kural motorundan farklı bir şey söylemedi
+
+    evidence = str(payload.get("evidence") or "").strip()
+    span = evidence if evidence and evidence.lower() in raw.lower() else ""
+    blob = _norm(raw)
+    return _finalize(
+        raw,
+        blob,
+        document_type,
+        legal_nature,
+        type_span=span,
+        confidence_override=0.6,
     )

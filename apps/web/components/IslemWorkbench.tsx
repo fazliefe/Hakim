@@ -7,23 +7,24 @@ import { BelgeKalip, IslemGuess, getBelgeler, guessIslem } from "@/lib/api";
 import { DownloadActions } from "@/components/DownloadActions";
 import { petitionToBlocks } from "@/lib/exportDocument";
 import { useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
+import { titleCaseLabel } from "@/lib/labels";
 
 const FALLBACK: BelgeKalip[] = [
-  { id: "sikayet", title: "Şikayet dilekçesi", when: "Savcılığa şikayet", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
-  { id: "suc_duyurusu", title: "Suç duyurusu", when: "İhbar", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
-  { id: "cevap", title: "Cevap dilekçesi", when: "İddiaya cevap", makam: "Görevli ceza mahkemesi", legal_basis: [], sections: [] },
-  { id: "itiraz", title: "İtiraz dilekçesi", when: "CMK m.268", makam: "İtiraz mercii", legal_basis: [], sections: [] },
-  { id: "istinaf", title: "İstinaf dilekçesi", when: "CMK m.273", makam: "Bölge Adliye Mahkemesi", legal_basis: [], sections: [] },
-  { id: "temyiz", title: "Temyiz dilekçesi", when: "CMK m.291", makam: "Yargıtay", legal_basis: [], sections: [] },
-  { id: "temyiz_cevap", title: "Temyize cevap", when: "Hukuk temyiz cevabı", makam: "Yargıtay Başkanlığı", legal_basis: [], sections: [] },
-  { id: "katilma", title: "Davaya katılma", when: "CMK m.237", makam: "Ceza mahkemesi", legal_basis: [], sections: [] },
-  { id: "bireysel_basvuru", title: "Bireysel başvuru", when: "AYM", makam: "Anayasa Mahkemesi", legal_basis: [], sections: [] },
-  { id: "idari_dava", title: "İdari dava dilekçesi", when: "İYUK", makam: "İdare mahkemesi", legal_basis: [], sections: [] },
-  { id: "tahliye", title: "Tahliye talebi", when: "Tutukluluk", makam: "Mahkeme / hakimlik", legal_basis: [], sections: [] },
-  { id: "ihtiyac_tahliye", title: "İhtiyaç tahliyesi", when: "Kira / sulh hukuk", makam: "Sulh hukuk mahkemesi", legal_basis: [], sections: [] },
-  { id: "sure_uzatim", title: "Süre uzatım talebi", when: "Hukuk cevap süresi", makam: "Hukuk mahkemesi", legal_basis: [], sections: [] },
-  { id: "icra_borca_itiraz", title: "Borca itiraz", when: "İlamsız icra / ödeme emri", makam: "İcra müdürlüğü", legal_basis: [], sections: [] },
-  { id: "adli_kontrol_itiraz", title: "Adli kontrol itirazı", when: "Koruma tedbiri", makam: "İtiraz mercii", legal_basis: [], sections: [] },
+  { id: "sikayet", title: "Şikayet Dilekçesi", when: "Savcılığa Şikayet", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
+  { id: "suc_duyurusu", title: "Suç Duyurusu", when: "İhbar", makam: "Cumhuriyet Başsavcılığı", legal_basis: [], sections: [] },
+  { id: "cevap", title: "Cevap Dilekçesi", when: "İddiaya Cevap", makam: "Görevli Ceza Mahkemesi", legal_basis: [], sections: [] },
+  { id: "itiraz", title: "İtiraz Dilekçesi", when: "CMK m.268", makam: "İtiraz Mercii", legal_basis: [], sections: [] },
+  { id: "istinaf", title: "İstinaf Dilekçesi", when: "CMK m.273", makam: "Bölge Adliye Mahkemesi", legal_basis: [], sections: [] },
+  { id: "temyiz", title: "Temyiz Dilekçesi", when: "CMK m.291", makam: "Yargıtay", legal_basis: [], sections: [] },
+  { id: "temyiz_cevap", title: "Temyize Cevap", when: "Hukuk Temyiz Cevabı", makam: "Yargıtay Başkanlığı", legal_basis: [], sections: [] },
+  { id: "katilma", title: "Davaya Katılma", when: "CMK m.237", makam: "Ceza Mahkemesi", legal_basis: [], sections: [] },
+  { id: "bireysel_basvuru", title: "Bireysel Başvuru", when: "AYM", makam: "Anayasa Mahkemesi", legal_basis: [], sections: [] },
+  { id: "idari_dava", title: "İdari Dava Dilekçesi", when: "İYUK", makam: "İdare Mahkemesi", legal_basis: [], sections: [] },
+  { id: "tahliye", title: "Tahliye Talebi", when: "Tutukluluk", makam: "Mahkeme / Hakimlik", legal_basis: [], sections: [] },
+  { id: "ihtiyac_tahliye", title: "İhtiyaç Tahliyesi", when: "Kira / Sulh Hukuk", makam: "Sulh Hukuk Mahkemesi", legal_basis: [], sections: [] },
+  { id: "sure_uzatim", title: "Süre Uzatım Talebi", when: "Hukuk Cevap Süresi", makam: "Hukuk Mahkemesi", legal_basis: [], sections: [] },
+  { id: "icra_borca_itiraz", title: "Borca İtiraz", when: "İlamsız İcra / Ödeme Emri", makam: "İcra Müdürlüğü", legal_basis: [], sections: [] },
+  { id: "adli_kontrol_itiraz", title: "Adli Kontrol İtirazı", when: "Koruma Tedbiri", makam: "İtiraz Mercii", legal_basis: [], sections: [] },
 ];
 
 const SIDE = [{ id: "yazim", label: "Yazım" }];
@@ -180,8 +181,10 @@ export function IslemWorkbench() {
     getBelgeler()
       .then((rows) => {
         const dilekce = rows.filter((item) => item.family !== "kamu");
-        if (dilekce.length) setKalip(dilekce);
-        else if (rows.length) setKalip(rows);
+        const titled = (rows: BelgeKalip[]) =>
+          rows.map((item) => ({ ...item, title: titleCaseLabel(item.title) }));
+        if (dilekce.length) setKalip(titled(dilekce));
+        else if (rows.length) setKalip(titled(rows));
       })
       .catch(() => setKalip(FALLBACK));
   }, []);
@@ -302,10 +305,10 @@ export function IslemWorkbench() {
       }
       footer={
         loading
-          ? "Taslak yazılıyor…"
+          ? "Taslak Yazılıyor…"
           : result
             ? verdictTitle
-            : "Dilekçe bekleniyor"
+            : "Dilekçe Bekleniyor"
       }
     >
       <section className="main-pane islem-pane">
@@ -326,7 +329,7 @@ export function IslemWorkbench() {
             void submit(event, mode === "manual" ? action : "");
           }}
         >
-          <div className="mode-switch" role="tablist" aria-label="Yazım modu">
+          <div className="mode-switch" role="tablist" aria-label="Yazım Modu">
             <button
               type="button"
               role="tab"
@@ -337,7 +340,7 @@ export function IslemWorkbench() {
                 setAction("");
               }}
             >
-              Otomatik anlama
+              Otomatik Anlama
             </button>
             <button
               type="button"
@@ -346,11 +349,11 @@ export function IslemWorkbench() {
               className={mode === "manual" ? "on" : ""}
               onClick={() => setMode("manual")}
             >
-              Manuel kalıp
+              Manuel Kalıp
             </button>
           </div>
           {mode === "auto" ? (
-            <div className="islem-examples" aria-label="Örnek anlatılar">
+            <div className="islem-examples" aria-label="Örnek Anlatılar">
               {AUTO_EXAMPLES.map((item) => (
                 <button
                   key={item.expect}
@@ -366,11 +369,11 @@ export function IslemWorkbench() {
           {mode === "manual" ? (
             <select
               className="kalip-select"
-              aria-label="Dilekçe kalıbı"
+              aria-label="Dilekçe Kalıbı"
               value={action}
               onChange={(event) => setAction(event.target.value)}
             >
-              <option value="">Kalıp seçin</option>
+              <option value="">Kalıp Seçin</option>
               {kalip.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title}
@@ -389,7 +392,7 @@ export function IslemWorkbench() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            aria-label="Olay veya dayanak evrak"
+            aria-label="Olay veya Dayanak Evrak"
             rows={6}
             spellCheck={false}
             placeholder={
@@ -406,10 +409,10 @@ export function IslemWorkbench() {
               {loading
                 ? "Yazılıyor…"
                 : mode === "manual" && selected
-                  ? `${selected.title} üret`
+                  ? `${selected.title} Üret`
                   : guess
-                    ? `${guess.title} olarak yaz`
-                    : "Anla ve uygun dilekçeyi yaz"}
+                    ? `${guess.title} Olarak Yaz`
+                    : "Anla ve Uygun Dilekçeyi Yaz"}
             </button>
             {downloads}
           </div>
@@ -423,7 +426,7 @@ export function IslemWorkbench() {
         ) : null}
         {result?.gaps?.length ? (
           <aside className="gap-banner">
-            <h2>Eksik hususlar</h2>
+            <h2>Eksik Hususlar</h2>
             <p>Dilekçe yer tutucularla yazıldı. Aşağıya bildiklerinizi yazıp taslağı yenileyin; kimlik ve tarih uydurulmaz.</p>
             <form className="gap-form" onSubmit={applyGaps}>
               {result.gaps.map((gap) => (

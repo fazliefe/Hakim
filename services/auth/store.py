@@ -6,6 +6,7 @@ import re
 import secrets
 import sqlite3
 import string
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -13,13 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from auth.mail import send_code_email, send_password_email, smtp_configured
-from auth.passwords import hash_password, verify_password
+from auth.passwords import MIN_PASSWORD_LENGTH, hash_password, password_too_short, verify_password
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SQLITE = ROOT / "data" / "accounts.sqlite"
 DEFAULT_ADMIN_EMAIL = "hukukcu@hakim.local"
 DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin1234"
 SESSION_DAYS = 14
 CODE_MINUTES = 15
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,24}$")
@@ -45,6 +45,29 @@ ACCOUNT_ACTIVITY_KINDS = frozenset(
         "admin_send_password",
     }
 )
+
+
+def _bootstrap_admin_password() -> str:
+    """İlk admin hesabı oluşturulurken kullanılacak parola. `HAKIM_ADMIN_PASSWORD`
+    set edilmişse onu kullanır; edilmemişse sabit/tahmin edilebilir bir
+    varsayılan YERİNE rastgele bir parola üretir ve tek seferlik konsola
+    yazdırır (yarışma/production'da unutulmuş bir "admin1234" riskini
+    ortadan kaldırmak için — bkz. docs/competition_deployment.md). Yalnızca
+    admin hesabı henüz YOKKEN çağrılır (bkz. `ensure_admin`); var olan bir
+    hesabın parolasını geriye dönük değiştirmez."""
+    env = os.environ.get("HAKIM_ADMIN_PASSWORD", "").strip()
+    if env:
+        return env
+    generated = secrets.token_urlsafe(12)
+    print(
+        "[hakim-auth] HAKIM_ADMIN_PASSWORD set edilmemiş; ilk admin hesabı için "
+        f"rastgele parola üretildi: {generated}\n"
+        "[hakim-auth] Bu parolayı not edin (bir daha gösterilmez) veya .env'e "
+        "HAKIM_ADMIN_PASSWORD=... ekleyip data/accounts.sqlite dosyasını silerek "
+        "yeniden başlatın.",
+        file=sys.stderr,
+    )
+    return generated
 
 
 class AuthError(Exception):
@@ -201,6 +224,21 @@ class AuthStore:
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username ON accounts (username COLLATE NOCASE)"
             )
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS account_files (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    filename TEXT NOT NULL,
+                    mime TEXT NOT NULL DEFAULT '',
+                    kind TEXT NOT NULL DEFAULT '',
+                    text TEXT NOT NULL DEFAULT '',
+                    byte_size INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_files_user ON account_files (user_id, created_at DESC);
+                """
+            )
 
     def ensure_admin(self) -> None:
         with self._connect() as conn:
@@ -231,7 +269,7 @@ class AuthStore:
                     DEFAULT_ADMIN_EMAIL,
                     DEFAULT_ADMIN_USERNAME,
                     "Yönetici",
-                    hash_password(DEFAULT_ADMIN_PASSWORD),
+                    hash_password(_bootstrap_admin_password()),
                     _now_s(),
                 ),
             )
@@ -318,8 +356,8 @@ class AuthStore:
             raise AuthError("Geçerli bir e-posta girin.")
         if email.endswith(".local"):
             raise AuthError("Gerçek bir e-posta kullanın.")
-        if len(password) < 6:
-            raise AuthError("Parola en az 6 karakter olmalıdır.")
+        if password_too_short(password):
+            raise AuthError(f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalıdır.")
         if self.get_by_email(email):
             raise AuthError("Bu e-posta zaten kayıtlı.", 409)
         if self.get_by_username(uname):
@@ -413,17 +451,17 @@ class AuthStore:
         self.log(verified.id, "verify", f"{verified.username} e-postasını doğruladı")
         return verified
 
-    def request_password_reset(self, identifier: str) -> tuple[str, bool]:
+    def request_password_reset(self, identifier: str) -> tuple[str | None, bool]:
         user = self.get_by_identifier(identifier)
         if user is None:
-            raise AuthError("Hesap bulunamadı.", 404)
+            return None, smtp_configured()
         code, sent = self.issue_verification(user.id, kind="reset")
         self.log(user.id, "password_reset_request", f"{user.username} parola sıfırlama istedi")
         return code, sent
 
     def reset_password(self, identifier: str, code: str, password: str) -> UserRecord:
-        if len(password) < 6:
-            raise AuthError("Parola en az 6 karakter olmalıdır.")
+        if password_too_short(password):
+            raise AuthError(f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalıdır.")
         user = self._consume_code(identifier, code)
         with self._connect() as conn:
             conn.execute(
@@ -565,8 +603,8 @@ class AuthStore:
         *,
         keep_token: str | None = None,
     ) -> UserRecord:
-        if len(new_password) < 6:
-            raise AuthError("Parola en az 6 karakter olmalıdır.")
+        if password_too_short(new_password):
+            raise AuthError(f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalıdır.")
         with self._connect() as conn:
             row = conn.execute("SELECT password_hash FROM accounts WHERE id = ?", (user.id,)).fetchone()
             if row is None:
@@ -767,6 +805,117 @@ class AuthStore:
             name = target.username if target else user_id
             self.log(actor.id, "admin_revoke_sessions", f"{actor.username} oturumları kapattı: {name}")
         return deleted
+
+    def save_file(
+        self,
+        user_id: str,
+        *,
+        filename: str,
+        mime: str,
+        kind: str,
+        text: str,
+        byte_size: int,
+    ) -> dict[str, Any]:
+        file_id = str(uuid.uuid4())
+        created = _now_s()
+        body = (text or "")[:160000]
+        name = (filename or "evrak").strip()[:180] or "evrak"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO account_files (id, user_id, filename, mime, kind, text, byte_size, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (file_id, user_id, name, (mime or "")[:80], (kind or "")[:24], body, max(0, int(byte_size)), created),
+            )
+        return self.get_file(user_id, file_id) or {
+            "id": file_id,
+            "filename": name,
+            "mime": mime,
+            "kind": kind,
+            "byte_size": byte_size,
+            "created_at": created,
+            "text": body,
+        }
+
+    def update_file(
+        self,
+        user_id: str,
+        file_id: str,
+        *,
+        filename: str,
+        text: str,
+    ) -> dict[str, Any] | None:
+        existing = self.get_file(user_id, file_id)
+        if existing is None:
+            return None
+        body = (text or "")[:160000]
+        name = (filename or existing.get("filename") or "evrak").strip()[:180] or "evrak"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE account_files
+                SET filename = ?, text = ?, byte_size = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (name, body, len(body.encode("utf-8")), file_id, user_id),
+            )
+        return self.get_file(user_id, file_id)
+
+    def list_files(self, user_id: str, *, limit: int = 40) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, filename, mime, kind, byte_size, created_at, length(text) AS chars
+                FROM account_files
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (user_id, max(1, min(limit, 80))),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "filename": row["filename"],
+                "mime": row["mime"],
+                "kind": row["kind"],
+                "byte_size": row["byte_size"],
+                "created_at": row["created_at"],
+                "chars": row["chars"],
+            }
+            for row in rows
+        ]
+
+    def get_file(self, user_id: str, file_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, filename, mime, kind, text, byte_size, created_at
+                FROM account_files
+                WHERE id = ? AND user_id = ?
+                """,
+                (file_id, user_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "filename": row["filename"],
+            "mime": row["mime"],
+            "kind": row["kind"],
+            "text": row["text"],
+            "byte_size": row["byte_size"],
+            "created_at": row["created_at"],
+        }
+
+    def delete_file(self, user_id: str, file_id: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM account_files WHERE id = ? AND user_id = ?",
+                (file_id, user_id),
+            )
+            return int(cur.rowcount or 0) > 0
 
     def log(self, user_id: str, kind: str, summary: str, detail: str | dict[str, Any] | None = None) -> None:
         if isinstance(detail, dict):

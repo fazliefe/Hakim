@@ -208,7 +208,7 @@ export function LegalGraphView({ evidence, selected, onSelect, query }: Props) {
       : "Tüm arşiv grafı. Altın düğümler bu sorguya ait. Sürükleyin, tekerlekle yakınlaştırın.");
 
   if (!corpus) {
-    return <p className="muted graph-empty">Graf yükleniyor…</p>;
+    return <p className="muted graph-empty">Graf Yükleniyor…</p>;
   }
   if (nodes.length === 0) {
     return <p className="muted graph-empty">Graf için kaynak yok. Neo4j veya sorgu sonucu gerekli.</p>;

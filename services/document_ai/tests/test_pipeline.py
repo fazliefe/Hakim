@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
-from document_ai.pipeline import GRAPH_NODES, Analysis, _apply_citation_usage, _mevzuat_at, analyze_document, build_document_trace
+import pytest
+
 from document_ai.classify import classify_document
+from document_ai.pipeline import (
+    GRAPH_NODES,
+    Analysis,
+    _apply_citation_usage,
+    _mevzuat_at,
+    analyze_document,
+    build_document_trace,
+)
 
 
 def test_analyze_computes_istinaf_deadline() -> None:
@@ -22,9 +32,111 @@ def test_analyze_computes_istinaf_deadline() -> None:
     assert istinaf.trigger.isoformat() == "2026-08-14"
     assert istinaf.last_day is not None
     # CMK m.273/1: tebliğden itibaren iki hafta (14 gün), 7 gün değil.
-    assert istinaf.last_day.isoformat() == "2026-08-28"
+    # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
+    # penceresinin (20 Temmuz-31 Ağustos, CMK m.331) içinde kaldığından
+    # tatilin bitişinden itibaren 3 gün uzar (CMK m.331/4): 31 Ağustos + 3
+    # gün = 3 Eylül.
+    assert istinaf.last_day.isoformat() == "2026-09-03"
     assert "CMK m.273" in istinaf.legal_basis
     assert "taslak" in analysis.draft.lower()
+
+
+def test_administrative_judgment_does_not_borrow_criminal_deadline() -> None:
+    # "istinaf" kelimesi idare kararında da geçer; CMK m.273'e (7 gün) sızmamalı,
+    # İYUK m.45'e (30 gün, idari istinaf) bağlanmalı.
+    text = (
+        "T.C. ANKARA İDARE MAHKEMESİ GEREKÇELİ KARAR\n"
+        "İptal davası hakkında davanın reddine, hükmün istinaf yolu açık olmak üzere "
+        "karar verildi.\n"
+        "Karar tarihi: 01.08.2026\n"
+        "Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.document_type == "mahkeme_karari"
+    assert analysis.classification.legal_nature == "idare"
+    assert "istinaf" not in analysis.classification.remedies
+    assert "istinaf_idari" in analysis.classification.remedies
+    assert "idari_dava" in analysis.classification.remedies
+
+    names = {item.name for item in analysis.deadlines}
+    assert "İstinaf" not in names
+    assert "İdari istinaf" in names
+    assert "İdari dava açma süresi" in names
+
+    idari_istinaf = next(item for item in analysis.deadlines if item.name == "İdari istinaf")
+    assert idari_istinaf.trigger.isoformat() == "2026-08-14"
+    assert idari_istinaf.last_day is not None
+    assert "İYUK m.45" in idari_istinaf.legal_basis
+
+    idari_dava = next(item for item in analysis.deadlines if item.name == "İdari dava açma süresi")
+    assert "İYUK m.7" in idari_dava.legal_basis
+
+
+def test_analyze_computes_hukuk_istinaf_and_temyiz_deadline() -> None:
+    """HMK m.345 (istinaf) ve m.361 (temyiz): tebliğden itibaren iki hafta
+    (14 gün) — CMK'nın ceza süreleriyle aynı rakam ama farklı kanuna
+    dayanıyor; hukuk davaları CMK m.273/291'e (ceza) yanlış bağlanmamalı
+    (canlı bir BAM/istinaf tazminat kararıyla doğrulandı)."""
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca "
+        "karar verilmiştir. İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.legal_nature == "hukuk"
+    names = {item.name for item in analysis.deadlines}
+    assert "İstinaf (hukuk)" in names
+    assert "Temyiz (hukuk)" in names
+    istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf (hukuk)")
+    assert istinaf.trigger.isoformat() == "2026-08-14"
+    # Ham hesap 2026-08-28'e denk gelir, ancak bu tarih adli tatil
+    # penceresinin (20 Temmuz-31 Ağustos, HMK m.102) içinde kaldığından
+    # tatilin bitişinden itibaren bir hafta (7 gün) uzar (HMK m.104):
+    # 31 Ağustos + 7 gün = 7 Eylül.
+    assert istinaf.last_day.isoformat() == "2026-09-07"
+    assert "HMK m.345" in istinaf.legal_basis
+    # CMK'nın ceza kuralları hiç karışmamalı.
+    assert "CMK m.273" not in istinaf.legal_basis
+    assert not any("CMK" in basis for item in analysis.deadlines for basis in item.legal_basis)
+
+
+def test_ceza_analysis_carries_legal_interpretation_caveat() -> None:
+    """Ceren Özkurt'un bulgusu: sistem güncel kanun metnini uyguluyor gibi
+    görünüyor ama lehe kanun uygulaması (TCK m.7), içtihat, zamanaşımı gibi
+    ilkeler nedeniyle gerçek sonuç farklılaşabilir — bu sessizce göz ardı
+    edilmemeli, açıkça uyarılmalı."""
+    text = (
+        "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR\n"
+        "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+        "İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.legal_caveat is not None
+    assert "lehe kanun" in analysis.legal_caveat.lower()
+    assert "TCK m.7" in analysis.legal_caveat
+
+
+def test_hukuk_analysis_carries_shorter_generic_caveat() -> None:
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ\nGEREKÇELİ KARAR\n"
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca "
+        "karar verilmiştir. İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\nTebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.legal_caveat is not None
+    assert "çtihat" in analysis.legal_caveat
+    # Hukuk davasında "lehe kanun" (TCK m.7'ye özgü bir ceza ilkesi) geçmemeli.
+    assert "lehe kanun" not in analysis.legal_caveat.lower()
+
+
+def test_kamu_evrak_has_no_legal_interpretation_caveat() -> None:
+    analysis = analyze_document(
+        "T.C. İÇİŞLERİ BAKANLIĞI\nGENELGE\n2026/12 sayılı genelge ile taşra teşkilatına duyurulur."
+    )
+    assert analysis.legal_caveat is None
 
 
 def test_analyze_computes_idari_dava_deadline() -> None:
@@ -316,3 +428,51 @@ def test_kamu_genelge_skips_law_retrieve() -> None:
     assert analysis.classification.document_type == "genelge"
     assert called["n"] == 0
     assert analysis.related == []
+
+
+def test_confident_classification_never_calls_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    # resolve_writer() taslak (yazım) adımında allow_ollama=... ile zaten çağrılır;
+    # burada sadece step_sinif'in EK, argümansız bir çağrı yapmadığını doğruluyoruz.
+    calls: list[tuple] = []
+
+    def tracking_resolve_writer(*args: object, **kwargs: object):
+        calls.append((args, kwargs))
+        return None
+
+    monkeypatch.setattr("llm.writer.resolve_writer", tracking_resolve_writer)
+    text = (
+        "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR "
+        "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+        "Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    assert analysis.classification.document_type == "mahkeme_karari"
+    sinif_style_calls = [c for c in calls if c == ((), {})]
+    assert sinif_style_calls == []
+
+
+def test_belirsiz_classification_uses_llm_assist_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_resolve_writer(*, allow_ollama: bool = True):
+        def chat_fn(messages: list[dict[str, str]]) -> str:
+            return json.dumps(
+                {
+                    "document_type": "ust_yazi",
+                    "legal_nature": "kamu",
+                    "evidence": "kurumumuza ulaşmış olup incelenmesi",
+                }
+            )
+
+        return chat_fn
+
+    monkeypatch.setattr("llm.writer.resolve_writer", fake_resolve_writer)
+    monkeypatch.setattr("llm.writer.writer_name", lambda **_: "sahte-llm")
+
+    text = "Bu evrak kurumumuza ulaşmış olup incelenmesi gerekmektedir."
+    analysis = analyze_document(text)
+    assert analysis.classification.document_type == "ust_yazi"
+    assert analysis.classification.confidence == 0.6
+
+    sinif_step = next(item for item in analysis.agents if item["id"] == "sinif")
+    assert sinif_step["state"] == "done"  # LLM doğrulaması sonrası artık "warn" değil.
+    assert "LLM ile doğrulandı" in (sinif_step["note"] or "")
+    assert "sahte-llm" in sinif_step["note"]

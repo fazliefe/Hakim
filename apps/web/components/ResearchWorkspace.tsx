@@ -17,14 +17,14 @@ const TraceGraphView = dynamic(
   { ssr: false },
 );
 
-type Tab = "metin" | "kaynaklar" | "graf" | "iz";
+type Tab = "metin" | "kaynaklar" | "emsal" | "graf" | "iz";
 type SideView = "arastirmalar" | "gecmis" | "kaydedilen";
 type ChatTurn = { id: string; query: string; answer: string; result: ResearchResponse };
 
 const SIDE_ITEMS = [
   { id: "arastirmalar", label: "Araştırmalar" },
   { id: "gecmis", label: "Geçmiş" },
-  { id: "kaydedilen", label: "Kaydedilen maddeler" },
+  { id: "kaydedilen", label: "Kaydedilen Maddeler" },
 ];
 
 const HISTORY_KEY = "hakim-research-history";
@@ -149,6 +149,25 @@ function sourceHeading(item: Evidence) {
   return `${lawPrefix(item.law_no)} m.${item.article_no ?? "?"}`;
 }
 
+const COURT_LABELS: Record<string, string> = {
+  yargitay: "Yargıtay",
+  danistay: "Danıştay",
+  yerelhukuk: "Yerel Hukuk",
+  istinafhukuk: "İstinaf Hukuk",
+  kyb: "KYB",
+  aym: "AYM",
+};
+
+function courtLabel(item: Evidence): string {
+  const slug = item.document_id?.split(":")[1] ?? "";
+  return COURT_LABELS[slug] || "Emsal karar";
+}
+
+function contentPreview(text: string, limit = 320): string {
+  const trimmed = text.trim();
+  return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
+}
+
 function buildFollowUp(turns: ChatTurn[], userText: string): string {
   const topic = turns[0]?.query || turns[turns.length - 1]?.query || "";
   const lead = userText.trim();
@@ -186,6 +205,7 @@ export function ResearchWorkspace() {
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
   const hideSemantic = Boolean(result && !result.evidence.some((item) => item.semantic_rank));
+  const decisions = useMemo(() => result?.evidence.filter(isDecision) ?? [], [result]);
 
   function persistHistory(next: HistoryEntry[]) {
     setHistory(next);
@@ -290,12 +310,12 @@ export function ResearchWorkspace() {
             <span className="badge">{selectedEvidence.authority || "resmi"}</span>
           </div>
           <div className="source-title">
-            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız karar" : "Başlıksız madde")}
+            {selectedEvidence.title || (isDecision(selectedEvidence) ? "Başlıksız Karar" : "Başlıksız Madde")}
           </div>
           <p className="source-content">{selectedEvidence.content}</p>
           {selectedEvidence.mulga_warning ? <p className="error">⚠ {selectedEvidence.mulga_warning}</p> : null}
           <button type="button" className="side-action" onClick={toggleSave}>
-            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan çıkar" : "Maddeyi kaydet"}
+            {savedIds.has(selectedEvidence.chunk_id) ? "Kayıttan Çıkar" : "Maddeyi Kaydet"}
           </button>
         </article>
       ) : null}
@@ -305,7 +325,7 @@ export function ResearchWorkspace() {
   return (
     <AppShell
       module="arastirma"
-      sidebarTitle="Hukuki araştırma"
+      sidebarTitle="Hukuki Araştırma"
       sidebarItems={SIDE_ITEMS}
       sidebarActive={side}
       onSidebarSelect={(id) => setSide(id as SideView)}
@@ -319,7 +339,7 @@ export function ResearchWorkspace() {
         <div className={`research-scroll${tab === "graf" || tab === "iz" ? " graph-fill" : ""}`}>
           {side !== "arastirmalar" ? (
             <div className="pane-hero">
-              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen maddeler"}</h1>
+              <h1>{side === "gecmis" ? "Geçmiş" : "Kaydedilen Maddeler"}</h1>
               <p>
                 {side === "gecmis"
                   ? "Önceki araştırmalar. Tıklayınca yeni sohbet başlar."
@@ -328,7 +348,7 @@ export function ResearchWorkspace() {
             </div>
           ) : tab !== "graf" && tab !== "iz" && turns.length === 0 ? (
             <div className="pane-hero">
-              <h1>Hukuki araştırma</h1>
+              <h1>Hukuki Araştırma</h1>
               <p>Sorunuzu yazın. Cevaptan sonra aynı sohbette devam edebilirsiniz.</p>
             </div>
           ) : null}
@@ -354,7 +374,30 @@ export function ResearchWorkspace() {
                   observability={result.observability}
                 />
               ) : null}
-              {tab !== "graf" && tab !== "iz" ? (
+              {result && tab === "emsal" ? (
+                <div className="emsal-karar-list">
+                  {decisions.length ? (
+                    decisions.map((item) => (
+                      <button
+                        key={item.chunk_id}
+                        type="button"
+                        className={`emsal-karar-card ${selected === item.n ? "selected" : ""}`}
+                        onClick={() => openSource(item.n)}
+                      >
+                        <div className="emsal-karar-head">
+                          <span className="badge">{courtLabel(item)}</span>
+                          <span className="emsal-karar-title">{sourceHeading(item)}</span>
+                        </div>
+                        <p className="emsal-karar-preview">{contentPreview(item.content)}</p>
+                        {item.mulga_warning ? <p className="error">⚠ {item.mulga_warning}</p> : null}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="muted">Bu sorguyla ilgili emsal karar bulunamadı.</p>
+                  )}
+                </div>
+              ) : null}
+              {tab !== "graf" && tab !== "iz" && tab !== "emsal" ? (
                 <>
                   {turns.length === 0 && !error && !loading ? (
                     <div className="empty-state">
@@ -372,6 +415,11 @@ export function ResearchWorkspace() {
                           <p className="muted">Cevap metni boş döndü.</p>
                         )}
                       </article>
+                      {index === turns.length - 1 && decisions.length ? (
+                        <button type="button" className="emsal-karar-nudge" onClick={() => onTab("emsal")}>
+                          🏛 {decisions.length} ilgili emsal karar bulundu — Emsal Karar sekmesine bakın
+                        </button>
+                      ) : null}
                       {index === turns.length - 1 && result?.reasoning ? (
                         <ReasoningPanel reasoning={result.reasoning} hideSemantic={hideSemantic} collapsible />
                       ) : null}
@@ -416,14 +464,14 @@ export function ResearchWorkspace() {
                           className="text-btn"
                           onClick={() => persistSaved(saved.filter((row) => row.id !== item.id))}
                         >
-                          Kayıttan çıkar
+                          Kayıttan Çıkar
                         </button>
                       </div>
                       <p>{item.content}</p>
                     </article>
                   ))
                 ) : (
-                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi kaydet» deyin.</p>
+                  <p className="muted">Kayıtlı madde yok. Kaynak panelinden «Maddeyi Kaydet» deyin.</p>
                 )
               ) : null}
             </div>
@@ -442,10 +490,10 @@ export function ResearchWorkspace() {
               placeholder={
                 turns.length ? "Devam sorunuzu yazın…" : "Hukuki sorunuzu yazın… örn. Madde 158"
               }
-              aria-label={turns.length ? "Devam sorusu" : "Hukuki soru"}
+              aria-label={turns.length ? "Devam Sorusu" : "Hukuki Soru"}
             />
             <button type="submit" disabled={loading || query.trim().length < 2}>
-              {loading ? "Aranıyor…" : turns.length ? "Devam et" : "Araştır"}
+              {loading ? "Kaynaklar Tartılıyor…" : turns.length ? "Devam Et" : "Araştır"}
             </button>
           </form>
         ) : null}
@@ -455,8 +503,9 @@ export function ResearchWorkspace() {
               [
                 ["metin", "Metin"],
                 ["kaynaklar", "Kaynaklar"],
-                ["graf", "Bilgi grafı"],
-                ["iz", "Arama izi"],
+                ["emsal", decisions.length ? `Emsal Karar (${decisions.length})` : "Emsal Karar"],
+                ["graf", "Bilgi Grafı"],
+                ["iz", "Arama İzi"],
               ] as const
             ).map(([id, label]) => (
               <button

@@ -7,8 +7,9 @@ import { AgentRail } from "@/components/AgentRail";
 import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
-import { BelgeKalip, getBelgeler, getKamuSablon, KamuSablon, writerLabel } from "@/lib/api";
+import { BelgeKalip, getBelgeler, getKamuSablon, KamuSablon, visionFile, writerLabel } from "@/lib/api";
 import { KAMU_FALLBACK, KAMU_SAMPLES, SABLON_BLOCK_LABELS } from "@/lib/kamuSamples";
+import { titleCaseLabel } from "@/lib/labels";
 import { FIELD_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
 function kamuSample(id: string, sablon: KamuSablon | null) {
@@ -33,7 +34,9 @@ export function KamuWorkbench() {
     getBelgeler()
       .then((rows) => {
         const kamu = rows.filter((item) => item.family === "kamu");
-        if (kamu.length) setKalipList(kamu);
+        if (kamu.length) {
+          setKalipList(kamu.map((item) => ({ ...item, title: titleCaseLabel(item.title) })));
+        }
       })
       .catch(() => setKalipList(KAMU_FALLBACK));
     getKamuSablon()
@@ -64,22 +67,22 @@ export function KamuWorkbench() {
     event.target.value = "";
     if (!file) return;
     void submitFile(file).then((data) => {
-      if (data?.text) {
-        const kalip = side === "sablon" || side === "kaynaklar" ? "ust_yazi" : side;
-        void submitSenaryo(kalip, data.text);
-      }
+      if (!data?.text) return;
+      if (visionFile(file)) return;
+      const kalip = side === "sablon" || side === "kaynaklar" ? "ust_yazi" : side;
+      void submitSenaryo(kalip, data.text);
     });
   }
 
   const sidebarSections = [
     {
-      title: "Yazışma kalıpları",
+      title: "Yazışma Kalıpları",
       items: kalipList.map((item) => ({ id: item.id, label: item.title })),
     },
     {
       title: "2646 Ek",
       items: [
-        { id: "sablon", label: "Şablon düzeni" },
+        { id: "sablon", label: "Şablon Düzeni" },
         { id: "kaynaklar", label: "Kaynaklar" },
       ],
     },
@@ -88,13 +91,13 @@ export function KamuWorkbench() {
   return (
     <AppShell
       module="kamu"
-      sidebarTitle="Kamu yazışmaları"
+      sidebarTitle="Kamu Yazışmaları"
       sidebarSections={sidebarSections}
       sidebarActive={side}
       onSidebarSelect={onSide}
       quote="“Sayı, konu, muhatap — sıra bozulmaz.”"
       quoteMeta="2646 Yönetmelik Ek"
-      inspectorTitle="Kalıp / dayanak"
+      inspectorTitle="Kalıp / Dayanak"
       inspector={
         side === "kaynaklar" ? (
           <div className="kamu-inspector">
@@ -121,7 +124,7 @@ export function KamuWorkbench() {
             <p className="muted">Makam: {selected.makam}</p>
             {result?.fields && Object.keys(result.fields).length ? (
               <>
-                <h3>Gelen evrak alanları</h3>
+                <h3>Gelen Evrak Alanları</h3>
                 <ul className="kamu-section-list">
                   {Object.entries(result.fields).map(([key, value]) => (
                     <li key={key}>
@@ -158,20 +161,20 @@ export function KamuWorkbench() {
       }
       footer={
         loading
-          ? "Kamu yazışması üretiliyor…"
+          ? "Kamu Yazışması Üretiliyor…"
           : result?.draft
             ? `${selected?.title ?? side} · ${writerLabel(result.writer)}`
-            : "2646 Ek düzenine uygun taslak"
+            : "2646 Ek Düzenine Uygun Taslak"
       }
     >
       <section className="main-pane kamu-pane">
         <div className="pane-hero">
           <h1>
             {side === "sablon"
-              ? "Şablon düzeni"
+              ? "Şablon Düzeni"
               : side === "kaynaklar"
-                ? "Kamu kaynakları"
-                : selected?.title ?? "Kamu yazışması"}
+                ? "Kamu Kaynakları"
+                : selected?.title ?? "Kamu Yazışması"}
           </h1>
           <p>
             {side === "sablon"
@@ -229,26 +232,26 @@ export function KamuWorkbench() {
               }}
             >
               <header className="sheet-head">
-                <span>{fileName ? fileName : "Gelen kamu evrakı"}</span>
+                <span>{fileName ? fileName : "Gelen Kamu Evrakı"}</span>
                 <div className="sheet-actions">
                   <label className="file-btn">
                     Evrak yükle
                     <input
                       type="file"
-                      accept=".pdf,.txt,.md,application/pdf,text/plain"
+                      accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp"
                       onChange={onFile}
                       disabled={loading}
                     />
                   </label>
                   <button type="submit" disabled={loading || text.trim().length < 8}>
-                    {loading ? "Üretiliyor…" : "Taslak üret"}
+                    {loading ? "Üretiliyor…" : "Taslak Üret"}
                   </button>
                 </div>
               </header>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                aria-label="Kamu evrak metni"
+                aria-label="Kamu Evrak Metni"
                 spellCheck={false}
               />
             </form>

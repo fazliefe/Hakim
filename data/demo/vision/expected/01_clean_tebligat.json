@@ -1,0 +1,7 @@
+{
+  "expected_document_type": "tebligat",
+  "expected_fields": {
+    "notification_date": "14.08.2026"
+  },
+  "expected_warnings": []
+}

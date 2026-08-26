@@ -8,6 +8,7 @@ from retrieval.bm25 import extract_article_no, parse_law_hint
 from hakim_legal_schema.ids import article_id
 
 from graph.projector import neighborhood, neighborhood_decision
+from retrieval.cross_encoder import PairScorer, create_reranker
 from retrieval.embeddings import Embedder, create_embedder
 from retrieval.hybrid import HybridSearcher
 from retrieval.mapping import detect_mulga_warning
@@ -935,11 +936,25 @@ class ResearchEngine:
         neo4j_driver: Any | None = None,
         *,
         evidence_limit: int = 8,
+        decision_index: str | None = None,
+        decision_embedder: Embedder | None = None,
+        reranker: PairScorer | None = None,
     ) -> None:
         self.embedder = embedder or create_embedder(prefer_neural=True)
-        self.hybrid = HybridSearcher(es_client, self.embedder, limit=30)
+        self.hybrid = HybridSearcher(
+            es_client,
+            self.embedder,
+            limit=30,
+            decision_index=decision_index,
+            decision_embedder=decision_embedder,
+        )
         self.neo4j = neo4j_driver
         self.evidence_limit = evidence_limit
+        # RRF sonrası aday daraltma için cross-encoder — bkz.
+        # retrieval/cross_encoder.py. Model yüklenemezse (offline, ilk
+        # çalıştırma) create_reranker None döner, rerank_fused sözcük-
+        # örtüşme sezgiseline düşer.
+        self.reranker = reranker if reranker is not None else create_reranker(prefer_neural=True)
 
     def research(self, query: str, *, law_no: str | None = "5237") -> ResearchResult:
         from retrieval.research_graph import run_research_graph
@@ -993,7 +1008,9 @@ def assemble_research_result(
                 retrievers=list(hit.sources),
                 graph_neighbors=list(neighbor_map.get(hit.chunk_id) or []),
                 used_in_answer=hit.rank <= 5,
-                mulga_warning=detect_mulga_warning(hit.hit.content),
+                mulga_warning=detect_mulga_warning(
+                    hit.hit.content, is_decision=bool((hit.hit.document_id or "").startswith("decision:"))
+                ),
             )
         )
 

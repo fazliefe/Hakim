@@ -1,0 +1,41 @@
+{
+  "id": "temyiz_hukuk",
+  "title": "Temyiz dilekçesi (hukuk)",
+  "family": "hukuk",
+  "makam": "Yargıtay ilgili hukuk dairesi",
+  "legal_basis": ["HMK m.361", "HMK m.362"],
+  "deadline_rule_id": "deadline:temyiz_hukuk:hmk361",
+  "when": "Bölge Adliye Mahkemesi (istinaf) kararına karşı hukuka aykırılık iddiası.",
+  "sections": [
+    { "id": "ust_yazi", "label": "Yargıtay ilgili hukuk dairesi" },
+    { "id": "karar", "label": "Temyiz olunan karar" },
+    { "id": "sure", "label": "Süre (HMK m.361)" },
+    { "id": "sebepler", "label": "Temyiz sebepleri (hukuka aykırılık)" },
+    { "id": "hukuki_nitelendirme", "label": "HMK dayanak" },
+    { "id": "talep", "label": "Bozma talebi" }
+  ],
+  "parsed": {
+    "required": ["makam", "karar", "sebepler", "talep", "sure_cumlesi"],
+    "properties": {
+      "makam": "string",
+      "karar": "string",
+      "sure_cumlesi": "string — 14 gün (iki hafta)",
+      "sebepler": ["string"],
+      "hukuki_nitelendirme": [{ "n": "integer", "madde": "string", "cumle": "string" }],
+      "talep": "string — bozma"
+    }
+  },
+  "writing": {
+    "tone": "Temyiz (hukuk davası): hukuka aykırılık. CMK/ceza terimleri kullanma; sanık/mağdur değil davacı/davalı. Olay tartışmasını istinaf gibi uzatma.",
+    "must": ["HMK m.361", "Yargıtay daire no uydurma", "sure_cumlesi'nde gün sayısını last_day'den (motor verisi) al, ezbere yazma"],
+    "must_not": ["BAM’a hitap", "CMK/TCK madde uydurmak"]
+  },
+  "example": {
+    "makam": "Yargıtay ilgili hukuk dairesi",
+    "karar": "Bölge Adliye Mahkemesi kararı",
+    "sure_cumlesi": "Temyiz süresi HMK m.361 uyarınca iki hafta (14 gün) içindedir.",
+    "sebepler": ["Kararın hukuka aykırılığı"],
+    "hukuki_nitelendirme": [],
+    "talep": "Kararın bozulması talep olunur."
+  }
+}

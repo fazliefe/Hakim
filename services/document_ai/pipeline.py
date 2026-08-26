@@ -17,7 +17,12 @@ from document_ai.answers import (
     format_sure,
     format_taslak,
 )
-from document_ai.classify import Classification, KAMU_TYPES, classify_document
+from document_ai.classify import (
+    Classification,
+    KAMU_TYPES,
+    classify_document,
+    classify_document_llm_assist,
+)
 from document_ai.extract import extract_dates, extract_fields, missing_fields
 from document_ai.gaps import diagnose_islem_gaps
 from document_ai.schemas import FIELD_LABELS
@@ -63,15 +68,23 @@ class Analysis:
     observability: dict[str, Any] = field(default_factory=dict)
     trace_nodes: list[dict[str, Any]] = field(default_factory=list)
     trace_edges: list[dict[str, Any]] = field(default_factory=list)
+    legal_caveat: str | None = None
 
 
 def _deadlines_for(classification: Classification, dates: dict[str, date]) -> list[DeadlineComputation]:
     out: list[DeadlineComputation] = []
     for rule in DEFAULT_RULES:
         remedy = str(rule["remedy"])
+        rule_nature = str(rule.get("nature") or "")
+        # Nature eşleşmezse hiç bakma: ceza kuralı idare metnine, idare kuralı ceza metnine sızmasın.
+        if rule_nature and classification.legal_nature != rule_nature:
+            continue
         include = remedy in classification.remedies
         if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "ceza":
-            if remedy in {"itiraz", "istinaf", "temyiz"}:
+            if remedy in {"itiraz", "istinaf_ceza", "temyiz_ceza"}:
+                include = True
+        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "hukuk":
+            if remedy in {"istinaf_hukuk", "temyiz_hukuk"}:
                 include = True
         if classification.legal_nature == "anayasa" and remedy == "bireysel_basvuru":
             include = True
@@ -128,7 +141,7 @@ def _targets(classification: Classification) -> list[dict[str, str]]:
         {"name": "UYAP Vatandaş", "url": "https://vatandas.uyap.gov.tr"},
         {"name": "mevzuat.gov.tr", "url": "https://www.mevzuat.gov.tr"},
     ]
-    if classification.legal_nature == "ceza":
+    if classification.legal_nature in {"ceza", "hukuk"}:
         rows.append({"name": "Yargıtay Karar Arama", "url": "https://karararama.yargitay.gov.tr"})
     if classification.legal_nature == "idare":
         rows.append({"name": "Danıştay Karar Arama", "url": "https://karararama.danistay.gov.tr"})
@@ -141,9 +154,39 @@ _NATURE_TR = {
     "ceza": "ceza",
     "idare": "idare",
     "anayasa": "anayasa",
+    "hukuk": "hukuk",
     "kamu": "kamu yazışması",
     "belirsiz": "nitelik belirsiz",
 }
+
+
+def _legal_interpretation_caveat(classification: Classification) -> str | None:
+    """Ceren Özkurt'un bulgusu: sistem, arşivdeki GÜNCEL kanun metnini
+    doğrudan uyguluyor. Ama gerçek hukuki sonuç lehe kanun uygulaması (TCK
+    m.7) TEK başına değil — içtihadı birleştirme kararları, zamanaşımı,
+    hâkimin takdir yetkisi gibi başka ilkelerle de bu metinden farklılaşabilir
+    (özellikle ceza hukukunda). Arşivde tarihsel versiyon olmadığı için
+    (yalnızca güncel metin var, bkz. mapping.py'deki mülga notu) bu ilkeler
+    hesaba katılamıyor — kesin bir hukuki tespit sunmuyoruz, sessizce göz ardı
+    de etmiyoruz: açıkça uyarıyoruz."""
+    if classification.document_type not in {"mahkeme_karari", "tebligat", "iddianame", "dilekce"}:
+        return None
+    if classification.legal_nature == "ceza":
+        return (
+            "Bu analiz arşivdeki güncel kanun metnine dayanır. Lehe kanun uygulaması "
+            "(TCK m.7), içtihadı birleştirme kararları, zamanaşımı, hâkimin takdir "
+            "yetkisi gibi ilkeler nedeniyle somut olaydaki gerçek hukuki sonuç bu "
+            "metinden farklılaşabilir — bu ilkeler burada ayrıca değerlendirilmemiştir. "
+            "Kesin dayanak olarak kullanmadan önce bir hukuk uzmanına danışın."
+        )
+    if classification.legal_nature in {"hukuk", "idare"}:
+        return (
+            "Bu analiz arşivdeki güncel kanun metnine dayanır. İçtihat, zamanaşımı/hak "
+            "düşürücü süre istisnaları gibi ilkeler nedeniyle somut olaydaki gerçek "
+            "hukuki sonuç bu metinden farklılaşabilir. Kesin dayanak olarak kullanmadan "
+            "önce bir hukuk uzmanına danışın."
+        )
+    return None
 
 
 def build_verdict(analysis: Analysis) -> str:
@@ -325,6 +368,19 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
     started = now()
     quoted = str(work.get("quoted") or "")
     classification = classify_document(quoted)
+    llm_assist_writer: str | None = None
+    if classification.document_type == "belirsiz" or classification.confidence < 0.55:
+        from llm.writer import resolve_writer, writer_name
+
+        chat_fn = resolve_writer()
+        if chat_fn is not None:
+            try:
+                assisted = classify_document_llm_assist(quoted, classification, chat_fn=chat_fn)
+            except Exception:
+                assisted = None
+            if assisted is not None:
+                classification = assisted
+                llm_assist_writer = writer_name()
     dates = extract_dates(quoted)
     fields = extract_fields(quoted)
     missing = missing_fields(classification.document_type, fields)
@@ -344,6 +400,11 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
         findings.append(Finding(f"{key} tarihi", value.isoformat(), 0.9, value.isoformat(), "evrak metni"))
     sinif_warn = classification.confidence < 0.55 or classification.document_type == "belirsiz"
     summary, answer = format_sinif(classification, fields, missing)
+    llm_assist_note: str | None = None
+    if llm_assist_writer:
+        llm_assist_note = f"Kural motoru belirsiz kaldı; LLM ile doğrulandı (yazıcı: {llm_assist_writer})."
+        summary = f"{summary} · LLM doğrulamalı"
+        answer = f"{answer}\n{llm_assist_note}"
     work["classification"] = classification
     work["dates"] = dates
     work["fields"] = fields
@@ -358,7 +419,7 @@ def step_sinif(work: dict[str, Any]) -> dict[str, Any]:
             summary=summary,
             answer=answer,
             confidence=classification.confidence,
-            note="Tür belirsiz veya düşük güven." if sinif_warn else None,
+            note=llm_assist_note or ("Tür belirsiz veya düşük güven." if sinif_warn else None),
         )
     )
     return work
@@ -578,6 +639,7 @@ def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
     )
     analysis.verdict = build_verdict(analysis)
     analysis.draft = build_draft(analysis, quoted)
+    analysis.legal_caveat = _legal_interpretation_caveat(classification)
     _apply_citation_usage(analysis)
     taslak_summary, taslak_answer = format_taslak(action or "ust_yazi", reason)
     work["analysis"] = analysis
@@ -676,6 +738,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
         "petition": analysis.petition,
         "trace_nodes": analysis.trace_nodes,
         "trace_edges": analysis.trace_edges,
+        "legal_caveat": analysis.legal_caveat,
         "action": analysis.suggested_action,
         "belge": analysis.suggested_action,
         "observability": analysis.observability or {

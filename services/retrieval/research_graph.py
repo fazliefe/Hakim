@@ -40,6 +40,8 @@ class ResearchState(TypedDict, total=False):
     hops: list
     bm25_hits: list
     semantic_hits: list
+    decision_bm25_hits: list
+    decision_semantic_hits: list
     fused: list
     route: str
     neighbors: dict
@@ -132,15 +134,20 @@ def _node_bm25(state: ResearchState) -> ResearchState:
     hits = state["engine"].hybrid.search_bm25(state["query"], law_no=state.get("search_law"))
     enough = bm25_is_enough(state["query"], hits)
     hops = list(state.get("hops") or [])
-    _hop(
-        hops,
-        "bm25",
-        "BM25",
-        started,
-        summary=f"{len(hits)} sonuç" + (" · yeter" if enough else " · semantic gerekir"),
-        state="done" if hits else "warn",
+    # Emsal karar index'i (Yargıtay/Danıştay) yalnızca law_no'suz (serbest
+    # metin) sorgularda dahil edilir — madde arayan biri sadece madde
+    # metnini görsün (kullanıcı kararı, bkz. HybridSearcher.search).
+    decision_hits = (
+        state["engine"].hybrid.search_decision_bm25(state["query"])
+        if state.get("search_law") is None
+        else []
     )
-    return {"bm25_hits": hits, "bm25_ok": enough, "hops": hops}
+    summary = f"{len(hits)} sonuç"
+    if decision_hits:
+        summary += f" · {len(decision_hits)} emsal karar"
+    summary += " · yeter" if enough else " · semantic gerekir"
+    _hop(hops, "bm25", "BM25", started, summary=summary, state="done" if hits else "warn")
+    return {"bm25_hits": hits, "decision_bm25_hits": decision_hits, "bm25_ok": enough, "hops": hops}
 
 
 def _node_vektor(state: ResearchState) -> ResearchState:
@@ -156,17 +163,18 @@ def _node_vektor(state: ResearchState) -> ResearchState:
             state="skip",
             summary="BM25 yeterli; vektör atlandı",
         )
-        return {"semantic_hits": [], "hops": hops}
+        return {"semantic_hits": [], "decision_semantic_hits": [], "hops": hops}
     hits = state["engine"].hybrid.search_semantic(state["query"], law_no=state.get("search_law"))
-    _hop(
-        hops,
-        "vektor",
-        "Vektör",
-        started,
-        summary=f"{len(hits)} sonuç",
-        state="done" if hits else "warn",
+    decision_hits = (
+        state["engine"].hybrid.search_decision_semantic(state["query"])
+        if state.get("search_law") is None
+        else []
     )
-    return {"semantic_hits": hits, "hops": hops}
+    summary = f"{len(hits)} sonuç"
+    if decision_hits:
+        summary += f" · {len(decision_hits)} emsal karar"
+    _hop(hops, "vektor", "Vektör", started, summary=summary, state="done" if hits else "warn")
+    return {"semantic_hits": hits, "decision_semantic_hits": decision_hits, "hops": hops}
 
 
 def _node_rrf(state: ResearchState) -> ResearchState:
@@ -176,6 +184,8 @@ def _node_rrf(state: ResearchState) -> ResearchState:
         state.get("bm25_hits") or [],
         state.get("semantic_hits") or [],
         limit=12,
+        decision_bm25_hits=state.get("decision_bm25_hits") or [],
+        decision_semantic_hits=state.get("decision_semantic_hits") or [],
     )
     if _is_exact_citation_query(state["query"]):
         route = "exact_citation"
@@ -190,9 +200,13 @@ def _node_rrf(state: ResearchState) -> ResearchState:
 
 def _node_rerank(state: ResearchState) -> ResearchState:
     started = time.perf_counter()
-    ranked = rerank_fused(state["query"], list(state.get("fused") or []), limit=12)
+    # getattr: testlerdeki _FakeEngine gibi reranker alanı olmayan motorlarla
+    # da çalışsın — yoksa rerank_fused zaten lexical sezgiseline düşer.
+    scorer = getattr(state.get("engine"), "reranker", None)
+    ranked = rerank_fused(state["query"], list(state.get("fused") or []), limit=12, scorer=scorer)
     hops = list(state.get("hops") or [])
-    _hop(hops, "rerank", "Rerank", started, summary=f"{len(ranked)} kaynak yeniden sıralandı")
+    method = "cross-encoder" if scorer is not None else "lexical"
+    _hop(hops, "rerank", "Rerank", started, summary=f"{len(ranked)} kaynak yeniden sıralandı ({method})")
     return {"fused": ranked, "hops": hops}
 
 

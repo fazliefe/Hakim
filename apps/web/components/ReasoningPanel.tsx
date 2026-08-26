@@ -42,12 +42,12 @@ export function ReasoningPanel({
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
-          <span>Akıl yürütme</span>
+          <span>Akıl Yürütme</span>
           <em>{open ? "Kapat" : `${hops.length} adım`}</em>
         </button>
       ) : (
         <header className="reasoning-head">
-          <h2>Akıl yürütme</h2>
+          <h2>Akıl Yürütme</h2>
         </header>
       )}
       {open ? (

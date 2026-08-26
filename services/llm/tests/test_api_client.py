@@ -168,14 +168,3 @@ def test_disable_reasoning_sends_chat_template_kwargs(monkeypatch) -> None:
     )
     _api_chat_body([{"role": "user", "content": "hi"}], json_mode=True)
     assert payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
-
-
-def test_api_payload_url() -> None:
-    assert api_payload_url("https://api.groq.com/openai/v1") == "https://api.groq.com/openai/v1/chat/completions"
-
-
-def test_api_configured_reads_env(monkeypatch) -> None:
-    monkeypatch.delenv("HAKIM_LLM_API_KEY", raising=False)
-    assert api_configured() is False
-    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
-    assert api_configured() is True

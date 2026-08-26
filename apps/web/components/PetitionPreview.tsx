@@ -24,7 +24,7 @@ export function PetitionPreview({
     <article className={`petition-sheet ${layout}`} data-layout={layout} data-family={family}>
       <header>
         <span>{headerLabel(layout, petition?.title)}</span>
-        <span className="badge">{badge || petition?.title}</span>
+        <span className="badge">{petition?.title || badge}</span>
       </header>
       {actions ? <div className="petition-toolbar">{actions}</div> : null}
       {layout === "resmi" || !petition ? (
@@ -37,7 +37,7 @@ export function PetitionPreview({
           {petition.sehir ? <p className="petition-city">{petition.sehir}</p> : null}
           {(petition.meta || []).length ? (
             <dl className="petition-meta">
-              {petition.meta.map((row) => (
+              {(petition.meta || []).map((row) => (
                 <div key={`${row.label}-${row.value.slice(0, 24)}`} className="petition-meta-row">
                   <dt>{row.label}</dt>
                   <dd>{row.value}</dd>
@@ -113,9 +113,9 @@ function fallbackParagraphs(petition?: PetitionView | null): string[] {
 }
 
 function headerLabel(layout: string, title?: string) {
-  if (layout === "resmi") return "Resmî yazı önizleme";
-  if (layout === "aym") return "Bireysel başvuru önizleme";
-  if (layout === "idari") return "İdari dava önizleme";
-  if (layout === "savcilik" || layout === "ihbar") return "Savcılık yazısı önizleme";
-  return title ? `${title} önizleme` : "Dilekçe önizleme";
+  if (layout === "resmi") return "Resmî Yazı Önizleme";
+  if (layout === "aym") return "Bireysel Başvuru Önizleme";
+  if (layout === "idari") return "İdari Dava Önizleme";
+  if (layout === "savcilik" || layout === "ihbar") return "Savcılık Yazısı Önizleme";
+  return title ? `${title} Önizleme` : "Dilekçe Önizleme";
 }

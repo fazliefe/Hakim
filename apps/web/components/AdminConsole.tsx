@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   AuthActivity,
   AuthUser,
@@ -34,28 +35,28 @@ function logWhen(value?: string | null) {
 }
 
 const ACTIVITY_TITLES: Record<string, string> = {
-  register: "Yeni hesap açıldı",
-  login: "Başarılı giriş yapıldı",
-  verify: "E-posta doğrulandı",
-  password_reset_request: "Parola sıfırlama istendi",
-  password_reset: "Parola sıfırlandı",
-  password_change: "Parola değiştirildi",
-  email_change_request: "E-posta değişikliği istendi",
-  email_change: "E-posta değiştirildi",
-  profile_update: "Profil güncellendi",
-  session_revoke: "Oturumlar kapatıldı",
-  admin_create_user: "Yeni hesap oluşturuldu",
-  admin_set_role: "Rol değiştirildi",
-  admin_lock: "Hesap kilitlendi",
-  admin_unlock: "Hesap kilidi açıldı",
-  admin_delete_user: "Hesap silindi",
-  admin_revoke_sessions: "Oturumlar yönetici tarafından kapatıldı",
-  admin_send_password: "Geçici parola e-posta ile gönderildi",
+  register: "Yeni Hesap Açıldı",
+  login: "Başarılı Giriş Yapıldı",
+  verify: "E-Posta Doğrulandı",
+  password_reset_request: "Parola Sıfırlama İstendi",
+  password_reset: "Parola Sıfırlandı",
+  password_change: "Parola Değiştirildi",
+  email_change_request: "E-Posta Değişikliği İstendi",
+  email_change: "E-Posta Değiştirildi",
+  profile_update: "Profil Güncellendi",
+  session_revoke: "Oturumlar Kapatıldı",
+  admin_create_user: "Yeni Hesap Oluşturuldu",
+  admin_set_role: "Rol Değiştirildi",
+  admin_lock: "Hesap Kilitlendi",
+  admin_unlock: "Hesap Kilidi Açıldı",
+  admin_delete_user: "Hesap Silindi",
+  admin_revoke_sessions: "Oturumlar Yönetici Tarafından Kapatıldı",
+  admin_send_password: "Geçici Parola E-Posta ile Gönderildi",
 };
 
 function activityTitle(row: AuthActivity) {
   if (row.kind === "login" && row.role === "admin") {
-    return "Yönetici paneline başarılı giriş yapıldı";
+    return "Yönetici Paneline Başarılı Giriş Yapıldı";
   }
   return ACTIVITY_TITLES[row.kind] || row.summary;
 }
@@ -66,7 +67,7 @@ function activityTarget(row: AuthActivity) {
 }
 
 function activityRole(role?: string) {
-  return role === "admin" ? "Yönetici - Tam yetkili" : "Kullanıcı";
+  return role === "admin" ? "Yönetici - Tam Yetkili" : "Kullanıcı";
 }
 
 function activityReason(row: AuthActivity) {
@@ -133,16 +134,17 @@ function initials(value?: string) {
 
 function statusLabel(user: AuthUser) {
   if (user.locked) return "Kilitli";
-  if (!user.email_verified) return "Davet bekliyor";
+  if (!user.email_verified) return "Davet Bekliyor";
   return "Aktif";
 }
 
 export function AdminConsole() {
   const router = useRouter();
+  const params = useSearchParams();
   const self = getStoredUser();
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [activity, setActivity] = useState<AuthActivity[]>([]);
-  const [selected, setSelected] = useState("hepsi");
+  const selected = params.get("hesap") || "hepsi";
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -168,6 +170,16 @@ export function AdminConsole() {
       setError(err instanceof Error ? err.message : "Yönetim paneli yüklenemedi");
     });
   }, [router]);
+
+  function selectAccount(id: string) {
+    const next = id === "hepsi" ? "/yonetim" : `/yonetim?hesap=${encodeURIComponent(id)}`;
+    if (id === selected) return;
+    if (id === "hepsi" || selected === "hepsi") {
+      router.push(next);
+      return;
+    }
+    router.replace(next);
+  }
 
   const recent = useMemo(() => {
     const rows = (selected === "hepsi" ? activity : activity.filter((row) => row.user_id === selected)).filter(
@@ -200,8 +212,11 @@ export function AdminConsole() {
       setUsername("");
       setRole("user");
       await reload();
-      const extra = created.preview_code ? ` Davet kodu: ${created.preview_code}` : "";
-      setInfo((created.message || "Hesap oluşturuldu.") + extra);
+      setInfo(
+        created.mailed
+          ? created.message || "Hesap oluşturuldu."
+          : (created.message || "Hesap oluşturuldu.") + " E-posta sunucusu bağlı değil. Kod iletilmedi.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kullanıcı eklenemedi");
     } finally {
@@ -259,11 +274,11 @@ export function AdminConsole() {
     }
     await run(async () => {
       const result = await sendAuthPassword(selectedUser.id);
-      const extras = [
-        result.preview_password ? ` Geçici parola: ${result.preview_password}` : "",
-        result.preview_code ? ` Davet kodu: ${result.preview_code}` : "",
-      ].join("");
-      setInfo((result.message || "Parola e-postaya gönderildi.") + extras);
+      setInfo(
+        result.mailed
+          ? result.message || "Parola e-postaya gönderildi."
+          : (result.message || "Parola oluşturuldu.") + " E-posta sunucusu bağlı değil. Parola iletilmedi.",
+      );
     });
   }
 
@@ -274,7 +289,7 @@ export function AdminConsole() {
     }
     await run(async () => {
       await deleteAuthUser(selectedUser.id);
-      setSelected("hepsi");
+      router.replace("/yonetim");
       setInfo("Hesap silindi.");
     });
   }
@@ -284,16 +299,16 @@ export function AdminConsole() {
       module="yonetim"
       sidebarTitle="Kullanıcılar"
       sidebarItems={[
-        { id: "hepsi", label: "Tüm hesaplar" },
+        { id: "hepsi", label: "Tüm Hesaplar" },
         ...users.map((item) => ({
           id: item.id,
           label: `${item.display_name}${item.locked ? " (kilitli)" : item.role === "admin" ? " (yönetici)" : ""}`,
         })),
       ]}
       sidebarActive={selected}
-      onSidebarSelect={setSelected}
+      onSidebarSelect={selectAccount}
       quote="“Yetki görünür olmalı; dosya değil, masa.”"
-      quoteMeta="Yönetim masası · data/accounts.sqlite"
+      quoteMeta="Yönetim Masası · data/accounts.sqlite"
       inspectorTitle="Davet"
       inspector={
         <div className="admin-inspector">
@@ -304,7 +319,7 @@ export function AdminConsole() {
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
             </label>
             <label>
-              Kullanıcı adı
+              Kullanıcı Adı
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
@@ -318,8 +333,8 @@ export function AdminConsole() {
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ornek@eposta.com" required />
             </label>
             <label>
-              Geçici parola
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+              Geçici Parola
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
             </label>
             <label>
               Rol
@@ -329,11 +344,11 @@ export function AdminConsole() {
               </select>
             </label>
             <button className="btn-gold" type="submit" disabled={saving}>
-              {saving ? "Ekleniyor…" : "Davet gönder"}
+              {saving ? "Ekleniyor…" : "Davet Gönder"}
             </button>
           </form>
           <div className="admin-recent">
-            <h3>{selected === "hepsi" ? "Son işlemler" : "Bu hesabın işlemleri"}</h3>
+            <h3>{selected === "hepsi" ? "Son İşlemler" : "Bu Hesabın İşlemleri"}</h3>
             {recent.length === 0 ? <p className="muted">Henüz hareket yok.</p> : null}
             <ul>
               {recent.map((row) => (
@@ -380,7 +395,7 @@ export function AdminConsole() {
     >
       <section className="main-pane admin-pane">
         <header className="admin-hero">
-          <p className="admin-kicker">Yönetim masası</p>
+          <p className="admin-kicker">Yönetim Masası</p>
           <h1>{selected === "hepsi" ? "Hesaplar" : selectedUser?.display_name || "Hesap"}</h1>
           <p className="admin-lede">
             {selected === "hepsi"
@@ -423,7 +438,7 @@ export function AdminConsole() {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => setSelected(item.id)}
+                onClick={() => selectAccount(item.id)}
               >
                 <span className="admin-mono">{initials(item.display_name)}</span>
                 <span className="admin-person">
@@ -444,7 +459,7 @@ export function AdminConsole() {
             <div className="admin-dossier-head">
               <span className="admin-mono xl">{initials(selectedUser.display_name)}</span>
               <div>
-                <p className="admin-kicker">{selectedUser.role === "admin" ? "Yönetici dosyası" : "Kullanıcı dosyası"}</p>
+                <p className="admin-kicker">{selectedUser.role === "admin" ? "Yönetici Dosyası" : "Kullanıcı Dosyası"}</p>
                 <h2>{selectedUser.display_name}</h2>
                 <p>@{selectedUser.username}</p>
               </div>
@@ -459,7 +474,7 @@ export function AdminConsole() {
                 <strong>{statusLabel(selectedUser)}</strong>
               </div>
               <div>
-                <span>Açık oturum</span>
+                <span>Açık Oturum</span>
                 <strong>{selectedUser.session_count ?? 0}</strong>
               </div>
               <div>
@@ -480,16 +495,16 @@ export function AdminConsole() {
                 </select>
               </label>
               <button type="button" className="btn-ghost" disabled={busy || isSelf} onClick={() => void onLock()}>
-                {selectedUser.locked ? "Kilidi aç" : "Kilitle"}
+                {selectedUser.locked ? "Kilidi Aç" : "Kilitle"}
               </button>
               <button type="button" className="btn-ghost" disabled={busy} onClick={() => void onSendPassword()}>
-                Şifreyi e-posta ile gönder
+                Şifreyi E-Posta ile Gönder
               </button>
               <button type="button" className="btn-ghost" disabled={busy} onClick={() => void onRevoke()}>
-                Oturumları kapat
+                Oturumları Kapat
               </button>
               <button type="button" className="btn-ghost danger" disabled={busy || isSelf} onClick={() => void onDelete()}>
-                Hesabı sil
+                Hesabı Sil
               </button>
             </div>
             {isSelf ? (

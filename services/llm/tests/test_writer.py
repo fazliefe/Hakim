@@ -171,6 +171,79 @@ def test_write_module_merges_example_when_keys_missing(monkeypatch) -> None:
     assert "kaynak" in text.lower()
 
 
+def test_write_module_retries_once_on_unparseable_json(monkeypatch) -> None:
+    from llm import writer as writer_mod
+
+    monkeypatch.setattr(writer_mod, "ollama_enabled", lambda: True)
+    monkeypatch.setattr(writer_mod, "ping", lambda: True)
+    calls: list[list[dict]] = []
+
+    def fake_chat(messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 1:
+            return "bu JSON değil, düz metin"
+        return json.dumps(
+            {
+                "ozet": "Düzeltilmiş özet [1].",
+                "ana_kaynak_n": 1,
+                "gerekce": [{"n": 1, "cumle": "Kaynak cümle [1]."}],
+                "kaynak_uyari": "Bu metin yalnızca yukarıdaki resmi kaynaklara dayanır.",
+            },
+            ensure_ascii=False,
+        )
+
+    text = write_module("arastirma", {"query": "dolandırıcılık", "evidence": []}, chat_fn=fake_chat)
+    assert len(calls) == 2
+    assert text is not None
+    assert "Düzeltilmiş özet" in text
+    # İkinci turda: orijinal mesajlar + modelin bozuk cevabı + hata geri bildirimi
+    assert calls[1][:-2] == calls[0]
+    assert calls[1][-2] == {"role": "assistant", "content": "bu JSON değil, düz metin"}
+    assert calls[1][-1]["role"] == "user"
+    assert "şemaya uymuyor" in calls[1][-1]["content"]
+
+
+def test_write_module_raises_after_second_failure(monkeypatch) -> None:
+    from llm import writer as writer_mod
+    from llm.client import OllamaError
+
+    monkeypatch.setattr(writer_mod, "ollama_enabled", lambda: True)
+    monkeypatch.setattr(writer_mod, "ping", lambda: True)
+    calls: list[list[dict]] = []
+
+    def fake_chat(messages, **kwargs):
+        calls.append(messages)
+        return "hâlâ JSON değil"
+
+    try:
+        write_module("arastirma", {"query": "dolandırıcılık", "evidence": []}, chat_fn=fake_chat)
+    except OllamaError:
+        pass
+    else:
+        raise AssertionError("OllamaError bekleniyordu")
+    assert len(calls) == 2  # bir orijinal + bir düzeltme turu; üçüncü çağrı yok
+
+
+def test_write_belge_retries_once_on_unparseable_json(monkeypatch) -> None:
+    from llm import writer as writer_mod
+
+    monkeypatch.setattr(writer_mod, "ollama_enabled", lambda: True)
+    monkeypatch.setattr(writer_mod, "ping", lambda: True)
+    spec = load_belge("istinaf")
+    example = spec["example"]
+    calls: list[list[dict]] = []
+
+    def fake_chat(messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 1:
+            return "yanlış format"
+        return json.dumps(example, ensure_ascii=False)
+
+    text = write_belge("istinaf", {"action": "istinaf"}, chat_fn=fake_chat)
+    assert len(calls) == 2
+    assert text.lstrip().startswith("T.C.")
+
+
 def test_resolve_writer_prefers_api(monkeypatch) -> None:
     from llm import writer as writer_mod
     from llm.writer import resolve_writer, writer_name

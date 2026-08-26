@@ -57,11 +57,23 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def _cors_origins() -> list[str]:
+    """Demo günü farklı bir host/IP gerekirse kod değişmeden HAKIM_CORS_ORIGINS ile açılsın."""
+    raw = os.environ.get("HAKIM_CORS_ORIGINS", "").strip()
+    if not raw:
+        return DEFAULT_CORS_ORIGINS
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or DEFAULT_CORS_ORIGINS
+
+
 app = FastAPI(title="HAKİM API", version=SCHEMA_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,  # frontend credentials/çerez göndermiyor; wildcard/çoklu origin ile de uyumlu kalsın
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -73,7 +85,10 @@ app.include_router(auth_router)
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=2)
-    law_no: str = "5237"
+    # Varsayılan davranış AYNI kalıyor (TCK). `null` gönderilirse arama tüm
+    # kanunlara VE emsal karar index'ine (Yargıtay/Danıştay) açılır — bkz.
+    # HybridSearcher.search: law_no=None olduğunda kararlar da dahil edilir.
+    law_no: str | None = "5237"
 
 
 class EvidenceOut(BaseModel):
@@ -126,11 +141,20 @@ class DocumentRequest(BaseModel):
     action: str | None = None
 
 
+class BundleRequest(BaseModel):
+    documents: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RedactRequest(BaseModel):
+    text: str = ""
+
+
 @lru_cache(maxsize=1)
 def _engine():
     from graph.neo4j_client import create_neo4j_driver
-    from retrieval.embeddings import create_embedder
+    from retrieval.embeddings import create_decision_embedder, create_embedder
     from retrieval.es_client import create_es_client
+    from retrieval.mapping import DECISION_INDEX_NAME
     from retrieval.research import ResearchEngine
 
     es = create_es_client(os.environ.get("HAKIM_ELASTICSEARCH_URL", "http://127.0.0.1:9200"))
@@ -140,7 +164,16 @@ def _engine():
         neo4j.verify_connectivity()
     except Exception:
         neo4j = None
-    return ResearchEngine(es, embedder=embedder, neo4j_driver=neo4j)
+    # Emsal karar (Yargıtay/Danıştay) index'i — kanun index'inden AYRI embedder
+    # (Evren bge-m3-embed, 1024 dims), law_no'suz sorgularda devreye girer.
+    decision_embedder = create_decision_embedder()
+    return ResearchEngine(
+        es,
+        embedder=embedder,
+        neo4j_driver=neo4j,
+        decision_index=DECISION_INDEX_NAME,
+        decision_embedder=decision_embedder,
+    )
 
 
 def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, Any]]:
@@ -160,7 +193,7 @@ def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, 
         fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
     except Exception:
         return []
-    ranked = rerank_fused(query, fused, limit=4)
+    ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
     neighbors = collect_neighbors(_engine(), ranked)
     rows: list[dict[str, Any]] = []
     for hit in ranked:
@@ -168,7 +201,9 @@ def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, 
         row["n"] = hit.rank
         # Mülga taraması kırpılmamış tam metinden — uyarı 400 karakterden
         # sonra da olabilir (bkz. CMK m.291 fıkra 2).
-        row["mulga_warning"] = detect_mulga_warning(hit.hit.content or "")
+        row["mulga_warning"] = detect_mulga_warning(
+            hit.hit.content or "", is_decision=bool((hit.hit.document_id or "").startswith("decision:"))
+        )
         row["content"] = (hit.hit.content or "")[:400]
         row["used_in_answer"] = True
         row["graph_neighbors"] = neighbors.get(hit.chunk_id) or []
@@ -252,11 +287,18 @@ def _check_elasticsearch() -> str:
 
 def _check_neo4j() -> str:
     try:
-        from graph.neo4j_client import create_neo4j_driver
+        from neo4j import GraphDatabase
+        from graph.neo4j_client import DEFAULT_NEO4J_PASSWORD, DEFAULT_NEO4J_URI, DEFAULT_NEO4J_USER
 
-        driver = create_neo4j_driver()
-        driver.verify_connectivity()
-        driver.close()
+        driver = GraphDatabase.driver(
+            DEFAULT_NEO4J_URI,
+            auth=(DEFAULT_NEO4J_USER, DEFAULT_NEO4J_PASSWORD),
+            connection_timeout=1.5,
+        )
+        try:
+            driver.verify_connectivity()
+        finally:
+            driver.close()
         return LIVE_OK
     except Exception:
         return LIVE_DOWN
@@ -339,6 +381,21 @@ def _check_langgraph() -> str:
     return _check_neo4j()
 
 
+def _check_deadline_calendar() -> str:
+    """Sürekli-güncel VERİ kontrolü — Docker gibi çalışan bir servis değil,
+    services/deadline/engine.py::_RELIGIOUS_HOLIDAYS tablosunun ileriye
+    dönük yeterince güncel olup olmadığını gösterir (bkz. o dosyadaki not).
+    `required`e eklenmiyor: tablo eskiyince yalnızca bayram günlerine denk
+    gelen süre hesapları ±birkaç gün kayabilir, tüm API'yi "kapalı" saymak
+    orantısız olur — diğer pilller gibi bilgilendirici kalır."""
+    try:
+        from deadline.engine import religious_holiday_table_status
+
+        return LIVE_OK if religious_holiday_table_status()["ok"] else LIVE_DOWN
+    except Exception:
+        return LIVE_DOWN
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     checks = {
@@ -350,6 +407,7 @@ def health() -> dict[str, Any]:
         "ollama": _check_ollama(),
         "langfuse": _check_langfuse(),
         "langgraph": _check_langgraph(),
+        "takvim": _check_deadline_calendar(),
     }
     required = ("api", "elasticsearch", "neo4j", "postgres")
     live = all(checks[key] == LIVE_OK for key in required)
@@ -373,6 +431,7 @@ def durum() -> dict[str, Any]:
         "ollama": "Ollama",
         "langfuse": "Langfuse",
         "langgraph": "LangGraph",
+        "takvim": "Süre takvimi",
     }
     return payload
 
@@ -511,7 +570,7 @@ def belgeler() -> dict[str, Any]:
 @app.post("/v1/arastirma", response_model=ResearchResponse)
 def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchResponse:
     try:
-        result = _engine().research(body.query.strip(), law_no=body.law_no)
+        result = _engine().research(body.query.strip(), law_no=(body.law_no or None))
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=503, detail=f"Araştırma motoru hazır değil: {exc}") from exc
 
@@ -564,6 +623,71 @@ async def evrak_dosya(file: UploadFile = File(...), user=Depends(optional_user))
         f"Dosya: {extracted.filename} ({label})",
         {"filename": extracted.filename, "label": label},
     )
+    return payload
+
+
+@app.post("/v1/evrak/analyze")
+async def evrak_analyze(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
+    """StructuredDocument: kalite → VLM alanları → güven bandı. Hukuki hüküm yok. Yalnız fotoğraf."""
+    from document_ai.vision.analyzer import VisionUploadError, analyze_bytes
+    from llm.client import OllamaError
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Dosya boş.")
+    try:
+        document = analyze_bytes(file.filename or "evrak", data)
+    except VisionUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OllamaError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Görüntü analiz edilemedi: {exc}") from exc
+    payload = document.model_dump()
+    _record_activity(
+        user,
+        "evrak",
+        f"VLM analiz: {document.filename} ({document.document_type})",
+        {"document_id": document.document_id, "document_type": document.document_type},
+    )
+    return payload
+
+
+@app.post("/v1/evrak/bundle")
+def evrak_bundle(body: BundleRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Compare already-analyzed documents. Empty list is valid. No VLM call."""
+    from document_ai.bundle.analyzer import analyze_bundle
+    from hakim_legal_schema.document import StructuredDocument
+
+    docs = []
+    for raw in body.documents:
+        try:
+            docs.append(StructuredDocument.model_validate(raw))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Evrak paketi geçersiz: {exc}") from exc
+    bundle = analyze_bundle(docs)
+    _record_activity(
+        user,
+        "evrak",
+        f"Paket: {len(docs)} evrak",
+        {"bundle_id": bundle.bundle_id, "conflicts": len(bundle.conflicts)},
+    )
+    return bundle.model_dump()
+
+
+@app.post("/v1/evrak/redact")
+def evrak_redact(body: RedactRequest, user=Depends(optional_user)) -> dict[str, Any]:
+    """Mask TCKN/phone/IBAN/email in text. Does not change the original document."""
+    from document_ai.privacy.pii_detector import detect_pii, redact_text
+
+    text = body.text or ""
+    regions = detect_pii(text)
+    payload = {
+        "redacted": redact_text(text),
+        "count": len(regions),
+        "kinds": sorted({item.type for item in regions}),
+    }
+    _record_activity(user, "evrak", "Gizleme", {"count": payload["count"]})
     return payload
 
 

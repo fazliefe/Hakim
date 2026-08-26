@@ -8,6 +8,18 @@ defaults:
   embedding:
     model: newmindai/Mursit-Base-TR-Retrieval
     dims: 768
+  # RRF'den çıkan adayları (kanun maddesi + emsal karar, tipik olarak <=12)
+  # daraltmadan önce yeniden sıralayan cross-encoder. Yerel CPU'da çalışır
+  # (Evren API'sinde ayrı bir rerank ucu yok); bu yüzden küçük/hızlı bir
+  # multilingual model seçildi — bge-reranker-v2-m3 gibi büyük modeller
+  # istek başına saniyeler ekleyebilir. Model indirilemezse/yüklenemezse
+  # (offline, ilk çalıştırmada internet yok) retrieval/rerank.py sessizce
+  # sözcük-örtüşme sezgiseline düşer — enabled: false ile de devre dışı
+  # bırakılabilir.
+  rerank:
+    enabled: true
+    model: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+    batch_size: 16
   research:
     allow_ollama: false
   llm:
@@ -81,6 +93,26 @@ profiles:
       # istek thinking açıkken 2320, kapalıyken 126 token). vLLM/Qwen3 standart
       # parametresiyle kapatılıyor.
       disable_reasoning: true
+    # Emsal karar (Yargıtay/Danıştay) semantic aramasında kullanılıyor — AYRI
+    # bir anahtar (`embedding` DEĞİL): kanun maddeleri hâlâ defaults.embedding
+    # (768 dims, yerel CPU model) kullanıyor; iki dense_vector boyutu aynı ES
+    # index'te karışamaz, bkz. retrieval/mapping.py. Bu anahtarı `embedding`
+    # yaparsan `_merge()` defaults.embedding'in üzerine yazar ve kanun
+    # index'inin embedder'ı kırılır (bge-m3-embed geçerli bir yerel
+    # sentence-transformers modeli değil) — canlı doğrulandı, tekrar yapma.
+    decision_embedding:
+      provider: api
+      url: https://evren-llmapi.ssyz.org.tr/v1
+      model: bge-m3-embed
+      dims: 1024
+      timeout: 30
+    # Evren `vlm` alias görüntü kabul etmez (video). El yazısı / fotoğraf:
+    # llm-fast veya llm-large, istek başına en fazla 2 görüntü.
+    vision:
+      model: llm-fast
+      max_images: 2
+      timeout: 120
+      max_tokens: 4096
     ollama:
       enabled: false
       url: http://127.0.0.1:11434

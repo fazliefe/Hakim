@@ -15,6 +15,27 @@ def test_route_yazisma_judgment_is_istinaf() -> None:
     assert "CMK" in reason
 
 
+def test_route_yazisma_hukuk_judgment_is_istinaf_hukuk() -> None:
+    text = (
+        "T.C. ANKARA 4. ASLİYE HUKUK MAHKEMESİ GEREKÇELİ KARAR "
+        "Davacının maddi tazminat davasının reddine, HMK hükümleri uyarınca karar verilmiştir."
+    )
+    action, reason = route_yazisma(classify_document(text))
+    assert action == "istinaf_hukuk"
+    assert "HMK" in reason
+
+
+def test_route_yazisma_hukuk_yargitay_karari_is_temyiz_hukuk() -> None:
+    text = (
+        "Bölge Adliye Mahkemesi'nce davacının istinaf başvurusunun esastan reddine "
+        "oy birliği ile karar verildi. HMK'nin 361. maddesi uyarınca Yargıtay ilgili "
+        "hukuk dairesine temyiz yolu açıktır."
+    )
+    action, reason = route_yazisma(classify_document(text))
+    assert action == "temyiz_hukuk"
+    assert "HMK" in reason
+
+
 def test_route_yazisma_genelge_is_bilgi() -> None:
     text = "T.C. İÇİŞLERİ BAKANLIĞI\nGENELGE\n2026/12 sayılı genelge ile taşra teşkilatına duyurulur."
     action, reason = route_yazisma(classify_document(text))

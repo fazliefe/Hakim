@@ -1,0 +1,15 @@
+{
+  "document_id": "law:2577",
+  "law_no": "2577",
+  "title": "İDARÍ YARGILAMA USULÜ KANUNU12",
+  "source_file": "idari yargılama kanunu.pdf",
+  "content_hash": "275f1c701709651434922795706702e54a941649b91065c873634bdfae201657",
+  "extract_method": "ocr",
+  "pages": 39,
+  "note": "paddleocr-gpu pages all from idari-yargilama-kanunu",
+  "chunk_count": 91,
+  "article_chunks": 91,
+  "retrieved_at": "2026-08-20T16:17:38.725619+00:00",
+  "official": true,
+  "kind": "pdf_law"
+}

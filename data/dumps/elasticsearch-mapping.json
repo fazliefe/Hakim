@@ -1,0 +1,74 @@
+{
+  "hakim-legal-chunks": {
+    "mappings": {
+      "properties": {
+        "article_id": {
+          "type": "keyword"
+        },
+        "article_no": {
+          "type": "keyword"
+        },
+        "authority": {
+          "type": "keyword"
+        },
+        "chunk_id": {
+          "type": "keyword"
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "hakim_turkish"
+        },
+        "court": {
+          "type": "keyword"
+        },
+        "document_id": {
+          "type": "keyword"
+        },
+        "document_type": {
+          "type": "keyword"
+        },
+        "embedding": {
+          "type": "dense_vector",
+          "dims": 768,
+          "index": true,
+          "similarity": "cosine",
+          "index_options": {
+            "type": "int8_hnsw",
+            "m": 16,
+            "ef_construction": 100
+          }
+        },
+        "embedding_model": {
+          "type": "keyword"
+        },
+        "indexed_at": {
+          "type": "date"
+        },
+        "law_no": {
+          "type": "keyword"
+        },
+        "source_provider": {
+          "type": "keyword"
+        },
+        "title": {
+          "type": "text",
+          "fields": {
+            "raw": {
+              "type": "keyword"
+            }
+          },
+          "analyzer": "hakim_turkish"
+        },
+        "valid_from": {
+          "type": "date"
+        },
+        "valid_until": {
+          "type": "date"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

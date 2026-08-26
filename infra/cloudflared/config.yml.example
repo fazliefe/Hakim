@@ -1,0 +1,32 @@
+# Cloudflare named Tunnel şablonu — HÂKİM yarışma deployment'ı.
+#
+# Kopyala: bu dosyayı aynı klasöre `config.yml` adıyla kopyala ve
+# aşağıdaki iki placeholder'ı doldur. `config.yml` .gitignore'da —
+# commit edilmez (tunnel ID/hostname makineye/hesaba özeldir).
+#
+#   copy infra\cloudflared\config.yml.example infra\cloudflared\config.yml
+#
+# Doldurman gereken iki alan:
+#   1. tunnel / credentials-file → `cloudflared tunnel create hakim-competition`
+#      çıktısında verilir (bkz. docs/competition_deployment.md "İlk kurulum").
+#   2. hostname → `cloudflared tunnel route dns` ile bağladığın gerçek alan adı.
+#
+# Bu dosyanın YERİ önemli değil; `cloudflared tunnel run --config <bu-dosya>
+# hakim-competition` ile açıkça verilir (scripts/start_competition.ps1 da
+# aynısını yapar). cloudflared'in kendi varsayılan konumu
+# (%USERPROFILE%\.cloudflared\config.yml) yerine repo içinde tutmak, tek
+# yerden takip edilebilir olması için tercih edildi.
+
+tunnel: <TUNNEL_ID>
+credentials-file: <TUNNEL_CREDENTIALS_JSON_PATH>
+
+ingress:
+  # Yalnızca frontend (Next.js, port 3000) dışa açılır. Next.js kendi
+  # rewrite'ı (apps/web/next.config.js) /api-hakim/* isteklerini backend'e
+  # (127.0.0.1:8000) proxy'ler — backend hiçbir zaman doğrudan burada
+  # listelenmez / dışa açılmaz.
+  - hostname: <HAKIM_PUBLIC_HOSTNAME>
+    service: http://localhost:3000
+  # Eşleşmeyen her şey (yalnızca bu tunnel'a tanımlı olmayan başka bir
+  # hostname/path) 404 döner — cloudflared'in zorunlu "catch-all" kuralı.
+  - service: http_status:404
