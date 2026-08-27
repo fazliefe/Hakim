@@ -33,7 +33,7 @@ const TR_MAP: Record<string, string> = {
   Ç: "c",
 };
 
-function toUsername(value: string): string {
+export function toUsername(value: string): string {
   return value
     .split("")
     .map((ch) => TR_MAP[ch] ?? ch)
