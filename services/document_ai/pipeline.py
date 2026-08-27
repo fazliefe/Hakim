@@ -5,7 +5,11 @@ from datetime import date, datetime
 from typing import Any, Callable
 
 from deadline.catalog import DEFAULT_RULES
-from deadline.engine import DeadlineComputation, compute_last_day_detail
+from deadline.engine import (
+    LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR,
+    DeadlineComputation,
+    compute_last_day_detail,
+)
 from document_ai.agents import build_reasoning, chain_status as score_chain, diagnose_chain, elapsed_ms, now, pick_yazisma_action, step
 from document_ai.answers import (
     format_havale,
@@ -133,6 +137,13 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
         # writer.py) tuple'ın ilk elemanından fazlasını okumuyordu, geri
         # kalanı yalnızca arayüze ham kod olarak sızıyordu.
         basis = (str(rule["legal_basis_label"]),)
+        coverage_warning = None
+        if last is not None and last.year > LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR:
+            coverage_warning = (
+                f"Bu son gün ({last.isoformat()}), dini tatil takviminin tam kapsadığı "
+                f"{LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR} yılının ötesine düşüyor — "
+                "resmi tatile denk gelip gelmediği doğrulanamadı, elle kontrol edin."
+            )
         out.append(
             DeadlineComputation(
                 rule_id=str(rule["id"]),
@@ -145,6 +156,7 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
                 legal_basis=basis,
                 missing=missing,
                 adjustment_note=note,
+                calendar_coverage_warning=coverage_warning,
             )
         )
     return out
@@ -758,6 +770,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
                 "legal_basis": list(item.legal_basis),
                 "missing": item.missing,
                 "adjustment_note": item.adjustment_note,
+                "calendar_coverage_warning": item.calendar_coverage_warning,
             }
             for item in analysis.deadlines
         ],

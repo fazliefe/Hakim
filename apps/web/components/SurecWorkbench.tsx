@@ -66,6 +66,9 @@ export function SurecWorkbench() {
               )}
             </p>
             {selected.adjustment_note ? <p className="deadline-note">{selected.adjustment_note}</p> : null}
+            {selected.calendar_coverage_warning ? (
+              <p className="deadline-coverage-warning">{selected.calendar_coverage_warning}</p>
+            ) : null}
             <p className="muted">{selected.legal_basis.join(" · ")}</p>
             <LegalDisclaimer variant="genel" />
           </div>

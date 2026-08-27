@@ -238,3 +238,7 @@ class DeadlineComputation:
     legal_basis: tuple[str, ...]
     missing: str | None = None
     adjustment_note: str | None = None
+    # last_day, religious_holiday_table_status()'un "tam kapsanan" dediği
+    # yılın ötesine düşüyorsa dolu — global /health pilinin aksine, BU
+    # SPESİFİK hesaba bağlı bir uyarı (bkz. pipeline.py::_deadlines_for).
+    calendar_coverage_warning: str | None = None

@@ -41,6 +41,41 @@ def test_analyze_computes_istinaf_deadline() -> None:
     assert "taslak" in analysis.draft.lower()
 
 
+def test_deadline_has_no_coverage_warning_within_covered_years() -> None:
+    """Orta #9: dini tatil takviminin tam kapsadığı ufkun içine düşen normal
+    bir hesap, madde bazında hiçbir uyarı taşımamalı — yalnızca /health'teki
+    global pil değil, spesifik hesabın kendisi de sessizce doğru olmalı."""
+    text = (
+        "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR\n"
+        "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+        "İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\n"
+        "Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf")
+    assert istinaf.calendar_coverage_warning is None
+
+
+def test_deadline_carries_coverage_warning_beyond_covered_years(monkeypatch) -> None:
+    """Aynı hesap, dini tatil takviminin kapsadığı ufuk daraltılınca (ör.
+    tablo bakımı gerçekten geride kalsaydı) artık bir uyarı taşımalı — bu,
+    global /health pilinden BAĞIMSIZ, spesifik hesabın kendi alanı."""
+    monkeypatch.setattr("document_ai.pipeline.LAST_FULLY_COVERED_RELIGIOUS_HOLIDAY_YEAR", 2020)
+    text = (
+        "T.C. ANKARA 4. AĞIR CEZA MAHKEMESİ GEREKÇELİ KARAR\n"
+        "Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verildi. "
+        "İstinaf yolu açıktır.\n"
+        "Karar tarihi: 01.08.2026\n"
+        "Tebliğ tarihi: 14.08.2026"
+    )
+    analysis = analyze_document(text)
+    istinaf = next(item for item in analysis.deadlines if item.name == "İstinaf")
+    assert istinaf.calendar_coverage_warning is not None
+    assert "2020" in istinaf.calendar_coverage_warning
+    assert istinaf.last_day.isoformat() in istinaf.calendar_coverage_warning
+
+
 def test_administrative_judgment_does_not_borrow_criminal_deadline() -> None:
     # "istinaf" kelimesi idare kararında da geçer; CMK m.273'e (7 gün) sızmamalı,
     # İYUK m.45'e (30 gün, idari istinaf) bağlanmalı.

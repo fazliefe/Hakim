@@ -414,6 +414,9 @@ export function EvrakWorkbench() {
                     {selectedDeadline.adjustment_note ? (
                       <p className="deadline-note">{selectedDeadline.adjustment_note}</p>
                     ) : null}
+                    {selectedDeadline.calendar_coverage_warning ? (
+                      <p className="deadline-coverage-warning">{selectedDeadline.calendar_coverage_warning}</p>
+                    ) : null}
                     {selectedDeadline.legal_basis.length ? (
                       <p className="muted">{selectedDeadline.legal_basis.join(" · ")}</p>
                     ) : null}

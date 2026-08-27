@@ -2884,6 +2884,20 @@ a.source-row {
   line-height: 1.45;
 }
 
+/* .deadline-note'tan (rutin hafta sonu/tatil ertelemesi) kasıtlı olarak
+   ayrı: takvimin tam kapsamadığı bir yıla düşen, doğrulanmamış bir son gün
+   uyarısı — --danger tonuyla, .legal-disclaimer ile tutarlı. */
+.deadline-coverage-warning {
+  margin: 0.3rem 0 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid rgba(229, 115, 115, 0.4);
+  background: rgba(229, 115, 115, 0.08);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1080px) {
   .login-screen.cinematic .login-panel {
     right: 50%;

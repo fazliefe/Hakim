@@ -555,6 +555,7 @@ export type DeadlineOut = {
   legal_basis: string[];
   missing: string | null;
   adjustment_note?: string | null;
+  calendar_coverage_warning?: string | null;
 };
 
 export type ReasoningHop = {
