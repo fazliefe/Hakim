@@ -7,6 +7,7 @@ import { AppShell, InspectorMode } from "@/components/AppShell";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { RESEARCH_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
 import { lawPrefix, shortLabel } from "@/components/graph/layout";
+import { LegalDisclaimer } from "@/components/LegalDisclaimer";
 
 const LegalGraphView = dynamic(
   () => import("@/components/graph/LegalGraphView").then((mod) => mod.LegalGraphView),
@@ -134,6 +135,7 @@ function AnswerBody({
           </p>
         );
       })}
+      <LegalDisclaimer variant="arastirma" />
     </div>
   );
 }

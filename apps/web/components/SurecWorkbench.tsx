@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { LegalDisclaimer } from "@/components/LegalDisclaimer";
 import { writerLabel } from "@/lib/api";
 import { NATURE_LABEL, SAMPLE_EVRAK, STAGE_LABEL, useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
 
@@ -66,6 +67,7 @@ export function SurecWorkbench() {
             </p>
             {selected.adjustment_note ? <p className="deadline-note">{selected.adjustment_note}</p> : null}
             <p className="muted">{selected.legal_basis.join(" · ")}</p>
+            <LegalDisclaimer variant="genel" />
           </div>
         ) : (
           <p className="muted">Karar metnini çözün; süreler kural motoruyla hesaplanır.</p>

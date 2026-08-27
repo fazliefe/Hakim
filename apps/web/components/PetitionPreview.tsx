@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { PetitionView } from "@/lib/api";
+import { LegalDisclaimer } from "@/components/LegalDisclaimer";
 
 export function PetitionPreview({
   petition,
@@ -27,6 +28,7 @@ export function PetitionPreview({
         <span className="badge">{petition?.title || badge}</span>
       </header>
       {actions ? <div className="petition-toolbar">{actions}</div> : null}
+      <LegalDisclaimer variant="dilekce" />
       {layout === "resmi" || !petition ? (
         <pre className="draft-pre">{draft}</pre>
       ) : (

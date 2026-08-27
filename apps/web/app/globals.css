@@ -2359,6 +2359,17 @@ button {
   color: var(--silver-400);
 }
 
+.legal-disclaimer {
+  margin: 0.9rem 0 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(229, 115, 115, 0.4);
+  border-radius: 8px;
+  background: rgba(229, 115, 115, 0.08);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
 .cite {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
@@ -4137,6 +4148,14 @@ a.source-row {
   color: #7a2e12;
 }
 
+/* Kağıt görünümlü önizleme her zaman açık zeminli (color-scheme: light);
+   burada tema değişkeni yerine sabit, kontrastı garanti bir kırmızı kullan. */
+.petition-sheet .legal-disclaimer {
+  border-color: rgba(155, 44, 44, 0.35);
+  background: rgba(155, 44, 44, 0.07);
+  color: #7a2020;
+}
+
 .petition-sheet[data-family="anayasa"] {
   background: #f4f1ea;
 }
@@ -5342,4 +5361,110 @@ html[data-theme="light"] .mobile-modulenav a {
   align-items: center;
   justify-content: center;
   padding: 0.7rem 1rem;
+}
+
+/* ---------- KVKK consent (login) ---------- */
+
+.login-kvkk {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.3rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(168, 180, 200, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.login-kvkk p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--silver-400);
+}
+
+.login-kvkk p a {
+  color: var(--gold-400);
+  text-decoration: underline;
+}
+
+.login-kvkk-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 12.5px;
+  color: var(--silver-200);
+  cursor: pointer;
+}
+
+.login-kvkk-check input {
+  margin-top: 0.18rem;
+  flex-shrink: 0;
+}
+
+/* ---------- KVKK page ---------- */
+
+.kvkk-screen {
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  padding: 3rem 1.2rem 4rem;
+  background: var(--navy-950);
+}
+
+.kvkk-card {
+  width: 100%;
+  max-width: 720px;
+}
+
+.kvkk-back {
+  display: inline-block;
+  margin-bottom: 1.4rem;
+  font-size: 0.85rem;
+  color: var(--gold-400);
+}
+
+.kvkk-card h1 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  margin: 0 0 0.3rem;
+  color: var(--silver-200);
+}
+
+.kvkk-updated {
+  margin: 0 0 1.4rem;
+  font-size: 0.8rem;
+  color: var(--silver-400);
+}
+
+.kvkk-todo {
+  margin: 0 0 1.8rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(229, 115, 115, 0.4);
+  border-radius: 8px;
+  background: rgba(229, 115, 115, 0.08);
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
+.kvkk-card section {
+  margin: 0 0 1.5rem;
+}
+
+.kvkk-card h2 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+  color: var(--gold-400);
+}
+
+.kvkk-card p,
+.kvkk-card li {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--silver-200);
+}
+
+.kvkk-card ul {
+  margin: 0;
+  padding-left: 1.2rem;
 }

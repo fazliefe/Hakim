@@ -53,6 +53,7 @@ export function LoginScreen() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [code, setCode] = useState("");
   const [mailOffline, setMailOffline] = useState(false);
+  const [kvkkConsent, setKvkkConsent] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -165,6 +166,7 @@ export function LoginScreen() {
       setMailOffline(false);
       if (next !== "unuttum") setCode("");
     }
+    if (next !== "kayit") setKvkkConsent(false);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -176,6 +178,10 @@ export function LoginScreen() {
       if (mode === "kayit") {
         if (password !== passwordConfirm) {
           setError("Şifreler eşleşmiyor.");
+          return;
+        }
+        if (!kvkkConsent) {
+          setError("Devam etmek için KVKK Aydınlatma Metni'ni onaylamanız gerekir.");
           return;
         }
         const pending = await registerAccount(username.trim(), email.trim(), password, username.trim());
@@ -440,6 +446,28 @@ export function LoginScreen() {
                   minLength={6}
                 />
               </label>
+            ) : null}
+            {mode === "kayit" ? (
+              <div className="login-kvkk">
+                <p>
+                  Yüklediğiniz evrak ve dilekçe metinleri, taslak üretimi için yapay zekâ servislerine
+                  gönderilir ve hesabınızla ilişkilendirilerek saklanır. Kişisel verilerinizin işlenmesi
+                  hakkında ayrıntılı bilgi{" "}
+                  <a href="/kvkk" target="_blank" rel="noopener noreferrer">
+                    KVKK Aydınlatma Metni
+                  </a>
+                  'nde yer alır.
+                </p>
+                <label className="login-kvkk-check">
+                  <input
+                    type="checkbox"
+                    checked={kvkkConsent}
+                    onChange={(e) => setKvkkConsent(e.target.checked)}
+                    required
+                  />
+                  <span>KVKK Aydınlatma Metni'ni okudum, kişisel verilerimin bu kapsamda işlenmesini kabul ediyorum.</span>
+                </label>
+              </div>
             ) : null}
             {mode === "giris" ? (
               <button type="button" className="login-forgot" onClick={() => go("unuttum")}>
