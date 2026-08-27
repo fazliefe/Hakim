@@ -536,6 +536,18 @@ export async function runResearch(query: string, lawNo: string | null = null): P
   return response.json();
 }
 
+/** Araştırma dikte: mikrofon kaydını Groq Whisper API'sine (backend üzerinden) gönderir. */
+export async function transcribeAudio(blob: Blob): Promise<{ text: string }> {
+  const body = new FormData();
+  const ext = blob.type.includes("mp4") ? "mp4" : blob.type.includes("wav") ? "wav" : "webm";
+  body.append("file", blob, `dikte.${ext}`);
+  const response = await apiFetch("/v1/arastirma/dikte", { method: "POST", body });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Ses metne çevrilemedi"));
+  }
+  return response.json();
+}
+
 export type Finding = {
   label: string;
   value: string;

@@ -28,6 +28,19 @@ defaults:
     enabled: false
   research:
     allow_ollama: false
+  # Araştırma modülündeki dikte (sesle yazma) özelliği — aktif yazım
+  # profilinden (active: yukarıda) BAĞIMSIZ, her zaman Groq'un Whisper API'si.
+  # Evren'de bir transkripsiyon uç noktası yok; profil evren/ollama/colab
+  # olsa bile dikte çalışsın diye burada, defaults'ta sabit tutuluyor
+  # (bkz. hakim_config.py::_parse — merged değil doğrudan defaults okunur).
+  # Anahtar: HAKIM_WHISPER_API_KEY (yoksa HAKIM_LLM_API_KEY'e düşer).
+  # Yalnızca Araştırma'da kullanılıyor: kullanıcı burada kendi kişisel/dosya
+  # verisini değil, genel bir hukuki soru dikte ediyor — bu yüzden self-hosted
+  # değil bir API kabul edilebilir (evrak/işlem modüllerinde OLMAZDI).
+  whisper:
+    url: https://api.groq.com/openai/v1
+    model: whisper-large-v3-turbo
+    timeout: 30
   llm:
     max_tokens: 900
     timeout: 25

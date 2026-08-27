@@ -650,6 +650,31 @@ def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchRes
     )
 
 
+@app.post("/v1/arastirma/dikte")
+async def arastirma_dikte(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, str]:
+    """Ses -> metin (dikte). Yalnızca Araştırma modülü için — kullanıcı burada
+    kendi kişisel/dosya verisini değil, genel bir hukuki soru dikte ediyor
+    (bkz. services/llm/speech.py'deki gerekçe). Evrak/işlem modüllerinde
+    AYNI mantık uygulanmamalı."""
+    from llm.speech import transcribe_audio, whisper_configured
+
+    if not whisper_configured():
+        raise HTTPException(status_code=503, detail="Dikte yapılandırılmamış (HAKIM_WHISPER_API_KEY yok).")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Ses verisi boş.")
+    try:
+        text = transcribe_audio(
+            data,
+            filename=file.filename or "audio.webm",
+            content_type=file.content_type or "audio/webm",
+        )
+    except Exception as exc:
+        logger.exception("Dikte başarısız")
+        raise HTTPException(status_code=422, detail=f"Dikte edilemedi: {exc}") from exc
+    return {"text": text}
+
+
 @app.post("/v1/evrak")
 def evrak(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
     payload = _analyze(body.text, surface="evrak")

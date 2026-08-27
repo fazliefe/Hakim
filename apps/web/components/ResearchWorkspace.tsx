@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Evidence, ResearchResponse, runResearch } from "@/lib/api";
+import { Evidence, ResearchResponse, runResearch, transcribeAudio } from "@/lib/api";
 import { AppShell, InspectorMode } from "@/components/AppShell";
 import { ReasoningPanel } from "@/components/ReasoningPanel";
 import { RESEARCH_THINK_STEPS, ThinkingHops } from "@/components/ThinkingHops";
@@ -177,6 +177,31 @@ function buildFollowUp(turns: ChatTurn[], userText: string): string {
   return `${lead}\nKonu: ${topic}`;
 }
 
+/**
+ * Sesli okuma için cevap metnini "konuşulabilir" hale getirir: [n] atıf
+ * işaretleri sessizce atlanmak yerine sözlü olarak belirtilir
+ * ("...kaynak 3'e göre..."), başlıklar ve liste işaretleri de doğal
+ * duraklamalarla okunacak şekilde sadeleştirilir.
+ */
+function toSpeakableText(text: string): string {
+  return text
+    .replace(/\[(\d+)\]/g, (_match, n: string) => `, kaynak ${n}'e göre,`)
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/^[•\-]\s+/gm, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s*,\s*,/g, ",")
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\n/g, " ")
+    .trim();
+}
+
+/** Tarayıcının desteklediği ilk MediaRecorder MIME türünü döndürür. */
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type));
+}
+
 export function ResearchWorkspace() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -192,9 +217,37 @@ export function ResearchWorkspace() {
   const threadEnd = useRef<HTMLDivElement>(null);
   const [readingId, setReadingId] = useState<string | null>(null);
 
+  // Dikte (Groq Whisper API) — yalnızca Araştırma modülünde, bkz. services/llm/speech.py
+  const [micSupported, setMicSupported] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [micStatus, setMicStatus] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const micStreamRef = useRef<MediaStream | null>(null);
+
+  // Sesli cevap (window.speechSynthesis) — atıflar sözlü belirtilir, bkz. toSpeakableText
+  const [ttsSupported, setTtsSupported] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+
   useEffect(() => {
     setHistory(readJson(HISTORY_KEY, []));
     setSaved(readJson(SAVED_KEY, []));
+    setMicSupported(
+      typeof navigator !== "undefined" &&
+        Boolean(navigator.mediaDevices?.getUserMedia) &&
+        typeof MediaRecorder !== "undefined",
+    );
+    setTtsSupported(typeof window !== "undefined" && Boolean(window.speechSynthesis));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -274,7 +327,82 @@ export function ResearchWorkspace() {
     await runQuery(query, { followUp: turns.length > 0 });
   }
 
+  async function toggleMic() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (transcribing) return;
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      const mimeType = pickRecorderMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        micStreamRef.current = null;
+        setRecording(false);
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType || "audio/webm" });
+        recordedChunksRef.current = [];
+        if (!blob.size) {
+          setMicStatus("Kayıt boş, tekrar deneyin.");
+          return;
+        }
+        setTranscribing(true);
+        setMicStatus("Ses metne çevriliyor…");
+        try {
+          const { text } = await transcribeAudio(blob);
+          setQuery((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+          setMicStatus("Dikte tamamlandı.");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Dikte başarısız";
+          setError(message);
+          setMicStatus(message);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setMicStatus("Kayıt başladı, durdurmak için tekrar tıklayın.");
+    } catch {
+      setMicStatus("Mikrofon erişimi reddedildi veya kullanılamıyor.");
+    }
+  }
+
+  function stopSpeaking() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingId(null);
+  }
+
+  function speakTurn(turn: ChatTurn) {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (speakingId === turn.id) {
+      stopSpeaking();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(toSpeakableText(turn.answer));
+    const voices = window.speechSynthesis.getVoices();
+    const trVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith("tr"));
+    if (trVoice) utterance.voice = trVoice;
+    utterance.lang = trVoice?.lang || "tr-TR";
+    utterance.onend = () => setSpeakingId((current) => (current === turn.id ? null : current));
+    utterance.onerror = () => setSpeakingId((current) => (current === turn.id ? null : current));
+    setSpeakingId(turn.id);
+    window.speechSynthesis.speak(utterance);
+  }
+
   function startNewResearch() {
+    stopSpeaking();
     setTurns([]);
     setResult(null);
     setQuery("");
@@ -418,7 +546,19 @@ export function ResearchWorkspace() {
                     <div key={turn.id} className="chat-turn">
                       <p className="chat-q">{turn.query}</p>
                       <article className="answer">
-                        {index === turns.length - 1 ? <h1>Cevap</h1> : <h2 className="chat-answer-label">Cevap</h2>}
+                        <div className="answer-head">
+                          {index === turns.length - 1 ? <h1>Cevap</h1> : <h2 className="chat-answer-label">Cevap</h2>}
+                          {ttsSupported && turn.answer ? (
+                            <button
+                              type="button"
+                              className={`speak-btn ${speakingId === turn.id ? "speaking" : ""}`}
+                              onClick={() => speakTurn(turn)}
+                              aria-pressed={speakingId === turn.id}
+                            >
+                              {speakingId === turn.id ? "⏹ Durdur" : "🔊 Sesli Oku"}
+                            </button>
+                          ) : null}
+                        </div>
                         {turn.answer ? (
                           <AnswerBody text={turn.answer} selected={selected} onCite={openSource} />
                         ) : (
@@ -517,9 +657,25 @@ export function ResearchWorkspace() {
               }
               aria-label={turns.length ? "Devam Sorusu" : "Hukuki Soru"}
             />
+            {micSupported ? (
+              <button
+                type="button"
+                className={`mic-btn ${recording ? "recording" : ""}`}
+                onClick={toggleMic}
+                disabled={transcribing}
+                aria-pressed={recording}
+                aria-label={recording ? "Dikteyi durdur" : "Dikte ile yaz"}
+                title={recording ? "Dikteyi durdur" : "Dikte ile yaz"}
+              >
+                {transcribing ? "…" : recording ? "⏺" : "🎤"}
+              </button>
+            ) : null}
             <button type="submit" disabled={loading || query.trim().length < 2}>
               {loading ? "Kaynaklar Tartılıyor…" : turns.length ? "Devam Et" : "Araştır"}
             </button>
+            <span className="mic-status" role="status" aria-live="polite">
+              {micStatus}
+            </span>
           </form>
         ) : null}
         {side === "arastirmalar" ? (

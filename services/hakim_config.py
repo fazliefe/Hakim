@@ -74,6 +74,13 @@ class ModelsConfig:
     vision_max_images: int
     vision_timeout: float
     vision_max_tokens: int
+    # Dikte (STT) — aktif yazım profilinden (llm.*) KASITLI olarak bağımsız:
+    # Evren'de bir Whisper uç noktası yok, bu yüzden `defaults.whisper`
+    # doğrudan `raw["defaults"]` üzerinden okunur (merged/profil overlay'e
+    # değil) — profil evren/ollama/vs. olsa bile dikte çalışmaya devam eder.
+    whisper_url: str
+    whisper_model: str
+    whisper_timeout: float
 
 
 class ModelsConfigError(ValueError):
@@ -118,6 +125,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     classification_fallback = merged.get("classification_fallback") or {}
     research = merged.get("research") or {}
     vision = merged.get("vision") or {}
+    whisper = defaults.get("whisper") or {}
     cfg = ModelsConfig(
         profile=profile,
         writer=str(merged.get("writer") or "api"),
@@ -160,6 +168,9 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         vision_max_images=int(vision.get("max_images") or 2),
         vision_timeout=float(vision.get("timeout") or 120),
         vision_max_tokens=int(vision.get("max_tokens") or 4096),
+        whisper_url=str(whisper.get("url") or "https://api.groq.com/openai/v1").rstrip("/"),
+        whisper_model=str(whisper.get("model") or "whisper-large-v3-turbo"),
+        whisper_timeout=float(whisper.get("timeout") or 30),
     )
     _validate(cfg)
     return cfg
