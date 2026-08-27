@@ -12,6 +12,7 @@
   --gold-600: #b8942a;
   --gold-800: #6f5210;
   --silver-200: #e8eef6;
+  --silver-300: #c3cddc;
   --silver-400: #a8b4c8;
   --steel: #8fa0b8;
   --danger: #e57373;
@@ -4868,6 +4869,7 @@ html[data-theme="light"] {
   --gold-600: #9a7820;
   --gold-800: #5c4510;
   --silver-200: #1c160c;
+  --silver-300: #3a3226;
   --silver-400: #5c5346;
   --steel: #7a7164;
   --danger: #9b2c2c;
@@ -5227,6 +5229,51 @@ html[data-theme="light"] .login-error {
 
 html[data-theme="light"] .login-legal {
   color: rgba(90, 70, 45, 0.55);
+}
+
+/* Gündüz temasında koyu lacivert zeminde kalan panel/kart/düğmeler —
+   sabit rgba() arkaplan kullanan, tema token'ına bağlı olmayan seçiciler
+   (bkz. --navy-* yalnızca html[data-theme="light"] kapsamında geçersiz
+   kılınır; buradaki background değerleri o değişkenlere değil ham renge
+   sabitlenmiş). "Kart" yüzeyler #fffdf8, "iz/track" yüzeyler #f7f1e3. */
+html[data-theme="light"] .mode-switch {
+  background: #f7f1e3;
+  border-color: rgba(154, 120, 32, 0.24);
+}
+
+html[data-theme="light"] .islem-compose .file-btn {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.35);
+  color: #6f5210;
+}
+
+html[data-theme="light"] .islem-examples button {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.22);
+  color: var(--silver-300);
+}
+
+html[data-theme="light"] .islem-photo-chip,
+html[data-theme="light"] .admin-metrics div,
+html[data-theme="light"] .evidence-panel,
+html[data-theme="light"] .graph-caption,
+html[data-theme="light"] .emsal-karar-card,
+html[data-theme="light"] .trace-hops,
+html[data-theme="light"] .trace-hop,
+html[data-theme="light"] .saved-article,
+html[data-theme="light"] .evrak-verdict,
+html[data-theme="light"] .evrak-ozet,
+html[data-theme="light"] .speak-btn,
+html[data-theme="light"] .mic-btn,
+html[data-theme="light"] .qr-card {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.18);
+}
+
+html[data-theme="light"] .gap-field input {
+  background: #fffdf8;
+  border-color: rgba(154, 120, 32, 0.28);
+  color: var(--silver-200);
 }
 
 @media (max-width: 768px), (orientation: landscape) and (max-height: 720px) and (max-width: 1100px) {
