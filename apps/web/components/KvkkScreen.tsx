@@ -56,6 +56,12 @@ export function KvkkScreen() {
             (belgeden çıkarılan yapılandırılmış alanlar) maskelenmeden gönderilir. Kullanılan
             sağlayıcı(lar) ve veri saklama politikaları: <strong>[doldurulacak]</strong>.
           </p>
+          <p>
+            Ayrıca, sistemin doğru çalışıp çalışmadığını izlemek (gözlemlenebilirlik) amacıyla bu
+            istekler <strong>Langfuse</strong> (ABD merkezli bulut servisi) üzerinden kaydedilebilir;
+            bu kayıtlar da yukarıdaki maskeleme kuralına tabidir ve yalnızca teknik ekip erişimine
+            açıktır.
+          </p>
         </section>
 
         <section>
