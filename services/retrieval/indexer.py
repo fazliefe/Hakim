@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Callable
 
 from retrieval.embeddings import Embedder, HashingEmbedder
 from retrieval.mapping import INDEX_NAME, chunk_from_article_row, chunk_from_decision_row, index_settings
+
+logger = logging.getLogger(__name__)
 
 
 ARTICLE_SQL = """
@@ -216,5 +219,5 @@ class LegalChunkIndexer:
                     }
                 )
         self.ensure_index()
-        print(f"pdf_laws chunks={len(rows)}", flush=True)
+        logger.info("pdf_laws chunks=%d", len(rows))
         return self.index_rows(rows)

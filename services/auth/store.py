@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import secrets
 import sqlite3
 import string
-import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -15,6 +15,8 @@ from typing import Any
 
 from auth.mail import send_code_email, send_password_email, smtp_configured
 from auth.passwords import MIN_PASSWORD_LENGTH, hash_password, password_too_short, verify_password
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SQLITE = ROOT / "data" / "accounts.sqlite"
@@ -59,13 +61,12 @@ def _bootstrap_admin_password() -> str:
     if env:
         return env
     generated = secrets.token_urlsafe(12)
-    print(
-        "[hakim-auth] HAKIM_ADMIN_PASSWORD set edilmemiş; ilk admin hesabı için "
-        f"rastgele parola üretildi: {generated}\n"
-        "[hakim-auth] Bu parolayı not edin (bir daha gösterilmez) veya .env'e "
-        "HAKIM_ADMIN_PASSWORD=... ekleyip data/accounts.sqlite dosyasını silerek "
-        "yeniden başlatın.",
-        file=sys.stderr,
+    logger.warning(
+        "HAKIM_ADMIN_PASSWORD set edilmemiş; ilk admin hesabı için rastgele "
+        "parola üretildi: %s. Bu parolayı not edin (bir daha gösterilmez) "
+        "veya .env'e HAKIM_ADMIN_PASSWORD=... ekleyip data/accounts.sqlite "
+        "dosyasını silerek yeniden başlatın.",
+        generated,
     )
     return generated
 

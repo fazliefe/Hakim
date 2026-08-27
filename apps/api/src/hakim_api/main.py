@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -15,6 +16,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from hakim_legal_schema import SCHEMA_VERSION
+
+logging.basicConfig(
+    level=os.environ.get("HAKIM_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path[:0] = [str(ROOT / "services"), str(ROOT / "packages" / "legal-schema" / "src")]
@@ -44,7 +51,7 @@ async def lifespan(_app: FastAPI):
 
         get_store()
     except Exception:
-        pass
+        logger.exception("Auth store başlatılamadı")
     if "pytest" not in sys.modules:
         import threading
 
@@ -54,7 +61,7 @@ async def lifespan(_app: FastAPI):
 
             init_langfuse()
         except Exception:
-            pass
+            logger.warning("Langfuse başlatılamadı, gözlemlenebilirlik devre dışı kalacak", exc_info=True)
     yield
 
 
@@ -164,6 +171,7 @@ def _engine():
         neo4j = create_neo4j_driver()
         neo4j.verify_connectivity()
     except Exception:
+        logger.warning("Neo4j bağlantısı kurulamadı, graf komşuluğu devre dışı kalacak", exc_info=True)
         neo4j = None
     # Emsal karar (Yargıtay/Danıştay) index'i — kanun index'inden AYRI embedder
     # (Evren bge-m3-embed, 1024 dims), law_no'suz sorgularda devreye girer.
@@ -193,6 +201,7 @@ def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, 
     try:
         fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
     except Exception:
+        logger.exception("Mevzuat arama başarısız (evrak analizi kaynak bulamadan devam edecek)")
         return []
     ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
     neighbors = collect_neighbors(_engine(), ranked)
@@ -246,6 +255,7 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             )
             return draft, petition, None
         except Exception as exc:  # noqa: BLE001 - taşınıp aşağıda işleniyor
+            logger.exception("Taslak üretimi başarısız")
             return None, None, exc
 
     def _make_ozet() -> str | None:
@@ -257,6 +267,7 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
         try:
             return write_module("evrak", {**payload, "action": action_id, "user_text": text[:900]})
         except Exception:
+            logger.warning("Evrak özeti üretilemedi", exc_info=True)
             return None
 
     # Taslak (compose_islem/write_module) ve özet (write_module("evrak", ...))
@@ -316,6 +327,7 @@ def _check_elasticsearch() -> str:
         es = Elasticsearch(DEFAULT_ES_URL, request_timeout=1.5)
         return LIVE_OK if es.ping() else LIVE_DOWN
     except Exception:
+        logger.debug("Elasticsearch health-check başarısız", exc_info=True)
         return LIVE_DOWN
 
 
@@ -335,6 +347,7 @@ def _check_neo4j() -> str:
             driver.close()
         return LIVE_OK
     except Exception:
+        logger.debug("Neo4j health-check başarısız", exc_info=True)
         return LIVE_DOWN
 
 
@@ -347,6 +360,7 @@ def _check_postgres() -> str:
             conn.execute("SELECT 1")
         return LIVE_OK
     except Exception:
+        logger.debug("Postgres health-check başarısız", exc_info=True)
         return LIVE_DOWN
 
 
@@ -375,12 +389,14 @@ def _check_yazim() -> str:
         else:
             value = _check_ollama()
     except Exception:
+        logger.debug("Yazım (LLM) health-check başarısız", exc_info=True)
         try:
             from llm.api_client import api_configured
 
             if not api_configured():
                 value = _check_ollama()
         except Exception:
+            logger.debug("Yazım health-check fallback (ollama) da başarısız", exc_info=True)
             value = LIVE_DOWN
     _YAZIM_CHECK["at"] = now
     _YAZIM_CHECK["value"] = value
@@ -396,6 +412,7 @@ def _check_ollama() -> str:
 
         value = LIVE_OK if ping() else LIVE_DOWN
     except Exception:
+        logger.debug("Ollama health-check başarısız", exc_info=True)
         value = LIVE_DOWN
     _OLLAMA_CHECK["at"] = now
     _OLLAMA_CHECK["value"] = value
@@ -408,6 +425,7 @@ def _check_langfuse() -> str:
 
         return LIVE_OK if langfuse_configured() else LIVE_DOWN
     except Exception:
+        logger.debug("Langfuse health-check başarısız", exc_info=True)
         return LIVE_DOWN
 
 
@@ -427,6 +445,7 @@ def _check_deadline_calendar() -> str:
 
         return LIVE_OK if religious_holiday_table_status()["ok"] else LIVE_DOWN
     except Exception:
+        logger.debug("Süre takvimi kapsam kontrolü başarısız", exc_info=True)
         return LIVE_DOWN
 
 
@@ -494,6 +513,7 @@ def _source_counts() -> dict[str, int]:
             ).fetchall()
         return {str(row[0]): int(row[1]) for row in rows}
     except Exception:
+        logger.warning("Kaynak sayıları Postgres'ten okunamadı", exc_info=True)
         return {}
 
 
@@ -537,6 +557,7 @@ def graf() -> dict[str, Any]:
             return {"nodes": [], "edges": [], "counts": {}, "detail": "Neo4j kapalı"}
         return dump_graph(driver)
     except Exception as exc:
+        logger.exception("Graf okunamadı")
         raise HTTPException(status_code=503, detail=f"Graf okunamadı: {exc}") from exc
 
 
@@ -606,6 +627,7 @@ def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchRes
     try:
         result = _engine().research(body.query.strip(), law_no=(body.law_no or None))
     except Exception as exc:  # pragma: no cover
+        logger.exception("Araştırma motoru hazır değil")
         raise HTTPException(status_code=503, detail=f"Araştırma motoru hazır değil: {exc}") from exc
 
     _record_activity(
@@ -676,6 +698,7 @@ async def evrak_analyze(file: UploadFile = File(...), user=Depends(optional_user
     except OllamaError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        logger.exception("Görüntü analiz edilemedi")
         raise HTTPException(status_code=422, detail=f"Görüntü analiz edilemedi: {exc}") from exc
     payload = document.model_dump()
     _record_activity(
@@ -830,6 +853,7 @@ def senaryo(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any
 
             payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
     except Exception as exc:
+        logger.exception("Senaryo taslağı üretimi başarısız")
         payload["writer_error"] = str(exc)[:280]
         mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
     payload["reasoning"] = build_reasoning(
