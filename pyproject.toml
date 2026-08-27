@@ -38,6 +38,7 @@ addopts = ["--import-mode=importlib"]
 testpaths = [
     "packages/legal-schema/tests",
     "apps/api/tests",
+    "services/auth/tests",
     "connectors/mevzuat/tests",
     "connectors/courts/tests",
     "connectors/agencies/tests",
