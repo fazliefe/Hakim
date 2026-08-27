@@ -14,6 +14,7 @@ import {
   verifyAccount,
 } from "@/lib/api";
 import { subscribePhoneLayout } from "@/lib/phone-layout";
+import { applyTheme, readTheme, THEME_KEY } from "@/lib/theme";
 import { QrEntryLink } from "@/components/QrEntryLink";
 
 type Mode = "giris" | "kayit" | "dogrula" | "unuttum" | "reset-kod" | "yeni-sifre";
@@ -63,8 +64,23 @@ export function LoginScreen() {
   const [ready, setReady] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [narrow, setNarrow] = useState(false);
+  const [sceneTheme, setSceneTheme] = useState<"dark" | "light">("dark");
   const onBiasChange = useCallback((v: number) => {
     biasRef.current = v;
+  }, []);
+
+  useEffect(() => {
+    setSceneTheme(readTheme());
+    const sync = () => setSceneTheme(readTheme());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === THEME_KEY) sync();
+    };
+    window.addEventListener("hakim-theme", sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("hakim-theme", sync);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -326,7 +342,7 @@ export function LoginScreen() {
 
         {narrow ? null : (
           <div className="login-stage">
-            <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} />
+            <InteractiveScale onBiasChange={onBiasChange} size="hero" scrollProgress={scrollProgress} theme={sceneTheme} />
           </div>
         )}
 
@@ -334,6 +350,33 @@ export function LoginScreen() {
           <Image src="/hakim-emblem.png" alt="" width={28} height={28} priority />
           <span>HÂKİM</span>
         </header>
+
+        <button
+          type="button"
+          className="login-theme-toggle"
+          onClick={() => applyTheme(sceneTheme === "dark" ? "light" : "dark")}
+          aria-label={sceneTheme === "dark" ? "Gündüz moduna geç" : "Gece moduna geç"}
+          title={sceneTheme === "dark" ? "Gündüz moduna geç" : "Gece moduna geç"}
+        >
+          {sceneTheme === "dark" ? (
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.6" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                d="M12 2.6v2.4M12 19v2.4M4.6 12H2.2M21.8 12h-2.4M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M18.4 5.6l-1.7 1.7M7.3 16.7l-1.7 1.7"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M20.2 14.6a8.4 8.4 0 0 1-10.8-10.8 8.6 8.6 0 1 0 10.8 10.8Z"
+              />
+            </svg>
+          )}
+        </button>
 
         <div className="login-titlecard">
           <p className="login-kicker">Kaynak Odaklı Hukuk Zekâsı</p>

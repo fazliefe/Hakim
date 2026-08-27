@@ -274,6 +274,51 @@ button {
   filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.45));
 }
 
+.login-theme-toggle {
+  position: absolute;
+  z-index: 5;
+  top: 1.6rem;
+  right: 1.8rem;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(226, 188, 106, 0.28);
+  background: rgba(14, 16, 20, 0.4);
+  color: #e8c56a;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity 0.9s ease 0.35s,
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.35s,
+    background 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.login-screen.cinematic.is-ready .login-theme-toggle {
+  opacity: 1;
+  transform: none;
+}
+
+.login-theme-toggle:hover {
+  background: rgba(14, 16, 20, 0.6);
+  border-color: rgba(226, 188, 106, 0.5);
+}
+
+html[data-theme="light"] .login-theme-toggle {
+  border-color: rgba(140, 96, 32, 0.3);
+  background: rgba(255, 250, 240, 0.55);
+  color: #a8781f;
+}
+
+html[data-theme="light"] .login-theme-toggle:hover {
+  background: rgba(255, 250, 240, 0.8);
+  border-color: rgba(140, 96, 32, 0.55);
+}
+
 .login-brand span {
   font-family: var(--font-brand);
   letter-spacing: 0.28em;
@@ -4792,18 +4837,115 @@ html[data-theme="light"] .legend-dot {
   border-color: #8a7340;
 }
 
+/* Gündüz modu: gece "mumla aydınlanmış mermer salon" temasının aynı
+   kompozisyonu (aynı terazi, aynı sütunlar, aynı ADALET kemeri) — güneş
+   ışığıyla dolu bir adliye salonu olarak yeniden ışıklandırılmış. Sıcak
+   traverten/fildişi + bronzlaşmış altın paleti; soğuk mavi ton yok. */
 html[data-theme="light"] .login-screen.cinematic {
-  color-scheme: dark;
-  background: #03040a;
-  --navy-950: #050c18;
-  --navy-900: #0a1628;
-  --gold-200: #f6e7b0;
-  --gold-400: #e8c56a;
-  --gold-500: #d4af37;
-  --gold-600: #b8942a;
-  --silver-200: #e8eef6;
-  --silver-400: #a8b4c8;
-  --steel: #8fa0b8;
+  color-scheme: light;
+  background: #ece1c9;
+  color: #2c2013;
+  --navy-950: #ece1c9;
+  --navy-900: #e2d5b4;
+  --gold-200: #c99a3c;
+  --gold-400: #a8781f;
+  --gold-500: #8f6519;
+  --gold-600: #785316;
+  --silver-200: #2c2013;
+  --silver-400: #5a4a30;
+  --steel: #8a7a5f;
+}
+
+html[data-theme="light"] .login-depth {
+  background:
+    radial-gradient(ellipse 48% 42% at 28% 42%, rgba(184, 130, 40, 0.16), transparent 62%),
+    radial-gradient(ellipse 36% 50% at 72% 18%, rgba(255, 250, 235, 0.55), transparent 58%);
+}
+
+html[data-theme="light"] .login-shaft {
+  background: linear-gradient(180deg, rgba(255, 244, 214, 0.55), rgba(255, 244, 214, 0.04) 46%, transparent 72%);
+}
+
+html[data-theme="light"] .login-orb-a {
+  background: rgba(184, 130, 40, 0.18);
+}
+
+html[data-theme="light"] .login-orb-b {
+  background: rgba(224, 200, 156, 0.24);
+}
+
+html[data-theme="light"] .login-orb-c {
+  background: rgba(160, 110, 40, 0.12);
+}
+
+html[data-theme="light"] .login-horizon {
+  background: linear-gradient(180deg, transparent, rgba(90, 66, 30, 0.14) 55%, rgba(90, 66, 30, 0.26));
+}
+
+html[data-theme="light"] .login-vignette {
+  background: radial-gradient(ellipse at 34% 48%, transparent 58%, rgba(80, 58, 26, 0.16) 100%);
+}
+
+html[data-theme="light"] .login-curtain {
+  background: #ece1c9;
+}
+
+html[data-theme="light"] .login-brand span {
+  color: rgba(44, 32, 19, 0.82);
+}
+
+html[data-theme="light"] .login-kicker {
+  color: rgba(140, 96, 32, 0.88);
+}
+
+html[data-theme="light"] .login-hero-copy {
+  color: #2c2013;
+}
+
+html[data-theme="light"] .login-slogan {
+  color: rgba(90, 70, 45, 0.85);
+}
+
+html[data-theme="light"] .login-screen.cinematic .login-card {
+  background: rgba(255, 250, 240, 0.72);
+  border-color: rgba(140, 96, 32, 0.26);
+  box-shadow: 0 24px 64px rgba(90, 66, 30, 0.16), 0 0 40px rgba(184, 130, 40, 0.1);
+}
+
+html[data-theme="light"] .login-card h2 {
+  color: #2c2013;
+}
+
+html[data-theme="light"] .login-form label {
+  color: rgba(44, 32, 19, 0.78);
+}
+
+html[data-theme="light"] .login-form input {
+  border-color: rgba(44, 32, 19, 0.18);
+  background: rgba(44, 32, 19, 0.05);
+  color: #2c2013;
+}
+
+html[data-theme="light"] .login-form input:focus {
+  border-color: rgba(140, 96, 32, 0.55);
+  background: rgba(44, 32, 19, 0.08);
+  box-shadow: 0 0 0 4px rgba(140, 96, 32, 0.14);
+}
+
+html[data-theme="light"] .login-form input::placeholder {
+  color: rgba(90, 70, 45, 0.6);
+}
+
+html[data-theme="light"] .login-mode button.active {
+  color: #2c2013;
+}
+
+html[data-theme="light"] .login-error {
+  color: #a83e3e;
+}
+
+html[data-theme="light"] .login-legal {
+  color: rgba(90, 70, 45, 0.55);
 }
 
 @media (max-width: 768px), (orientation: landscape) and (max-height: 720px) and (max-width: 1100px) {

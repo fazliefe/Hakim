@@ -1,21 +1,142 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Lightformer, OrbitControls, Sparkles, Text } from "@react-three/drei";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 type DragSide = "left" | "right" | "beam" | null;
+export type SceneTheme = "dark" | "light";
 
 type Props = {
   size?: "hero" | "compact";
   onBiasChange?: (bias: number) => void;
   scrollProgress?: number;
+  theme?: SceneTheme;
 };
 
-const GOLD = "#d4af37";
 const orbitGate = { allowed: true };
+
+// ---------------------------------------------------------------------------
+// Tema paleti
+//
+// Gece: mumla/meşaleyle aydınlanmış, mermer bir adalet salonu — koyu lacivert-
+// siyah taş, altın yaldız, sıcak/soğuk kontrast spot ışıkları, tozlu karanlık.
+// Gündüz: AYNI salon — aynı sütunlar, aynı terazi, aynı ADALET kemeri — ama
+// öğle güneşiyle dolu: sıcak traverten/fildişi taş, bronzlaşmış altın, tek
+// baskın güneş ışığı + sıcak dolgu (soğuk mavi ton YOK, gece'deki ay ışığı
+// hissi yerine gün ışığının netliği/şeffaflığı).
+// ---------------------------------------------------------------------------
+
+type ScenePalette = {
+  bg: string;
+  gold: string;
+  goldWarm: string;
+  goldPale: string;
+  goldMuted: string;
+  steel: string;
+  sun: string;
+  fill: string;
+  spot1: string;
+  spot2: string;
+  hazeWarm: string;
+  hazeCool: string;
+  envA: string;
+  envB: string;
+  sparkle: string;
+  shadowColor: string;
+  ambientIntensity: number;
+  fillIntensity: number;
+  bloomThreshold: number;
+  bloomIntensity: number;
+  bloomSmoothing: number;
+};
+
+const PALETTE: Record<SceneTheme, ScenePalette> = {
+  dark: {
+    bg: "#07090f",
+    gold: "#d4af37",
+    goldWarm: "#e8c56a",
+    goldPale: "#f4e4bc",
+    goldMuted: "#c9b37a",
+    steel: "#c5cdd8",
+    sun: "#fff3dc",
+    fill: "#9aacd0",
+    spot1: "#f3e0b8",
+    spot2: "#f0d7a0",
+    hazeWarm: "#f0d48a",
+    hazeCool: "#c5d4f0",
+    envA: "#a8b8d4",
+    envB: "#e8d5a4",
+    sparkle: "#e8c56a",
+    shadowColor: "#000000",
+    ambientIntensity: 0.32,
+    fillIntensity: 0.45,
+    bloomThreshold: 0.22,
+    bloomIntensity: 0.65,
+    bloomSmoothing: 0.3,
+  },
+  light: {
+    bg: "#ece1c9",
+    gold: "#a8781f",
+    goldWarm: "#c99a3c",
+    goldPale: "#fff3da",
+    goldMuted: "#8f7038",
+    steel: "#97a0a6",
+    sun: "#fff8ea",
+    fill: "#e9d9b8",
+    spot1: "#fff0d2",
+    spot2: "#ffe9bd",
+    hazeWarm: "#fff2d6",
+    hazeCool: "#f3e6c8",
+    envA: "#e6d6ae",
+    envB: "#f2e2b8",
+    sparkle: "#fff2d6",
+    shadowColor: "#5c4526",
+    ambientIntensity: 0.62,
+    fillIntensity: 0.3,
+    bloomThreshold: 0.78,
+    bloomIntensity: 0.35,
+    bloomSmoothing: 0.25,
+  },
+};
+
+// Taş/mermer yüzeylerin tek tek ayarlanmış tonları — gece'deki koyu
+// lacivert-siyah varyasyonların her biri, gündüz'de aynı bağıl derinlik
+// hissini koruyan bir traverten/fildişi tonuna eşleniyor.
+const STONE_MAP: Record<string, string> = {
+  "#171a22": "#d8c9a5",
+  "#14171f": "#d3c39a",
+  "#1b1f28": "#e0d2b0",
+  "#0a0c13": "#d9c9a4",
+  "#151820": "#cdbd90",
+  "#141820": "#d0c093",
+  "#1b202b": "#e3d5b5",
+  "#12151c": "#c9b98b",
+  "#171b24": "#d4c49a",
+  "#10131a": "#c6b586",
+  "#151821": "#cebe91",
+  "#2a2418": "#b9995c",
+  "#1e2430": "#c7ad78",
+  "#161a22": "#c3b384",
+  "#0c0b10": "#cfbf94",
+  "#0b0d14": "#d6c6a0",
+  "#2c2416": "#b28f52",
+};
+
+const ScenePaletteContext = createContext<{ theme: SceneTheme; palette: ScenePalette; stone: (hex: string) => string }>(
+  {
+    theme: "dark",
+    palette: PALETTE.dark,
+    stone: (hex) => hex,
+  }
+);
+
+function useScenePalette() {
+  return useContext(ScenePaletteContext);
+}
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -30,22 +151,20 @@ function usePrefersReducedMotion() {
 }
 
 function GoldMaterial({ roughness = 0.22, metalness = 1 }: { roughness?: number; metalness?: number }) {
+  const { palette } = useScenePalette();
   return (
-    <meshStandardMaterial
-      color={GOLD}
-      metalness={metalness}
-      roughness={roughness}
-      envMapIntensity={1.25}
-    />
+    <meshStandardMaterial color={palette.gold} metalness={metalness} roughness={roughness} envMapIntensity={1.25} />
   );
 }
 
 function SteelMaterial() {
-  return <meshStandardMaterial color="#c5cdd8" metalness={0.92} roughness={0.28} envMapIntensity={1} />;
+  const { palette } = useScenePalette();
+  return <meshStandardMaterial color={palette.steel} metalness={0.92} roughness={0.28} envMapIntensity={1} />;
 }
 
 function StoneMaterial({ color = "#171a22" }: { color?: string }) {
-  return <meshStandardMaterial color={color} roughness={0.72} metalness={0.18} envMapIntensity={0.45} />;
+  const { stone } = useScenePalette();
+  return <meshStandardMaterial color={stone(color)} roughness={0.72} metalness={0.18} envMapIntensity={0.45} />;
 }
 
 function Column({ position }: { position: [number, number, number] }) {
@@ -76,6 +195,7 @@ function Column({ position }: { position: [number, number, number] }) {
 }
 
 function DistantHalo({ reducedMotion }: { reducedMotion: boolean }) {
+  const { palette } = useScenePalette();
   const ref = useRef<THREE.Group>(null);
   useFrame((_, dt) => {
     if (reducedMotion || !ref.current) return;
@@ -85,26 +205,27 @@ function DistantHalo({ reducedMotion }: { reducedMotion: boolean }) {
     <group ref={ref} position={[-0.45, 1.2, -4.6]}>
       <mesh>
         <torusGeometry args={[1.9, 0.012, 12, 96]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.22} envMapIntensity={1.5} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.22} envMapIntensity={1.5} />
       </mesh>
       <mesh>
         <torusGeometry args={[1.52, 0.006, 12, 96]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={0.5} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={0.5} />
       </mesh>
       <mesh>
         <ringGeometry args={[0.35, 0.72, 48]} />
-        <meshBasicMaterial color={GOLD} transparent opacity={0.07} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color={palette.gold} transparent opacity={0.07} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </group>
   );
 }
 
 function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
+  const { palette, stone } = useScenePalette();
   return (
     <group>
       <mesh position={[0, 2.8, 0]}>
         <cylinderGeometry args={[12.5, 12.5, 8.4, 48, 1, true]} />
-        <meshStandardMaterial color="#0a0c13" roughness={0.92} metalness={0.08} side={THREE.BackSide} />
+        <meshStandardMaterial color={stone("#0a0c13")} roughness={0.92} metalness={0.08} side={THREE.BackSide} />
       </mesh>
       <Column position={[-3.15, 0, -2.55]} />
       <Column position={[2.55, 0, -2.9]} />
@@ -113,11 +234,11 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
       <InscribedPanel position={[2.95, 1.58, -3.45]} rotation={[0, -0.48, 0]} title="HUKUK" opacity={0.92} />
       <mesh position={[-1.4, 4.4, -3.2]} rotation={[0.55, 0.15, -0.18]}>
         <planeGeometry args={[1.6, 7.5]} />
-        <meshBasicMaterial color="#e8c56a" transparent opacity={0.05} depthWrite={false} />
+        <meshBasicMaterial color={palette.goldWarm} transparent opacity={0.05} depthWrite={false} />
       </mesh>
       <mesh position={[1.1, 4.2, -3.6]} rotation={[0.5, -0.2, 0.12]}>
         <planeGeometry args={[1.2, 6.8]} />
-        <meshBasicMaterial color="#c9d4ee" transparent opacity={0.04} depthWrite={false} />
+        <meshBasicMaterial color={palette.hazeCool} transparent opacity={0.04} depthWrite={false} />
       </mesh>
       {[1.55, 2.35, 3.35].map((radius) => (
         <mesh key={radius} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.014, 0]}>
@@ -140,11 +261,11 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
       })}
       <mesh position={[0, 2.12, 0]}>
         <cylinderGeometry args={[12.42, 12.42, 0.22, 48, 1, true]} />
-        <meshStandardMaterial color="#151820" roughness={0.8} metalness={0.12} side={THREE.BackSide} />
+        <meshStandardMaterial color={stone("#151820")} roughness={0.8} metalness={0.12} side={THREE.BackSide} />
       </mesh>
       <mesh position={[0, 2.0, 0]}>
         <cylinderGeometry args={[12.38, 12.38, 0.02, 48, 1, true]} />
-        <meshStandardMaterial color={GOLD} roughness={0.3} metalness={1} side={THREE.BackSide} />
+        <meshStandardMaterial color={palette.gold} roughness={0.3} metalness={1} side={THREE.BackSide} />
       </mesh>
       <DistantHalo reducedMotion={reducedMotion} />
       {!reducedMotion ? (
@@ -154,7 +275,7 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
           size={1.6}
           speed={0.12}
           opacity={0.28}
-          color="#e8c56a"
+          color={palette.sparkle}
           position={[-0.4, 1.7, -2.2]}
         />
       ) : null}
@@ -163,6 +284,7 @@ function ChamberBackdrop({ reducedMotion }: { reducedMotion: boolean }) {
 }
 
 function HallLantern({ position }: { position: [number, number, number] }) {
+  const { palette } = useScenePalette();
   return (
     <group position={position}>
       <mesh position={[0, 0.42, 0]}>
@@ -171,11 +293,11 @@ function HallLantern({ position }: { position: [number, number, number] }) {
       </mesh>
       <mesh>
         <sphereGeometry args={[0.048, 16, 16]} />
-        <meshBasicMaterial color="#f4e4bc" transparent opacity={0.9} />
+        <meshBasicMaterial color={palette.goldPale} transparent opacity={0.9} />
       </mesh>
       <mesh>
         <sphereGeometry args={[0.16, 16, 16]} />
-        <meshBasicMaterial color="#e8c56a" transparent opacity={0.07} depthWrite={false} />
+        <meshBasicMaterial color={palette.goldWarm} transparent opacity={0.07} depthWrite={false} />
       </mesh>
       <mesh position={[0, -0.07, 0]}>
         <coneGeometry args={[0.055, 0.08, 8]} />
@@ -200,25 +322,26 @@ function InscribedPanel({
   width?: number;
   height?: number;
 }) {
+  const { palette, stone } = useScenePalette();
   const lines = [0.82, 0.7, 0.76, 0.52, 0.68, 0.44, 0.6];
   return (
     <group position={position} rotation={rotation}>
       <mesh castShadow>
         <boxGeometry args={[width + 0.08, height + 0.1, 0.05]} />
-        <meshStandardMaterial color="#141820" roughness={0.74} metalness={0.16} />
+        <meshStandardMaterial color={stone("#141820")} roughness={0.74} metalness={0.16} />
       </mesh>
       <mesh position={[0, 0, 0.028]}>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color="#1b202b" roughness={0.62} metalness={0.22} transparent opacity={opacity} />
+        <meshStandardMaterial color={stone("#1b202b")} roughness={0.62} metalness={0.22} transparent opacity={opacity} />
       </mesh>
       <mesh position={[0, height * 0.28, 0.032]}>
         <planeGeometry args={[width * 0.72, 0.012]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={opacity} />
       </mesh>
       <Text
         position={[0, height * 0.36, 0.034]}
         fontSize={0.078}
-        color={GOLD}
+        color={palette.gold}
         anchorX="center"
         anchorY="middle"
         letterSpacing={0.18}
@@ -230,7 +353,7 @@ function InscribedPanel({
         <mesh key={index} position={[-(width * 0.32) + span * width * 0.18, height * 0.12 - index * 0.085, 0.034]}>
           <planeGeometry args={[width * span * 0.55, 0.012]} />
           <meshStandardMaterial
-            color="#c9b37a"
+            color={palette.goldMuted}
             metalness={0.45}
             roughness={0.4}
             transparent
@@ -243,29 +366,31 @@ function InscribedPanel({
 }
 
 function MiniScale({ opacity }: { opacity: number }) {
+  const { palette } = useScenePalette();
   return (
     <group>
       <mesh position={[0, 0.028, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.01, 0.01, 0.5, 8]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.25} transparent opacity={opacity} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.25} transparent opacity={opacity} />
       </mesh>
       <mesh position={[0, 0.028, 0.01]}>
         <boxGeometry args={[0.02, 0.014, 0.14]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.25} transparent opacity={opacity} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.25} transparent opacity={opacity} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.25, 0.026, 0]}>
         <circleGeometry args={[0.065, 16]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={opacity} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0.25, 0.026, 0]}>
         <circleGeometry args={[0.065, 16]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={opacity} />
       </mesh>
     </group>
   );
 }
 
 function FloorCompass({ opacity }: { opacity: number }) {
+  const { palette, stone } = useScenePalette();
   const labels = [
     { text: "HUKUK", angle: 0 },
     { text: "KANUN", angle: Math.PI / 2 },
@@ -276,13 +401,13 @@ function FloorCompass({ opacity }: { opacity: number }) {
     <group position={[-0.3, 0.02, -5.7]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.15, 48]} />
-        <meshStandardMaterial color="#12151c" roughness={0.52} metalness={0.32} />
+        <meshStandardMaterial color={stone("#12151c")} roughness={0.52} metalness={0.32} />
       </mesh>
       {[0.42, 0.72, 1.08].map((radius) => (
         <mesh key={radius} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
           <ringGeometry args={[radius, radius + 0.025, 64]} />
           <meshStandardMaterial
-            color={GOLD}
+            color={palette.gold}
             metalness={1}
             roughness={0.26}
             transparent
@@ -299,7 +424,7 @@ function FloorCompass({ opacity }: { opacity: number }) {
             position={[Math.cos(angle) * 0.75, 0.006, Math.sin(angle) * 0.75]}
           >
             <planeGeometry args={[0.018, 0.55]} />
-            <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
+            <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
           </mesh>
         );
       })}
@@ -323,7 +448,7 @@ function FloorCompass({ opacity }: { opacity: number }) {
           position={[Math.sin(item.angle) * 0.88, 0.03, Math.cos(item.angle) * 0.88]}
           rotation={[-Math.PI / 2, 0, item.angle]}
           fontSize={0.07}
-          color={GOLD}
+          color={palette.gold}
           anchorX="center"
           anchorY="middle"
           letterSpacing={0.16}
@@ -337,6 +462,7 @@ function FloorCompass({ opacity }: { opacity: number }) {
 }
 
 function Frieze({ position, width, opacity }: { position: [number, number, number]; width: number; opacity: number }) {
+  const { palette } = useScenePalette();
   const count = 9;
   const words = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
   return (
@@ -352,7 +478,7 @@ function Frieze({ position, width, opacity }: { position: [number, number, numbe
             <Text
               position={[0, 0, 0.04]}
               fontSize={0.05}
-              color={GOLD}
+              color={palette.gold}
               anchorX="center"
               anchorY="middle"
               fillOpacity={0.3 + opacity * 0.55}
@@ -375,12 +501,13 @@ function Drape({
   rotation?: [number, number, number];
   opacity: number;
 }) {
+  const { palette, stone } = useScenePalette();
   return (
     <group position={position} rotation={rotation}>
       <mesh>
         <planeGeometry args={[0.92, 2.15]} />
         <meshStandardMaterial
-          color="#10131a"
+          color={stone("#10131a")}
           roughness={0.92}
           metalness={0.08}
           transparent
@@ -398,12 +525,12 @@ function Drape({
       </mesh>
       <mesh position={[0, 0.18, 0.01]}>
         <circleGeometry args={[0.11, 24]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.28} transparent opacity={opacity * 0.7} />
       </mesh>
       <Text
         position={[0, -0.22, 0.02]}
         fontSize={0.055}
-        color={GOLD}
+        color={palette.gold}
         anchorX="center"
         anchorY="middle"
         letterSpacing={0.2}
@@ -422,6 +549,7 @@ function BookPlinth({
   position: [number, number, number];
   rotation?: [number, number, number];
 }) {
+  const { stone } = useScenePalette();
   return (
     <group position={position} rotation={rotation}>
       <mesh castShadow>
@@ -438,17 +566,18 @@ function BookPlinth({
       </mesh>
       <mesh position={[-0.04, 0.23, 0.02]} rotation={[0, -0.22, 0]} castShadow>
         <boxGeometry args={[0.22, 0.038, 0.15]} />
-        <meshStandardMaterial color="#2a2418" roughness={0.68} metalness={0.2} />
+        <meshStandardMaterial color={stone("#2a2418")} roughness={0.68} metalness={0.2} />
       </mesh>
       <mesh position={[0.01, 0.275, -0.01]} rotation={[0, 0.08, 0]} castShadow>
         <boxGeometry args={[0.2, 0.032, 0.13]} />
-        <meshStandardMaterial color="#1e2430" roughness={0.62} metalness={0.25} />
+        <meshStandardMaterial color={stone("#1e2430")} roughness={0.62} metalness={0.25} />
       </mesh>
     </group>
   );
 }
 
 function Urn({ position }: { position: [number, number, number] }) {
+  const { palette } = useScenePalette();
   return (
     <group position={position}>
       <mesh position={[0, 0.08, 0]} castShadow>
@@ -461,17 +590,18 @@ function Urn({ position }: { position: [number, number, number] }) {
       </mesh>
       <mesh position={[0, 0.32, 0]}>
         <sphereGeometry args={[0.055, 14, 14]} />
-        <meshBasicMaterial color="#f3e0b8" transparent opacity={0.55} />
+        <meshBasicMaterial color={palette.goldPale} transparent opacity={0.55} />
       </mesh>
       <mesh>
         <sphereGeometry args={[0.14, 14, 14]} />
-        <meshBasicMaterial color="#e8c56a" transparent opacity={0.06} depthWrite={false} />
+        <meshBasicMaterial color={palette.goldWarm} transparent opacity={0.06} depthWrite={false} />
       </mesh>
     </group>
   );
 }
 
 function RevealHall({ progress, reducedMotion }: { progress: number; reducedMotion: boolean }) {
+  const { palette, stone } = useScenePalette();
   const mid = THREE.MathUtils.smoothstep(progress, 0.05, 0.36);
   const deep = THREE.MathUtils.smoothstep(progress, 0.28, 0.72);
   const far = THREE.MathUtils.smoothstep(progress, 0.55, 0.92);
@@ -511,13 +641,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
 
       <mesh position={[-0.3, 2.62, -8.35]} rotation={[0, 0, 0]}>
         <torusGeometry args={[1.85, 0.04, 12, 64, Math.PI]} />
-        <meshStandardMaterial
-          color={GOLD}
-          metalness={1}
-          roughness={0.22}
-          transparent
-          opacity={0.2 + deep * 0.75}
-        />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.22} transparent opacity={0.2 + deep * 0.75} />
       </mesh>
       <mesh position={[-0.3, 3.52, -8.38]} rotation={[Math.PI / 2, 0, Math.PI]}>
         <coneGeometry args={[1.62, 0.1, 3]} />
@@ -526,7 +650,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
       <mesh position={[-0.3, 2.72, -8.32]}>
         <ringGeometry args={[0.55, 1.55, 64]} />
         <meshBasicMaterial
-          color={GOLD}
+          color={palette.gold}
           transparent
           opacity={0.03 + far * 0.14}
           side={THREE.DoubleSide}
@@ -536,7 +660,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
       <Text
         position={[-0.3, 3.42, -8.18]}
         fontSize={0.13}
-        color={GOLD}
+        color={palette.gold}
         anchorX="center"
         anchorY="middle"
         letterSpacing={0.42}
@@ -548,7 +672,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.3, 0.017, -4.9]}>
         <planeGeometry args={[0.38, 7.4]} />
         <meshStandardMaterial
-          color="#2c2416"
+          color={stone("#2c2416")}
           metalness={0.35}
           roughness={0.48}
           transparent
@@ -558,7 +682,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.3, 0.019, -4.9]}>
         <planeGeometry args={[0.055, 7.4]} />
         <meshStandardMaterial
-          color={GOLD}
+          color={palette.gold}
           metalness={1}
           roughness={0.28}
           transparent
@@ -576,46 +700,20 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
       ))}
       <mesh position={[-0.3, 0.085, -7.15]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[2.7, 0.04]} />
-        <meshStandardMaterial color={GOLD} metalness={1} roughness={0.3} transparent opacity={0.35 + far * 0.5} />
+        <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.3} transparent opacity={0.35 + far * 0.5} />
       </mesh>
 
       {[4.15, 5.35, 6.7].map((radius) => (
         <mesh key={radius} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.016, -1.4]}>
           <torusGeometry args={[radius, 0.01, 8, 96]} />
-          <meshStandardMaterial
-            color={GOLD}
-            metalness={1}
-            roughness={0.32}
-            transparent
-            opacity={0.15 + mid * 0.7}
-          />
+          <meshStandardMaterial color={palette.gold} metalness={1} roughness={0.32} transparent opacity={0.15 + mid * 0.7} />
         </mesh>
       ))}
 
-      <InscribedPanel
-        position={[-3.55, 1.62, -5.85]}
-        rotation={[0, 0.52, 0]}
-        title="CEZA"
-        opacity={0.45 + mid * 0.55}
-      />
-      <InscribedPanel
-        position={[3.05, 1.68, -6.05]}
-        rotation={[0, -0.48, 0]}
-        title="MEDENİ"
-        opacity={0.45 + mid * 0.55}
-      />
-      <InscribedPanel
-        position={[-3.85, 1.72, -7.55]}
-        rotation={[0, 0.38, 0]}
-        title="İDARE"
-        opacity={0.4 + deep * 0.6}
-      />
-      <InscribedPanel
-        position={[3.25, 1.78, -7.7]}
-        rotation={[0, -0.34, 0]}
-        title="USUL"
-        opacity={0.4 + deep * 0.6}
-      />
+      <InscribedPanel position={[-3.55, 1.62, -5.85]} rotation={[0, 0.52, 0]} title="CEZA" opacity={0.45 + mid * 0.55} />
+      <InscribedPanel position={[3.05, 1.68, -6.05]} rotation={[0, -0.48, 0]} title="MEDENİ" opacity={0.45 + mid * 0.55} />
+      <InscribedPanel position={[-3.85, 1.72, -7.55]} rotation={[0, 0.38, 0]} title="İDARE" opacity={0.4 + deep * 0.6} />
+      <InscribedPanel position={[3.25, 1.78, -7.7]} rotation={[0, -0.34, 0]} title="USUL" opacity={0.4 + deep * 0.6} />
       <InscribedPanel
         position={[-0.3, 1.55, -8.72]}
         rotation={[0, 0, 0]}
@@ -641,15 +739,15 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
 
       <mesh position={[-2.4, 5.4, -5.4]} rotation={[0.62, 0.1, -0.14]}>
         <planeGeometry args={[2.4, 10]} />
-        <meshBasicMaterial color="#f0d48a" transparent opacity={0.03 + deep * 0.09} depthWrite={false} />
+        <meshBasicMaterial color={palette.hazeWarm} transparent opacity={0.03 + deep * 0.09} depthWrite={false} />
       </mesh>
       <mesh position={[1.9, 5.25, -5.8]} rotation={[0.58, -0.18, 0.1]}>
         <planeGeometry args={[1.9, 9]} />
-        <meshBasicMaterial color="#c5d4f0" transparent opacity={0.025 + deep * 0.07} depthWrite={false} />
+        <meshBasicMaterial color={palette.hazeCool} transparent opacity={0.025 + deep * 0.07} depthWrite={false} />
       </mesh>
 
-      <pointLight position={[-0.3, 3.4, -6.2]} color="#f0d7a0" intensity={deep * 2.8} distance={14} />
-      <spotLight position={[-0.3, 5.6, -3.8]} intensity={far * 3.2} angle={0.46} penumbra={0.92} color="#f3e0b8" />
+      <pointLight position={[-0.3, 3.4, -6.2]} color={palette.spot2} intensity={deep * 2.8} distance={14} />
+      <spotLight position={[-0.3, 5.6, -3.8]} intensity={far * 3.2} angle={0.46} penumbra={0.92} color={palette.spot1} />
 
       {!reducedMotion && deep > 0.12 ? (
         <Sparkles
@@ -658,7 +756,7 @@ function RevealHall({ progress, reducedMotion }: { progress: number; reducedMoti
           size={1.8}
           speed={0.14}
           opacity={0.16 + deep * 0.28}
-          color="#e8c56a"
+          color={palette.sparkle}
           position={[-0.3, 2.4, -5.4]}
         />
       ) : null}
@@ -858,6 +956,7 @@ function HangAssembly() {
 }
 
 function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void }) {
+  const { palette, stone } = useScenePalette();
   const beamRef = useRef<THREE.Group>(null);
   const leftHang = useRef<THREE.Group>(null);
   const rightHang = useRef<THREE.Group>(null);
@@ -929,7 +1028,7 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
     <group>
       <mesh position={[0, 0.045, 0]} receiveShadow>
         <cylinderGeometry args={[0.64, 0.7, 0.09, 64]} />
-        <meshStandardMaterial color="#0c0b10" metalness={0.72} roughness={0.28} envMapIntensity={1.1} />
+        <meshStandardMaterial color={stone("#0c0b10")} metalness={0.72} roughness={0.28} envMapIntensity={1.1} />
       </mesh>
       <mesh position={[0, 0.092, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.58, 0.006, 12, 64]} />
@@ -997,7 +1096,7 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
               <Text
                 position={[0, -0.28, 0.02]}
                 fontSize={0.052}
-                color={GOLD}
+                color={palette.gold}
                 anchorX="center"
                 anchorY="middle"
                 letterSpacing={0.22}
@@ -1017,7 +1116,7 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
               <Text
                 position={[0, -0.28, 0.02]}
                 fontSize={0.052}
-                color={GOLD}
+                color={palette.gold}
                 anchorX="center"
                 anchorY="middle"
                 letterSpacing={0.22}
@@ -1033,67 +1132,108 @@ function ScaleModel({ onBiasChange }: { onBiasChange?: (bias: number) => void })
   );
 }
 
-export function JusticeScaleCanvas({ size = "hero", onBiasChange, scrollProgress = 0 }: Props) {
+function SceneContent({
+  compact,
+  reducedMotion,
+  journey,
+  onBiasChange,
+}: {
+  compact: boolean;
+  reducedMotion: boolean;
+  journey: number;
+  onBiasChange?: (bias: number) => void;
+}) {
+  const { theme, palette, stone } = useScenePalette();
+  return (
+    <>
+      <color attach="background" args={[palette.bg]} />
+      <fog attach="fog" args={[palette.bg, 11, 22]} />
+      <ambientLight intensity={palette.ambientIntensity} />
+      <directionalLight
+        castShadow
+        position={[2.8, 4.6, 3.2]}
+        intensity={theme === "light" ? 2.1 : 1.55}
+        color={palette.sun}
+        shadow-mapSize={[1024, 1024]}
+      />
+      <directionalLight position={[-3.4, 1.8, 1.2]} intensity={palette.fillIntensity} color={palette.fill} />
+      <spotLight position={[0.6, 3.4, 2.4]} intensity={theme === "light" ? 1.3 : 2.2} angle={0.5} penumbra={0.85} color={palette.spot1} />
+      <spotLight position={[-2.2, 5.2, -3.4]} intensity={theme === "light" ? 2.0 : 3.4} angle={0.35} penumbra={0.9} color={palette.spot2} />
+
+      <ChamberBackdrop reducedMotion={reducedMotion} />
+      <RevealHall progress={journey} reducedMotion={reducedMotion} />
+
+      <group position={compact ? [0, 0, 0] : [-0.55, 0, 0]}>
+        <ScaleModel onBiasChange={onBiasChange} />
+      </group>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <circleGeometry args={[11, 64]} />
+        <meshStandardMaterial color={stone("#0b0d14")} metalness={0.35} roughness={0.55} />
+      </mesh>
+      <ContactShadows position={[0, 0.012, 0]} opacity={0.45} scale={8} blur={2.6} far={2.8} color={palette.shadowColor} />
+
+      <Environment resolution={256} frames={1}>
+        <Lightformer intensity={2.6} position={[0, 5, 1]} scale={[10, 1.4, 1]} />
+        <Lightformer intensity={1.1} position={[-4, 2, 2]} scale={[4, 4, 1]} color={palette.envA} />
+        <Lightformer intensity={1.6} position={[4, 3, -1]} scale={[5, 1.8, 1]} color={palette.envB} />
+      </Environment>
+
+      {/* Altın yaldızın gerçekten ışık saçıyormuş gibi görünmesi için —
+          @react-three/postprocessing zaten bağımlılıktı, hiç kullanılmıyordu.
+          Eşik/yoğunluk temaya göre ayarlı: gündüzde zemin zaten parlak,
+          yalnızca en parlak vurgular (altın, fener alevleri) parlamalı. */}
+      <EffectComposer>
+        <Bloom
+          luminanceThreshold={palette.bloomThreshold}
+          luminanceSmoothing={palette.bloomSmoothing}
+          intensity={palette.bloomIntensity}
+          mipmapBlur
+        />
+      </EffectComposer>
+    </>
+  );
+}
+
+export function JusticeScaleCanvas({ size = "hero", onBiasChange, scrollProgress = 0, theme = "dark" }: Props) {
   const compact = size === "compact";
   const reducedMotion = usePrefersReducedMotion();
   const journey = compact ? 0 : scrollProgress;
+  const ctxValue = useMemo(
+    () => ({
+      theme,
+      palette: PALETTE[theme],
+      stone: (hex: string) => (theme === "light" ? STONE_MAP[hex] ?? hex : hex),
+    }),
+    [theme]
+  );
   return (
     <div className={`scale-canvas ${size}`}>
-      <Canvas
-        shadows
-        dpr={[1, 1.6]}
-        camera={{
-          fov: compact ? 36 : 30,
-          position: compact ? [1.1, 1.25, 3.4] : [1.7, 1.35, 5.0],
-          near: 0.1,
-          far: compact ? 24 : 42,
-        }}
-        gl={{
-          antialias: true,
-          alpha: false,
-          powerPreference: "high-performance",
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.08,
-        }}
-        resize={{ scroll: false, debounce: 50 }}
-      >
-        <color attach="background" args={["#07090f"]} />
-        <fog attach="fog" args={["#07090f", 11, 22]} />
-        <ambientLight intensity={0.32} />
-        <directionalLight
-          castShadow
-          position={[2.8, 4.6, 3.2]}
-          intensity={1.55}
-          color="#fff3dc"
-          shadow-mapSize={[1024, 1024]}
-        />
-        <directionalLight position={[-3.4, 1.8, 1.2]} intensity={0.45} color="#9aacd0" />
-        <spotLight position={[0.6, 3.4, 2.4]} intensity={2.2} angle={0.5} penumbra={0.85} color="#f3e0b8" />
-        <spotLight position={[-2.2, 5.2, -3.4]} intensity={3.4} angle={0.35} penumbra={0.9} color="#f0d7a0" />
-
-        <ChamberBackdrop reducedMotion={reducedMotion} />
-        <RevealHall progress={journey} reducedMotion={reducedMotion} />
-
-        <group position={compact ? [0, 0, 0] : [-0.55, 0, 0]}>
-          <ScaleModel onBiasChange={onBiasChange} />
-        </group>
-
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <circleGeometry args={[11, 64]} />
-          <meshStandardMaterial color="#0b0d14" metalness={0.35} roughness={0.55} />
-        </mesh>
-        <ContactShadows position={[0, 0.012, 0]} opacity={0.45} scale={8} blur={2.6} far={2.8} />
-
-        <Environment resolution={256} frames={1}>
-          <Lightformer intensity={2.6} position={[0, 5, 1]} scale={[10, 1.4, 1]} />
-          <Lightformer intensity={1.1} position={[-4, 2, 2]} scale={[4, 4, 1]} color="#a8b8d4" />
-          <Lightformer intensity={1.6} position={[4, 3, -1]} scale={[5, 1.8, 1]} color="#e8d5a4" />
-        </Environment>
-
-        <AtmosphereDirector progress={journey} compact={compact} />
-        <ScrollDirector progress={journey} compact={compact} />
-        <SceneOrbit compact={compact} reducedMotion={reducedMotion} scrollProgress={journey} />
-      </Canvas>
+      <ScenePaletteContext.Provider value={ctxValue}>
+        <Canvas
+          shadows
+          dpr={[1, 1.6]}
+          camera={{
+            fov: compact ? 36 : 30,
+            position: compact ? [1.1, 1.25, 3.4] : [1.7, 1.35, 5.0],
+            near: 0.1,
+            far: compact ? 24 : 42,
+          }}
+          gl={{
+            antialias: true,
+            alpha: false,
+            powerPreference: "high-performance",
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: 1.08,
+          }}
+          resize={{ scroll: false, debounce: 50 }}
+        >
+          <SceneContent compact={compact} reducedMotion={reducedMotion} journey={journey} onBiasChange={onBiasChange} />
+          <AtmosphereDirector progress={journey} compact={compact} />
+          <ScrollDirector progress={journey} compact={compact} />
+          <SceneOrbit compact={compact} reducedMotion={reducedMotion} scrollProgress={journey} />
+        </Canvas>
+      </ScenePaletteContext.Provider>
     </div>
   );
 }
