@@ -205,11 +205,12 @@ def _legal_interpretation_caveat(classification: Classification) -> str | None:
         return None
     if classification.legal_nature == "ceza":
         return (
-            "Bu analiz arşivdeki güncel kanun metnine dayanır. Lehe kanun uygulaması "
-            "(TCK m.7), içtihadı birleştirme kararları, zamanaşımı, hâkimin takdir "
-            "yetkisi gibi ilkeler nedeniyle somut olaydaki gerçek hukuki sonuç bu "
-            "metinden farklılaşabilir — bu ilkeler burada ayrıca değerlendirilmemiştir. "
-            "Kesin dayanak olarak kullanmadan önce bir hukuk uzmanına danışın."
+            "Bu analiz arşivdeki güncel kanun metnine dayanır. Hukuki yorum ve uygulama "
+            "ilkeleri — lehe kanun uygulaması (TCK m.7), içtihadı birleştirme kararları, "
+            "zamanaşımı, hâkimin takdir yetkisi gibi — nedeniyle somut olaydaki gerçek "
+            "hukuki sonuç bu metinden farklılaşabilir — bu ilkeler burada ayrıca "
+            "değerlendirilmemiştir. Kesin dayanak olarak kullanmadan önce bir hukuk "
+            "uzmanına danışın."
         )
     if classification.legal_nature in {"hukuk", "idare"}:
         return (
