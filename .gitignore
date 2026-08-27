@@ -27,6 +27,7 @@ tools/evolver/gep/events.jsonl
 tools/evolver/memory/
 
 data/minio/
+data/accounts.sqlite
 data/accounts.sqlite-*
 data/tunnel-url.txt
 data/_sample_*.html
@@ -36,10 +37,11 @@ data/hf_cache/
 data/tessdata/
 !data/raw/.gitkeep
 
-# Include legal archive, accounts DB, and service dumps in the repo
+# Include legal archive and service dumps in the repo
+# (accounts.sqlite intentionally NOT force-included — it holds live
+# credentials/session tokens/user file text and must never be committed)
 !data/raw/
 !data/raw/**
-!data/accounts.sqlite
 !data/dumps/
 !data/dumps/**
 
