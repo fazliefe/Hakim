@@ -30,6 +30,7 @@ dev = [
     "pymupdf>=1.28.2",
     "huggingface_hub>=0.25",
     "pyarrow>=17.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -54,4 +55,23 @@ pythonpath = [
     "connectors",
     "services",
     "tools/evolver",
+]
+
+[tool.coverage.run]
+# testpaths/pythonpath'teki gerçek kaynak dizinleri — yalnızca rapor amaçlı,
+# bir eşik zorlanmıyor (bkz. .github/workflows/ci.yml).
+source = [
+    "packages/legal-schema/src",
+    "apps/api/src",
+    "connectors",
+    "services",
+    "tools/evolver",
+]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+skip_empty = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
 ]

@@ -50,12 +50,15 @@ jobs:
         env:
           HAKIM_DATABASE_URL: postgresql://hakim:hakim@127.0.0.1:5433/hakim
 
-      - name: Run tests
+      - name: Run tests (with coverage report)
         # Elasticsearch/Neo4j'ye bağlanan hiçbir test yok (repoda böyle bir
         # test bulunmuyor); yalnızca Postgres için canlı bağlantı bekleyen
         # testler vardı, artık yukarıdaki servis + migration adımıyla
         # gerçekten çalışıyorlar.
-        run: uv run pytest -q
+        # --cov: yalnızca RAPOR — bilinçli olarak bir eşik (--cov-fail-under)
+        # zorlamıyoruz; şu anki kapsamı önce görünür kılmak, sonra ayrı bir
+        # kararla eşik koymak istiyoruz.
+        run: uv run pytest -q --cov --cov-report=term-missing
         env:
           HAKIM_DATABASE_URL: postgresql://hakim:hakim@127.0.0.1:5433/hakim
 
