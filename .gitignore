@@ -40,6 +40,14 @@ data/tessdata/
 # Include legal archive and service dumps in the repo
 # (accounts.sqlite intentionally NOT force-included — it holds live
 # credentials/session tokens/user file text and must never be committed)
+#
+# POLİTİKA (ileriye dönük): data/dumps/ altındaki mevcut dosyalar (Postgres/
+# Elasticsearch/Neo4j export'ları) burada kalıyor — geçmiş git history'si
+# bilinçli olarak temizlenmedi (bkz. ekip notu). Ama BUNDAN SONRA büyük
+# (birkaç MB'ı aşan) yeni dump'lar buraya COMMIT EDİLMEMELİ — git geçmişi
+# bu tür binary veriyi asla küçültmez, her yeniden export repo'yu büyütür.
+# Büyük veri setleri (örn. 125K'lık emsal karar export'u, bkz. ekip notu)
+# için repo dışı bir paylaşım yolu (harici disk/bulut) kullanın.
 !data/raw/
 !data/raw/**
 !data/dumps/
