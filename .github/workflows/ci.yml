@@ -9,6 +9,25 @@ jobs:
   python-tests:
     name: Python tests
     runs-on: ubuntu-latest
+    services:
+      # packages/legal-schema/tests/test_postgres.py ve
+      # services/ingestion/tests/test_{postgres_writer,decision_writer}.py
+      # canlı bir Postgres'e bağlanamazsa sessizce skip ediyordu (pytest.skip)
+      # — yani bu testler CI'da hiç gerçekten çalışmıyordu. Burada gerçek bir
+      # servis sağlanıyor ki artık koşsunlar.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hakim
+          POSTGRES_PASSWORD: hakim
+          POSTGRES_DB: hakim
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U hakim -d hakim"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -21,11 +40,24 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Apply Postgres migrations
+        # infra/docker-compose.yml'de bunu postgres image'ının kendi
+        # docker-entrypoint-initdb.d mekanizması yapıyor (repo dosyalarını
+        # volume olarak mount ederek); Actions'ın service container'ları
+        # checkout'tan ÖNCE ayağa kalktığı için aynı volume mount'u burada
+        # kullanamıyoruz — script'i checkout sonrası elle çalıştırıyoruz.
+        run: uv run python scripts/apply_postgres.py
+        env:
+          HAKIM_DATABASE_URL: postgresql://hakim:hakim@127.0.0.1:5433/hakim
+
       - name: Run tests
-        # Testler için Postgres/Elasticsearch/Neo4j gerekmiyor: canlı bağlantı
-        # bekleyen testler o servis yoksa kendiliğinden skip ediyor
-        # (bkz. services/ingestion/tests/test_postgres_writer.py).
+        # Elasticsearch/Neo4j'ye bağlanan hiçbir test yok (repoda böyle bir
+        # test bulunmuyor); yalnızca Postgres için canlı bağlantı bekleyen
+        # testler vardı, artık yukarıdaki servis + migration adımıyla
+        # gerçekten çalışıyorlar.
         run: uv run pytest -q
+        env:
+          HAKIM_DATABASE_URL: postgresql://hakim:hakim@127.0.0.1:5433/hakim
 
   web-build:
     name: Web build

@@ -97,7 +97,27 @@ def test_write_decisions_issued_by_relation(db) -> None:
 def test_write_decisions_cites_correct_law_for_multi_law_body(db) -> None:
     """Adım 1 regresyon testi: karar hem TCK hem CMK maddesine atıf yapıyorsa
     her ikisi de kendi kanununa CITES ile bağlanmalı — eskiden sadece TCK
-    (hardcoded) yakalanabiliyordu."""
+    (hardcoded) yakalanabiliyordu.
+
+    write_decisions yalnızca ZATEN indekslenmiş maddelere CITES kuruyor
+    (_known_articles_by_law), bu yüzden TCK m.141 ve CMK m.100'ü burada
+    kendimiz seed ediyoruz — gerçek ortamda bunlar mevzuat ingestion'ından
+    gelir, bu test onu varsaymadan kendi kendine yeterli olmalı.
+    """
+    for law_no, title, article_no in (
+        ("5237", "Türk Ceza Kanunu", "141"),
+        ("5271", "Ceza Muhakemesi Kanunu", "100"),
+    ):
+        db.execute(
+            "INSERT INTO legal_documents (id, document_type, number, title, source_id) "
+            "VALUES (%s, 'law', %s, %s, 'source:test_mahkeme') ON CONFLICT (id) DO NOTHING",
+            (f"law:{law_no}", law_no, title),
+        )
+        db.execute(
+            "INSERT INTO articles (id, document_id, article_no) VALUES (%s, %s, %s) "
+            "ON CONFLICT (id) DO NOTHING",
+            (f"law:{law_no}:article:{article_no}", f"law:{law_no}", article_no),
+        )
     body = (
         "Sanığın eylemi TCK'nın 141 inci maddesi kapsamında hırsızlık suçunu "
         "oluşturmaktadır. Tutuklama tedbiri CMK'nın 100 üncü maddesi uyarınca "
