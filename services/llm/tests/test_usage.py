@@ -19,6 +19,16 @@ def test_estimate_cost_zero_tokens() -> None:
     assert estimate_cost(0, 0) == 0.0
 
 
+def test_estimate_cost_uses_groq_equivalent_when_profile_rates_are_zero() -> None:
+    cost = estimate_cost(
+        1_000_000,
+        1_000_000,
+        input_per_million=0.0,
+        output_per_million=0.0,
+    )
+    assert abs(cost - 0.375) < 1e-9
+
+
 def test_parse_usage_from_openai_shape() -> None:
     usage = parse_usage(
         {"usage": {"prompt_tokens": 80, "completion_tokens": 20}, "model": "openai/gpt-oss-20b"}
@@ -100,7 +110,15 @@ def test_usage_totals_shape_matches_research_observability() -> None:
     """Madde B: /v1/evrak, /v1/işlem, /v1/senaryo da /v1/arastirma ile aynı
     observability.totals şeklini üretmeli — frontend Observability tipi tek."""
     totals = usage_totals(LlmUsage(prompt_tokens=100, completion_tokens=50))
-    assert set(totals) == {"prompt_tokens", "completion_tokens", "cost_usd", "provider", "model", "model_label"}
+    assert set(totals) == {
+        "prompt_tokens",
+        "completion_tokens",
+        "cost_usd",
+        "cost_estimated",
+        "provider",
+        "model",
+        "model_label",
+    }
     assert totals["prompt_tokens"] == 100
     assert totals["completion_tokens"] == 50
 

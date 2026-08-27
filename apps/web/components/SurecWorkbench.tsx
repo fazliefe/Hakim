@@ -109,8 +109,9 @@ export function SurecWorkbench() {
         </form>
         {error ? <p className="error">{error}</p> : null}
         {result?.legal_caveat ? (
-          <p className="legal-caveat" style={{ margin: "0 0.9rem 0.9rem" }}>
-            Uyarı: {result.legal_caveat}
+          <p className="legal-caveat warn" style={{ margin: "0 0.9rem 0.9rem" }}>
+            <span className="legal-caveat-kicker">Uyarı</span>
+            {result.legal_caveat}
           </p>
         ) : null}
         {result?.draft ? (

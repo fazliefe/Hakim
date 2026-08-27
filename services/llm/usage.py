@@ -48,6 +48,10 @@ def _bind(bucket: list[LlmUsage]) -> None:
         _global_bucket = bucket
 
 
+GROQ_EQUIV_INPUT_PER_MILLION = 0.075
+GROQ_EQUIV_OUTPUT_PER_MILLION = 0.30
+
+
 def estimate_cost(
     prompt_tokens: int,
     completion_tokens: int,
@@ -65,11 +69,38 @@ def estimate_cost(
             if output_per_million is None:
                 output_per_million = cfg.llm_output_per_million
         except Exception:
-            input_per_million = input_per_million if input_per_million is not None else 0.075
-            output_per_million = output_per_million if output_per_million is not None else 0.30
+            input_per_million = input_per_million if input_per_million is not None else GROQ_EQUIV_INPUT_PER_MILLION
+            output_per_million = output_per_million if output_per_million is not None else GROQ_EQUIV_OUTPUT_PER_MILLION
+    if float(input_per_million or 0) == 0.0 and float(output_per_million or 0) == 0.0:
+        if prompt_tokens or completion_tokens:
+            input_per_million = GROQ_EQUIV_INPUT_PER_MILLION
+            output_per_million = GROQ_EQUIV_OUTPUT_PER_MILLION
     return (prompt_tokens / 1_000_000) * float(input_per_million) + (
         completion_tokens / 1_000_000
     ) * float(output_per_million)
+
+
+def _cost_is_estimated(
+    prompt_tokens: int,
+    completion_tokens: int,
+    *,
+    input_per_million: float | None = None,
+    output_per_million: float | None = None,
+) -> bool:
+    if not prompt_tokens and not completion_tokens:
+        return False
+    if input_per_million is None or output_per_million is None:
+        try:
+            from hakim_config import get_models
+
+            cfg = get_models()
+            if input_per_million is None:
+                input_per_million = cfg.llm_input_per_million
+            if output_per_million is None:
+                output_per_million = cfg.llm_output_per_million
+        except Exception:
+            return True
+    return float(input_per_million or 0) == 0.0 and float(output_per_million or 0) == 0.0
 
 
 def parse_usage(body: dict[str, Any], *, model: str = "") -> LlmUsage:
@@ -117,6 +148,7 @@ def usage_totals(usage: LlmUsage) -> dict[str, Any]:
     """API yanıtlarına eklenecek toplam kullanım/maliyet özeti — research_graph
     dışındaki yüzeylerde (evrak/işlem/senaryo) de aynı gözlemlenebilirlik."""
     cost = estimate_cost(usage.prompt_tokens, usage.completion_tokens) if usage.total_tokens else 0.0
+    estimated = _cost_is_estimated(usage.prompt_tokens, usage.completion_tokens)
     provider = model = label = ""
     try:
         from hakim_config import get_models, model_label
@@ -131,6 +163,7 @@ def usage_totals(usage: LlmUsage) -> dict[str, Any]:
         "prompt_tokens": usage.prompt_tokens,
         "completion_tokens": usage.completion_tokens,
         "cost_usd": round(cost, 8),
+        "cost_estimated": estimated,
         "provider": provider,
         "model": model,
         "model_label": label,

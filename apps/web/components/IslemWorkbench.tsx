@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PetitionPreview } from "@/components/PetitionPreview";
-import { BelgeKalip, IslemGuess, getBelgeler, guessIslem } from "@/lib/api";
+import { BelgeKalip, IslemGuess, getBelgeler, guessIslem, screenIslemPhoto, visionFile } from "@/lib/api";
 import { DownloadActions } from "@/components/DownloadActions";
 import { petitionToBlocks } from "@/lib/exportDocument";
 import { useDocumentAnalysis } from "@/lib/useDocumentAnalysis";
@@ -169,6 +169,17 @@ const AUTO_EXAMPLES: Array<{ label: string; expect: string; text: string }> = [
   },
 ];
 
+const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/tiff,.jpg,.jpeg,.png,.webp,.tif,.tiff";
+const MAX_CHAT_PHOTOS = 4;
+
+type ChatPhoto = {
+  id: string;
+  name: string;
+  src: string;
+  caption: string;
+  scene: string;
+};
+
 export function IslemWorkbench() {
   const { text, setText, action, setAction, loading, error, result, submit } = useDocumentAnalysis("/v1/islem");
   const [side, setSide] = useState("yazim");
@@ -176,6 +187,17 @@ export function IslemWorkbench() {
   const [kalip, setKalip] = useState<BelgeKalip[]>(FALLBACK);
   const [guess, setGuess] = useState<IslemGuess | null>(null);
   const [gapAnswers, setGapAnswers] = useState<Record<string, string>>({});
+  const [photos, setPhotos] = useState<ChatPhoto[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photosRef = useRef<ChatPhoto[]>([]);
+  photosRef.current = photos;
+
+  useEffect(() => {
+    return () => {
+      photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.src));
+    };
+  }, []);
 
   useEffect(() => {
     getBelgeler()
@@ -226,7 +248,56 @@ export function IslemWorkbench() {
       .join("\n");
     if (!extra) return;
     const next = [text.trim(), extra].filter(Boolean).join("\n");
-    void submit(undefined, (mode === "manual" ? action : result.action) || "", next);
+    void submit(undefined, (mode === "manual" ? action : result.action) || "", next, visualEks());
+  }
+
+  function visualEks() {
+    return photos.map((photo) => ({ caption: photo.caption, scene: photo.scene }));
+  }
+
+  function dropPhoto(id: string) {
+    setPhotos((prev) => {
+      const gone = prev.find((item) => item.id === id);
+      if (gone) URL.revokeObjectURL(gone.src);
+      return prev.filter((item) => item.id !== id);
+    });
+  }
+
+  async function onPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+    const room = MAX_CHAT_PHOTOS - photos.length;
+    if (room <= 0) {
+      setPhotoError(`En fazla ${MAX_CHAT_PHOTOS} fotoğraf eklenebilir.`);
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    const accepted: ChatPhoto[] = [];
+    try {
+      for (const file of files.slice(0, room)) {
+        if (!visionFile(file)) {
+          setPhotoError("Yalnızca JPG, PNG veya WebP fotoğraf yükleyin.");
+          continue;
+        }
+        try {
+          const screened = await screenIslemPhoto(file);
+          accepted.push({
+            id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+            name: file.name,
+            src: URL.createObjectURL(file),
+            caption: screened.caption,
+            scene: screened.scene,
+          });
+        } catch (err) {
+          setPhotoError(err instanceof Error ? err.message : "Fotoğraf KVKK kontrolünden geçmedi.");
+        }
+      }
+      if (accepted.length) setPhotos((prev) => [...prev, ...accepted].slice(0, MAX_CHAT_PHOTOS));
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
   const detectedId = mode === "auto" ? result?.action || guess?.action : action;
@@ -326,7 +397,7 @@ export function IslemWorkbench() {
           className="islem-compose"
           onSubmit={(event) => {
             setGapAnswers({});
-            void submit(event, mode === "manual" ? action : "");
+            void submit(event, mode === "manual" ? action : "", undefined, visualEks());
           }}
         >
           <div className="mode-switch" role="tablist" aria-label="Yazım Modu">
@@ -400,10 +471,40 @@ export function IslemWorkbench() {
                 : "Olayı, tarihi ve tarafları yazın."
             }
           />
+          <div className="islem-photos">
+            <label className="file-btn">
+              {photoBusy ? "KVKK kontrolü…" : "Fotoğraf ekle"}
+              <input
+                type="file"
+                accept={PHOTO_ACCEPT}
+                multiple
+                onChange={onPhotos}
+                disabled={loading || photoBusy || photos.length >= MAX_CHAT_PHOTOS}
+                aria-label="Dilekçe eki fotoğrafı"
+              />
+            </label>
+            <p className="muted islem-photos-hint">
+              Fotoğraf KVKK kontrolünden geçerse EKLER’e alınır. Yüz, kimlik veya T.C. no içeren görüntü işlenmez.
+            </p>
+            {photos.length ? (
+              <ul className="islem-photo-list">
+                {photos.map((photo) => (
+                  <li key={photo.id} className="islem-photo-chip">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.src} alt={photo.caption} />
+                    <span>{photo.caption}</span>
+                    <button type="button" onClick={() => dropPhoto(photo.id)} aria-label={`${photo.caption} kaldır`}>
+                      Kaldır
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
           <div className="islem-compose-actions">
             <button
               type="submit"
-              disabled={loading || text.trim().length < 8 || (mode === "manual" && !action)}
+              disabled={loading || photoBusy || text.trim().length < 8 || (mode === "manual" && !action)}
             >
               {loading
                 ? "Yazılıyor…"
@@ -417,6 +518,7 @@ export function IslemWorkbench() {
           </div>
         </form>
         {error ? <p className="error">{error}</p> : null}
+        {photoError ? <p className="error">{photoError}</p> : null}
         {result?.route_reason ? (
           <p className="evrak-verdict">
             {mode === "auto" ? `Bu bir ${verdictTitle.toLowerCase()}. ` : ""}
@@ -456,6 +558,7 @@ export function IslemWorkbench() {
             draft={result.draft}
             badge={verdictTitle}
             actions={downloads}
+            ekImages={photos.map((photo) => ({ caption: photo.caption, src: photo.src }))}
           />
         ) : (
           <p className="muted islem-empty">

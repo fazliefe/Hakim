@@ -11,7 +11,7 @@ from document_ai.privacy.pii_detector import detect_pii
 from document_ai.validation.attachment_validator import attachment_warnings
 from document_ai.validation.completeness import completeness_warnings
 from document_ai.validation.page_validator import page_warnings
-from document_ai.vlm_ocr import look_like_image, transcribe_images
+from document_ai.vlm_ocr import drop_signature_lines, look_like_image, transcribe_images
 from document_ai.vision.extractor import extract_from_images
 from document_ai.vision.quality import assess_image, jpeg_preview, user_facing_quality_lines
 from document_ai.vision.sanitize import drawable_bbox
@@ -192,8 +192,8 @@ def analyze_bytes(filename: str, data: bytes) -> StructuredDocument:
             best_type = extracted["document_type"]
             best_conf = extracted["document_type_confidence"]
 
-    transcribed = "\n\n".join(transcribed_parts).strip()
-    extracted_full = "\n\n".join(part for part in extract_parts if part)
+    transcribed = drop_signature_lines("\n\n".join(transcribed_parts))
+    extracted_full = drop_signature_lines("\n\n".join(part for part in extract_parts if part))
     if transcribed:
         raw = transcribed
     else:

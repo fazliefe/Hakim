@@ -9,18 +9,20 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any
 
-from hakim_config import get_models
+from hakim_config import effective_max_tokens, get_models
 from llm.api_client import _headers, _record_usage
 from llm.client import OllamaError
 
 TRANSCRIBE_PROMPT = (
     "Bu görüntüdeki belgeyi yukarıdan aşağı, soldan sağa SATIR SATIR aktar. "
-    "Başlık, mahkeme, davacı/davalı, konu, harç, arabuluculuk, açıklamalar, ekler, dipnot, "
-    "imza satırı ve şablon yer tutucuları ([Ad Soyad], noktalı yerler, 20...) DAHİL. "
+    "Başlık, mahkeme, davacı/davalı, konu, harç, arabuluculuk, açıklamalar, ekler, dipnot "
+    "ve şablon yer tutucuları ([Ad Soyad], noktalı yerler, 20...) DAHİL. "
+    "El yazısı imza, paraf ve karalamayı ATLA: okuma, harfe çevirme, 'imza var' yazma. "
     "Hiçbir paragrafı veya maddeyi atlama. Yalnızca KONU satırı yazmak yasak. "
     "Metin uydurma. Okunmayan yere [okunamadı] yaz. "
     "Başlık, özet veya açıklama ekleme; yalnız belge metnini döndür."
@@ -34,6 +36,18 @@ def vision_configured() -> bool:
     return bool(os.environ.get("HAKIM_LLM_API_KEY", "").strip())
 
 
+def drop_signature_lines(text: str) -> str:
+    """Keep body text; drop leftover signature OCR / 'imza var' lines."""
+    kept: list[str] = []
+    for line in (text or "").splitlines():
+        folded = line.replace("İ", "i").replace("I", "i").replace("ı", "i")
+        compact = re.sub(r"\s+", " ", folded).strip().strip("()[]").lower()
+        if compact in {"imza", "imza var", "imza mevcut", "imza satiri"} or compact.startswith("imza:"):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
 def transcribe_images(images: list[tuple[str, bytes]]) -> str:
     """`images` is a list of (mime, bytes). Batches by Evren's 2-image cap."""
     if not images:
@@ -44,7 +58,7 @@ def transcribe_images(images: list[tuple[str, bytes]]) -> str:
     for start in range(0, len(images), batch_size):
         chunk = images[start : start + batch_size]
         parts.append(vision_chat(chunk, TRANSCRIBE_PROMPT))
-    return "\n\n".join(p for p in parts if p.strip()).strip()
+    return drop_signature_lines("\n\n".join(p for p in parts if p.strip()))
 
 
 def transcribe_pdf_bytes(data: bytes, *, max_pages: int = MAX_PDF_PAGES) -> str:
@@ -126,7 +140,7 @@ def _vision_chat_body(
         "model": chosen,
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.0,
-        "max_tokens": cfg.vision_max_tokens,
+        "max_tokens": effective_max_tokens(cfg.vision_max_tokens),
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}

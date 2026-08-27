@@ -104,7 +104,7 @@ def test_duplicate_attachment_section_keeps_one() -> None:
         assert "ek" in fields[0].value.lower()
 
 
-def test_presence_only_signature_has_no_overlay() -> None:
+def test_signature_field_is_dropped() -> None:
     cleaned = sanitize_fields(
         [
             ExtractedField(
@@ -112,11 +112,16 @@ def test_presence_only_signature_has_no_overlay() -> None:
                 value="imza var",
                 bbox=[0.70, 0.82, 0.88, 0.90],
                 confidence=0.92,
-            )
+            ),
+            ExtractedField(
+                name="subject",
+                value="Tahliye talebidir.",
+                bbox=[0.12, 0.28, 0.78, 0.32],
+                confidence=0.93,
+            ),
         ]
     )
-    assert cleaned[0].value == "imza var"
-    assert cleaned[0].bbox == [0.0, 0.0, 0.0, 0.0]
+    assert [item.name for item in cleaned] == ["subject"]
 
 
 def test_low_confidence_bbox_is_zeroed() -> None:

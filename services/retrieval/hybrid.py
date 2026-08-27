@@ -7,8 +7,14 @@ from typing import Any
 
 from retrieval.bm25 import Bm25Searcher, SearchHit, extract_article_no, parse_law_hint
 from retrieval.embeddings import Embedder
+from retrieval.mapping import INDEX_NAME
 from retrieval.rrf import FusedHit, reciprocal_rank_fusion
 from retrieval.semantic import SemanticSearcher
+
+
+def _missing_es_index(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "index_not_found" in text or "no such index" in text
 
 
 def unique_by_article(hits: list[FusedHit], *, limit: int | None = None) -> list[FusedHit]:
@@ -74,13 +80,19 @@ class HybridSearcher:
         limit: int = 30,
         decision_index: str | None = None,
         decision_embedder: Embedder | None = None,
+        index_name: str | None = None,
+        bm25_weight: float = 1.0,
+        dense_weight: float = 1.0,
     ) -> None:
-        self.bm25 = Bm25Searcher(es_client)
-        self.semantic = SemanticSearcher(es_client, embedder)
+        idx = index_name or INDEX_NAME
+        self.bm25 = Bm25Searcher(es_client, index_name=idx)
+        self.semantic = SemanticSearcher(es_client, embedder, index_name=idx)
         self.bm25_size = bm25_size
         self.semantic_size = semantic_size
         self.rrf_k = rrf_k
         self.limit = limit
+        self.bm25_weight = bm25_weight
+        self.dense_weight = dense_weight
         self.decision_bm25: Bm25Searcher | None = None
         self.decision_semantic: SemanticSearcher | None = None
         if decision_index and decision_embedder is not None:
@@ -108,12 +120,22 @@ class HybridSearcher:
     def search_decision_bm25(self, query: str, *, at: datetime | None = None) -> list[SearchHit]:
         if self.decision_bm25 is None:
             return []
-        return self.decision_bm25.search(query, size=self.bm25_size, at=at)
+        try:
+            return self.decision_bm25.search(query, size=self.bm25_size, at=at)
+        except Exception as exc:
+            if _missing_es_index(exc):
+                return []
+            raise
 
     def search_decision_semantic(self, query: str, *, at: datetime | None = None) -> list[SearchHit]:
         if self.decision_semantic is None:
             return []
-        return self.decision_semantic.search(query, size=self.semantic_size, at=at)
+        try:
+            return self.decision_semantic.search(query, size=self.semantic_size, at=at)
+        except Exception as exc:
+            if _missing_es_index(exc):
+                return []
+            raise
 
     def fuse(
         self,
@@ -148,7 +170,12 @@ class HybridSearcher:
         if decision_semantic_hits:
             ranked_lists["semantic_decisions"] = decision_semantic_hits
 
-        fused = reciprocal_rank_fusion(ranked_lists, k=self.rrf_k, limit=pool)
+        fused = reciprocal_rank_fusion(
+            ranked_lists,
+            k=self.rrf_k,
+            limit=pool,
+            weights=self._rrf_weights(list(ranked_lists)),
+        )
         article_no = extract_article_no(query)
         if article_no:
             hinted = parse_law_hint(query)
@@ -187,6 +214,36 @@ class HybridSearcher:
             decision_semantic_hits=decision_semantic_hits,
         )
 
+    def search_multi(
+        self,
+        queries: list[str],
+        *,
+        law_no: str | None = None,
+        at: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[FusedHit]:
+        if len(queries) <= 1:
+            return self.search(queries[0] if queries else "", law_no=law_no, at=at, limit=limit)
+        ranked: dict[str, list[SearchHit]] = {}
+        for i, query in enumerate(queries):
+            ranked[f"bm25_{i}"] = self.search_bm25(query, law_no=law_no, at=at)
+            if not _is_exact_citation_query(query):
+                ranked[f"semantic_{i}"] = self.search_semantic(query, law_no=law_no, at=at)
+        top_n = limit or self.limit
+        pool = max(top_n * 3, top_n)
+        fused = reciprocal_rank_fusion(
+            ranked,
+            k=self.rrf_k,
+            limit=pool,
+            weights=self._rrf_weights(list(ranked)),
+        )
+        return unique_by_article(fused, limit=top_n)
+
+    def _rrf_weights(self, names: list[str]) -> dict[str, float]:
+        out: dict[str, float] = {}
+        for name in names:
+            out[name] = self.bm25_weight if name.startswith("bm25") else self.dense_weight
+        return out
 
 
 def fused_to_dict(hit: FusedHit) -> dict[str, Any]:

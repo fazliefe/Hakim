@@ -38,6 +38,7 @@ type Props = {
   edges: VisEdge[];
   selectedId?: string | null;
   hierarchical?: boolean;
+  spread?: boolean;
   onNodeClick?: (id: string, evidenceN?: number) => void;
 };
 
@@ -95,7 +96,7 @@ function uniqueEdges(edges: VisEdge[]): VisEdge[] {
   return out.map((edge, index) => ({ ...edge, id: `e${index}` }));
 }
 
-export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }: Props) {
+export function VisGraph({ nodes, edges, selectedId, hierarchical, spread, onNodeClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const clickRef = useRef(onNodeClick);
@@ -123,11 +124,12 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
               enabled: true,
               direction: "LR",
               sortMethod: "directed",
-              levelSeparation: 168,
-              nodeSpacing: 72,
-              treeSpacing: 88,
+              levelSeparation: 210,
+              nodeSpacing: 96,
+              treeSpacing: 120,
               blockShifting: true,
               edgeMinimization: true,
+              parentCentralization: true,
             },
           },
           physics: { enabled: false },
@@ -142,7 +144,7 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
               smooth: { enabled: true, type: "cubicBezier", forceDirection: "horizontal", roundness: 0.38 },
             },
           }
-      : nodes.length > NO_PHYSICS_NODE_COUNT
+      : nodes.length > (spread ? 2000 : NO_PHYSICS_NODE_COUNT)
         ? {
             // Güvenlik tavanı: sunucu tarafı sınırlaması (bkz. graph/projector.py
             // dump_graph, node_limit) atlanır/büyürse bile, barnesHut fiziği
@@ -156,17 +158,30 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
           }
         : {
             ...baseOptions,
-            layout: { improvedLayout: nodes.length < 120, hierarchical: { enabled: false } },
+            layout: {
+              improvedLayout: spread ? false : nodes.length < 120,
+              hierarchical: { enabled: false },
+              randomSeed: 2,
+            },
             physics: {
               enabled: true,
-              stabilization: { iterations: nodes.length > 200 ? 200 : 140, fit: true },
-              barnesHut: {
-                gravitationalConstant: nodes.length > 80 ? -28000 : -12000,
-                centralGravity: nodes.length > 80 ? 0.08 : 0.18,
-                springLength: nodes.length > 80 ? 70 : 160,
-                springConstant: 0.03,
-                damping: 0.16,
-              },
+              stabilization: { iterations: spread ? (nodes.length > 200 ? 180 : 140) : nodes.length > 200 ? 220 : 160, fit: true },
+              barnesHut: spread
+                ? {
+                    gravitationalConstant: nodes.length > 80 ? -62000 : -32000,
+                    centralGravity: 0.008,
+                    springLength: nodes.length > 80 ? 190 : 280,
+                    springConstant: 0.016,
+                    damping: 0.22,
+                    avoidOverlap: 1,
+                  }
+                : {
+                    gravitationalConstant: nodes.length > 80 ? -28000 : -12000,
+                    centralGravity: nodes.length > 80 ? 0.08 : 0.18,
+                    springLength: nodes.length > 80 ? 70 : 160,
+                    springConstant: 0.03,
+                    damping: 0.16,
+                  },
             },
           };
 
@@ -203,7 +218,7 @@ export function VisGraph({ nodes, edges, selectedId, hierarchical, onNodeClick }
       network.destroy();
       networkRef.current = null;
     };
-  }, [nodes, edges, hierarchical]);
+  }, [nodes, edges, hierarchical, spread]);
 
   useEffect(() => {
     const network = networkRef.current;

@@ -221,3 +221,89 @@ def test_disable_reasoning_sends_chat_template_kwargs(monkeypatch) -> None:
     )
     _api_chat_body([{"role": "user", "content": "hi"}], json_mode=True)
     assert payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_api_chat_overrides_temperature_and_model(monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from llm.api_client import _api_chat_body
+
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    payloads: list[dict] = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        payloads.append(json.loads(request.data.decode("utf-8")))
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "llm.api_client.get_models",
+        lambda: SimpleNamespace(
+            llm_url="https://evren-llmapi.ssyz.org.tr/v1",
+            llm_model="llm-fast",
+            llm_temperature=0.2,
+            llm_max_tokens=3072,
+            llm_timeout=120,
+            llm_disable_reasoning=True,
+        ),
+    )
+    _api_chat_body(
+        [{"role": "user", "content": "hi"}],
+        json_mode=False,
+        temperature=0.0,
+        model="llm-large",
+    )
+    assert payloads[0]["temperature"] == 0.0
+    assert payloads[0]["model"] == "llm-large"
+    assert payloads[0]["max_tokens"] == 3072
+
+
+def test_api_chat_unbounded_max_tokens_when_config_is_open(monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from hakim_config import UNBOUNDED_MAX_TOKENS
+    from llm.api_client import _api_chat_body
+
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    payloads: list[dict] = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        payloads.append(json.loads(request.data.decode("utf-8")))
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "llm.api_client.get_models",
+        lambda: SimpleNamespace(
+            llm_url="https://evren-llmapi.ssyz.org.tr/v1",
+            llm_model="llm-fast",
+            llm_temperature=0.2,
+            llm_max_tokens=None,
+            llm_timeout=120,
+            llm_disable_reasoning=True,
+        ),
+    )
+    _api_chat_body([{"role": "user", "content": "hi"}], json_mode=False)
+    assert payloads[0]["max_tokens"] == UNBOUNDED_MAX_TOKENS

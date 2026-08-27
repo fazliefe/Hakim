@@ -1,0 +1,166 @@
+{
+  "source": "eval\\results\\hybrid.json",
+  "top1": {
+    "answerable_p10": 0.028381642512077296,
+    "answerable_p50": 0.032266458495966696,
+    "unanswerable_p50": 0.02724014336917563,
+    "unanswerable_p90": 0.032018442622950824,
+    "unanswerable_p95": 0.03252247488101534
+  },
+  "curve": [
+    {
+      "threshold": null,
+      "Recall@5": 0.787037037037037,
+      "MRR": 0.7705530111582554,
+      "correct_refusal": 0.0,
+      "answerable_empty": 0.0
+    },
+    {
+      "threshold": 0.00909090909090909,
+      "Recall@5": 0.787037037037037,
+      "MRR": 0.7705530111582554,
+      "correct_refusal": 0.0,
+      "answerable_empty": 0.0
+    },
+    {
+      "threshold": 0.015625,
+      "Recall@5": 0.7773148148148148,
+      "MRR": 0.7479431216931216,
+      "correct_refusal": 0.0,
+      "answerable_empty": 0.0
+    },
+    {
+      "threshold": 0.019904931669637554,
+      "Recall@5": 0.7509259259259259,
+      "MRR": 0.7335648148148147,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.013888888888888888
+    },
+    {
+      "threshold": 0.020638297872340425,
+      "Recall@5": 0.7509259259259259,
+      "MRR": 0.7335648148148147,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.013888888888888888
+    },
+    {
+      "threshold": 0.02127659574468085,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.016666666666666666
+    },
+    {
+      "threshold": 0.02181050656660413,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.016666666666666666
+    },
+    {
+      "threshold": 0.022347066167290888,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.016666666666666666
+    },
+    {
+      "threshold": 0.02285930790603688,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.019444444444444445
+    },
+    {
+      "threshold": 0.02340736800106397,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.225,
+      "answerable_empty": 0.025
+    },
+    {
+      "threshold": 0.023863636363636365,
+      "Recall@5": 0.749537037037037,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.275,
+      "answerable_empty": 0.025
+    },
+    {
+      "threshold": 0.02426470588235294,
+      "Recall@5": 0.7481481481481481,
+      "MRR": 0.7328703703703703,
+      "correct_refusal": 0.275,
+      "answerable_empty": 0.027777777777777776
+    },
+    {
+      "threshold": 0.024691358024691357,
+      "Recall@5": 0.7439814814814815,
+      "MRR": 0.7321759259259258,
+      "correct_refusal": 0.3,
+      "answerable_empty": 0.030555555555555555
+    },
+    {
+      "threshold": 0.025148809523809525,
+      "Recall@5": 0.7412037037037037,
+      "MRR": 0.7289351851851852,
+      "correct_refusal": 0.325,
+      "answerable_empty": 0.030555555555555555
+    },
+    {
+      "threshold": 0.02557544757033248,
+      "Recall@5": 0.7402777777777778,
+      "MRR": 0.7280092592592592,
+      "correct_refusal": 0.35,
+      "answerable_empty": 0.03611111111111111
+    },
+    {
+      "threshold": 0.02603648424543947,
+      "Recall@5": 0.7361111111111112,
+      "MRR": 0.7252314814814814,
+      "correct_refusal": 0.35,
+      "answerable_empty": 0.041666666666666664
+    },
+    {
+      "threshold": 0.02651914295749912,
+      "Recall@5": 0.7277777777777777,
+      "MRR": 0.7162037037037037,
+      "correct_refusal": 0.4,
+      "answerable_empty": 0.05
+    },
+    {
+      "threshold": 0.02712049508554787,
+      "Recall@5": 0.7231481481481481,
+      "MRR": 0.7148148148148148,
+      "correct_refusal": 0.45,
+      "answerable_empty": 0.05277777777777778
+    },
+    {
+      "threshold": 0.027809742999616416,
+      "Recall@5": 0.7134259259259259,
+      "MRR": 0.7104166666666667,
+      "correct_refusal": 0.525,
+      "answerable_empty": 0.06944444444444445
+    },
+    {
+      "threshold": 0.028594771241830064,
+      "Recall@5": 0.6898148148148149,
+      "MRR": 0.6923611111111111,
+      "correct_refusal": 0.525,
+      "answerable_empty": 0.10277777777777777
+    },
+    {
+      "threshold": 0.02976190476190476,
+      "Recall@5": 0.6546296296296296,
+      "MRR": 0.6759259259259259,
+      "correct_refusal": 0.75,
+      "answerable_empty": 0.15555555555555556
+    },
+    {
+      "threshold": 0.032266458495966696,
+      "Recall@5": 0.4583333333333333,
+      "MRR": 0.5125,
+      "correct_refusal": 0.9,
+      "answerable_empty": 0.42777777777777776
+    }
+  ]
+}

@@ -298,7 +298,10 @@ export function EvrakWorkbench() {
                 </div>
               ) : null}
               {result?.legal_caveat ? (
-                <p className="legal-caveat class-card wide">Uyarı: {result.legal_caveat}</p>
+                <p className="legal-caveat warn class-card wide">
+                  <span className="legal-caveat-kicker">Uyarı</span>
+                  {result.legal_caveat}
+                </p>
               ) : null}
               <div className="class-card">
                 <span>Tür</span>
@@ -491,8 +494,9 @@ export function EvrakWorkbench() {
           result?.draft ? (
             <div style={{ padding: "0 0.9rem 1rem" }}>
               {result.legal_caveat ? (
-                <p className="legal-caveat" style={{ marginBottom: "0.7rem" }}>
-                  Uyarı: {result.legal_caveat}
+                <p className="legal-caveat warn" style={{ marginBottom: "0.7rem" }}>
+                  <span className="legal-caveat-kicker">Uyarı</span>
+                  {result.legal_caveat}
                 </p>
               ) : null}
               <div className="sheet-actions" style={{ marginBottom: "0.7rem" }}>
@@ -512,6 +516,7 @@ export function EvrakWorkbench() {
                   petition={result.petition}
                   draft={result.draft}
                   badge={result.belge ?? result.action}
+                  caveat={result.legal_caveat}
                 />
               ) : (
                 <article className="evrak-draft">

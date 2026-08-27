@@ -21,6 +21,10 @@ _LEGAL_MARK = (
     "madde",
     "tck",
     "cmk",
+    "tmk",
+    "tbk",
+    "iik",
+    "iyuk",
     "kanun",
     "hakaret",
     "dolandir",
@@ -31,6 +35,39 @@ _LEGAL_MARK = (
     "mahkeme",
     "istinaf",
     "temyiz",
+    "izinsiz",
+    "kotuye",
+    "trafik",
+    "tehlik",
+    "taksir",
+    "sozlesme",
+    "tazmin",
+    "kira",
+    "icra",
+    "vergi",
+    "sikayet",
+    "ihbar",
+    "yargi",
+    "hukum",
+    "anayasa",
+    "avukat",
+    "sanik",
+    "magdur",
+    "zimmet",
+    "rusvet",
+    "tehdit",
+    "yarala",
+    "tapu",
+    "miras",
+    "bosan",
+    "nafaka",
+    "velayet",
+    "haciz",
+    "iflas",
+    "tedbir",
+    "idari",
+    "kart",
+    "cekme",
 )
 
 _FOLD = str.maketrans("çğıöşüâÇĞİÖŞÜIı", "cgiosuaCGIOSUIi")
@@ -52,7 +89,11 @@ def query_is_off_topic(query: str) -> bool:
         return False
     if re.search(r"\bmac(?:i|u)?\b", blob) and "mahkeme" not in blob:
         return True
-    return any(mark in blob for mark in _OFF_TOPIC)
+    if any(mark in blob for mark in _OFF_TOPIC):
+        return True
+    # Hukuki işaret yoksa arşive bakılmaz; aksi halde yemek/sohbet en yakın
+    # maddeye yapışır.
+    return True
 
 
 def bm25_is_enough(query: str, hits: list[SearchHit]) -> bool:

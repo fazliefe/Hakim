@@ -13,6 +13,9 @@ def test_critical_fields_use_stricter_thresholds() -> None:
 
 def test_completeness_flags_required_tebligat_fields() -> None:
     from document_ai.validation.completeness import completeness_warnings
+    from document_ai.validation.document_rules import load_document_rules
+
+    load_document_rules.cache_clear()
 
     doc = StructuredDocument(
         document_id="doc-001",
@@ -36,11 +39,10 @@ def test_completeness_ignores_unread_values() -> None:
         fields=[
             ExtractedField(name="date", value="01.01.2026"),
             ExtractedField(name="document_no", value="E-123"),
-            ExtractedField(name="subject", value="Konu"),
+            ExtractedField(name="subject", value="[okunamadı]"),
             ExtractedField(name="recipient", value="İlgi"),
-            ExtractedField(name="signature", value="[okunamadı]"),
         ],
     )
     missing = completeness_warnings(doc)
-    assert [item.field for item in missing] == ["signature"]
+    assert [item.field for item in missing] == ["subject"]
     assert missing[0].message.startswith("✗")

@@ -27,6 +27,12 @@ export function shortLabel(text: string, max = 22) {
 export function lawPrefix(lawNo?: string | null) {
   if (lawNo === "5237") return "TCK";
   if (lawNo === "5271") return "CMK";
+  if (lawNo === "2577") return "İYUK";
+  if (lawNo === "4721") return "TMK";
+  if (lawNo === "6098") return "TBK";
+  if (lawNo === "2004") return "İİK";
+  if (lawNo === "2709") return "AY";
+  if (lawNo === "6100") return "HMK";
   return lawNo ? `K.${lawNo}` : "Kanun";
 }
 

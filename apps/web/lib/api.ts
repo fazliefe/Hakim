@@ -60,6 +60,7 @@ export type Observability = {
     prompt_tokens?: number;
     completion_tokens?: number;
     cost_usd?: number;
+    cost_estimated?: boolean;
     provider?: string;
     model?: string;
     model_label?: string;
@@ -760,6 +761,27 @@ export async function guessIslem(text: string): Promise<IslemGuess> {
   return response.json();
 }
 
+export type VisualEk = {
+  caption: string;
+  scene?: string;
+};
+
+export type IslemPhotoScreen = {
+  accepted: boolean;
+  caption: string;
+  scene: string;
+};
+
+export async function screenIslemPhoto(file: File): Promise<IslemPhotoScreen> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await apiFetch("/v1/islem/fotograf", { method: "POST", body });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Fotoğraf KVKK kontrolünden geçmedi"));
+  }
+  return response.json();
+}
+
 export async function getBelgeler(): Promise<BelgeKalip[]> {
   const response = await apiFetch("/v1/belgeler", { cache: "no-store" });
   if (!response.ok) {
@@ -773,11 +795,16 @@ export async function analyzeWorkspace(
   path: "/v1/evrak" | "/v1/surec" | "/v1/islem" | "/v1/senaryo",
   text: string,
   action?: string,
+  visualEks?: VisualEk[],
 ): Promise<DocumentAnalysis> {
   const response = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, action }),
+    body: JSON.stringify({
+      text,
+      action,
+      ...(path === "/v1/islem" && visualEks?.length ? { visual_eks: visualEks } : {}),
+    }),
   });
   if (!response.ok) {
     const raw = await response.text();

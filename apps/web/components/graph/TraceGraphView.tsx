@@ -111,17 +111,24 @@ function formatTokens(n?: number) {
   return (n ?? 0).toLocaleString("tr-TR");
 }
 
-function formatCost(n?: number) {
-  if (!n) return "$0";
-  if (n < 0.01) return `$${n.toFixed(6)}`;
-  return `$${n.toFixed(4)}`;
+function formatCost(n?: number, prompt?: number, completion?: number, estimated?: boolean) {
+  const tokens = (prompt ?? 0) + (completion ?? 0);
+  let value = n ?? 0;
+  let approx = Boolean(estimated);
+  if ((!value || value === 0) && tokens > 0) {
+    value = (prompt ?? 0) / 1_000_000 * 0.075 + (completion ?? 0) / 1_000_000 * 0.3;
+    approx = true;
+  }
+  if (!value) return "ücretsiz";
+  const shown = value < 0.01 ? `$${value.toFixed(6)}` : `$${value.toFixed(4)}`;
+  return approx ? `~${shown}` : shown;
 }
 
 function hopCaption(hop: TraceHop) {
   const tokens = (hop.prompt_tokens ?? 0) + (hop.completion_tokens ?? 0);
   const parts = [formatMs(hop.ms)];
   if (tokens) parts.push(`${formatTokens(tokens)} tok`);
-  if (hop.cost_usd) parts.push(formatCost(hop.cost_usd));
+  if (tokens) parts.push(formatCost(hop.cost_usd, hop.prompt_tokens, hop.completion_tokens));
   return parts.join(" · ");
 }
 
@@ -247,7 +254,15 @@ export function TraceGraphView({ nodes, evidence, selected, onSelect, observabil
             </strong>
           </span>
           <span>
-            Maliyet: <strong>{formatCost(totals?.cost_usd)}</strong>
+            Maliyet:{" "}
+            <strong>
+              {formatCost(
+                totals?.cost_usd,
+                totals?.prompt_tokens,
+                totals?.completion_tokens,
+                totals?.cost_estimated,
+              )}
+            </strong>
           </span>
         </div>
       ) : null}

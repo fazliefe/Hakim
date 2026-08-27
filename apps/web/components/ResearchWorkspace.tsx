@@ -299,10 +299,17 @@ export function ResearchWorkspace() {
     threadEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, loading]);
 
+  const citedEvidence = useMemo(() => {
+    if (!result?.evidence.length) return [];
+    const used = result.evidence.filter((item) => item.used_in_answer);
+    return used.length ? used : result.evidence;
+  }, [result]);
+
   const selectedEvidence: Evidence | null = useMemo(() => {
-    if (!result || selected == null) return result?.evidence[0] ?? null;
-    return result.evidence.find((item) => item.n === selected) ?? null;
-  }, [result, selected]);
+    if (!result?.evidence.length) return null;
+    if (selected == null) return citedEvidence[0] ?? result.evidence[0];
+    return result.evidence.find((item) => item.n === selected) ?? citedEvidence[0] ?? null;
+  }, [result, citedEvidence, selected]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
   const reading = saved.find((item) => item.id === readingId) ?? null;
@@ -344,7 +351,7 @@ export function ResearchWorkspace() {
     try {
       const data = await runResearch(payload);
       setResult(data);
-      setSelected(data.evidence[0]?.n ?? null);
+      setSelected(data.evidence.find((item) => item.used_in_answer)?.n ?? data.evidence[0]?.n ?? null);
       setTab("metin");
       setSide("arastirmalar");
       const turn: ChatTurn = {
@@ -471,8 +478,8 @@ export function ResearchWorkspace() {
 
   const inspector = (
     <div className="source-stack">
-      {result?.evidence.length ? (
-        result.evidence.map((item) => (
+      {citedEvidence.length ? (
+        citedEvidence.map((item) => (
           <button
             key={item.chunk_id}
             type="button"

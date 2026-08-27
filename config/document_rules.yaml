@@ -7,7 +7,6 @@ official_letter:
     - document_no
     - subject
     - recipient
-    - signature
   optional:
     - reference_section
     - attachment_section
@@ -20,7 +19,6 @@ ust_yazi:
     - document_no
     - subject
     - recipient
-    - signature
   optional:
     - reference_section
     - attachment_section
@@ -36,7 +34,6 @@ tebligat:
     - person_name
     - institution
     - stamp
-    - signature
 
 mahkeme_karari:
   required:
@@ -46,14 +43,12 @@ mahkeme_karari:
   optional:
     - person_name
     - institution
-    - signature
     - stamp
 
 olur:
   required:
     - date
     - subject
-    - signature
   optional:
     - document_no
     - sender
@@ -65,7 +60,6 @@ dilekce:
   optional:
     - person_name
     - date
-    - signature
 
 belirsiz:
   required: []

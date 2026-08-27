@@ -15,6 +15,7 @@ from document_ai.observability import (
 from retrieval.adaptive import bm25_is_enough, query_is_off_topic
 from retrieval.bm25 import parse_law_hint
 from retrieval.hybrid import _is_exact_citation_query
+from retrieval.query_expand import expand_queries, query_needs_multi
 from retrieval.rerank import rerank_fused
 from retrieval.research import _build_trace, _focus_query, assemble_research_result, collect_neighbors
 
@@ -51,6 +52,7 @@ class ResearchState(TypedDict, total=False):
     force_semantic: bool
     need_retry: bool
     attempt: int
+    multi_query: bool
 
 
 def _hop(
@@ -109,9 +111,21 @@ def _node_sorgu(state: ResearchState) -> ResearchState:
     query = (state.get("query") or "").strip()
     hinted = parse_law_hint(query)
     search_law = hinted if hinted else state.get("law_no")
+    multi = False
+    try:
+        from hakim_config import get_models
+
+        multi = bool(get_models().multi_query_aggregation and query_needs_multi(query))
+    except Exception:
+        multi = query_needs_multi(query)
     hops = list(state.get("hops") or [])
     _hop(hops, "sorgu", "Sorgu", started, summary=query[:220] or "boş sorgu")
-    return {"search_law": search_law, "hops": hops}
+    return {
+        "search_law": search_law,
+        "hops": hops,
+        "multi_query": multi,
+        "force_semantic": True if multi else bool(state.get("force_semantic")),
+    }
 
 
 def _node_kontrol(state: ResearchState) -> ResearchState:
@@ -179,32 +193,67 @@ def _node_vektor(state: ResearchState) -> ResearchState:
 
 def _node_rrf(state: ResearchState) -> ResearchState:
     started = time.perf_counter()
-    fused = state["engine"].hybrid.fuse(
-        state["query"],
-        state.get("bm25_hits") or [],
-        state.get("semantic_hits") or [],
-        limit=12,
-        decision_bm25_hits=state.get("decision_bm25_hits") or [],
-        decision_semantic_hits=state.get("decision_semantic_hits") or [],
-    )
-    if _is_exact_citation_query(state["query"]):
-        route = "exact_citation"
-    elif state.get("semantic_hits"):
-        route = "hybrid"
+    query = state["query"]
+    engine = state["engine"]
+    if state.get("multi_query") and hasattr(engine.hybrid, "search_multi"):
+        fused = engine.hybrid.search_multi(
+            expand_queries(query, "multi_query"),
+            law_no=state.get("search_law"),
+            limit=12,
+        )
+        route = "multi_query"
     else:
-        route = "bm25"
+        fused = engine.hybrid.fuse(
+            query,
+            state.get("bm25_hits") or [],
+            state.get("semantic_hits") or [],
+            limit=12,
+            decision_bm25_hits=state.get("decision_bm25_hits") or [],
+            decision_semantic_hits=state.get("decision_semantic_hits") or [],
+        )
+        if _is_exact_citation_query(query):
+            route = "exact_citation"
+        elif state.get("semantic_hits"):
+            route = "hybrid"
+        else:
+            route = "bm25"
+    gate_note = ""
+    try:
+        from hakim_config import get_models
+
+        threshold = float(get_models().dense_gate or 0.0)
+    except Exception:
+        threshold = 0.0
+    if threshold > 0 and fused and not _is_exact_citation_query(query):
+        semantic = list(state.get("semantic_hits") or [])
+        if not semantic and hasattr(engine.hybrid, "search_semantic"):
+            semantic = engine.hybrid.search_semantic(query, law_no=state.get("search_law"))[:1]
+        top = float(semantic[0].score) if semantic else 0.0
+        if semantic and top < threshold:
+            fused = []
+            gate_note = f" · dense kapı {top:.2f}<{threshold:.2f}"
+            route = "refuse"
     hops = list(state.get("hops") or [])
-    _hop(hops, "rrf", "Birleşim", started, summary=f"{len(fused)} kaynak · {route}")
+    _hop(hops, "rrf", "Birleşim", started, summary=f"{len(fused)} kaynak · {route}{gate_note}")
     return {"fused": fused, "route": route, "hops": hops}
 
 
 def _node_rerank(state: ResearchState) -> ResearchState:
     started = time.perf_counter()
-    # getattr: testlerdeki _FakeEngine gibi reranker alanı olmayan motorlarla
-    # da çalışsın — yoksa rerank_fused zaten lexical sezgiseline düşer.
-    scorer = getattr(state.get("engine"), "reranker", None)
-    ranked = rerank_fused(state["query"], list(state.get("fused") or []), limit=12, scorer=scorer)
+    fused = list(state.get("fused") or [])
     hops = list(state.get("hops") or [])
+    enabled = True
+    try:
+        from hakim_config import get_models
+
+        enabled = bool(get_models().rerank_enabled)
+    except Exception:
+        enabled = True
+    if not enabled:
+        _hop(hops, "rerank", "Rerank", started, state="skip", summary="RRF sırası korundu")
+        return {"fused": fused, "hops": hops}
+    scorer = getattr(state.get("engine"), "reranker", None)
+    ranked = rerank_fused(state["query"], fused, limit=12, scorer=scorer)
     method = "cross-encoder" if scorer is not None else "lexical"
     _hop(hops, "rerank", "Rerank", started, summary=f"{len(ranked)} kaynak yeniden sıralandı ({method})")
     return {"fused": ranked, "hops": hops}
@@ -292,7 +341,7 @@ def _node_reddet(state: ResearchState) -> ResearchState:
         reasoning=build_research_reasoning(query, [], route="refuse", answer=answer, refused=True),
     )
     hops = list(state.get("hops") or [])
-    _hop(hops, "reddet", "Reddet", started, state="warn", summary="sorgu hukuk araştırmasına uygun değil")
+    _hop(hops, "reddet", "Reddet", started, state="warn", summary="hukuk araştırması kapsamı dışında")
     return {"result": result, "hops": hops}
 
 
@@ -350,6 +399,10 @@ def build_observability(
         label = model_label(cfg)
     except Exception:
         model = ""
+    prompt_tokens = sum(int(item.get("prompt_tokens") or 0) for item in hops)
+    completion_tokens = sum(int(item.get("completion_tokens") or 0) for item in hops)
+    from llm.usage import _cost_is_estimated
+
     return {
         "engine": "langgraph",
         "graph_nodes": list(GRAPH_NODES),
@@ -360,9 +413,10 @@ def build_observability(
         "hops": hops,
         "totals": {
             "ms": sum(int(item.get("ms") or 0) for item in hops),
-            "prompt_tokens": sum(int(item.get("prompt_tokens") or 0) for item in hops),
-            "completion_tokens": sum(int(item.get("completion_tokens") or 0) for item in hops),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
             "cost_usd": round(sum(float(item.get("cost_usd") or 0) for item in hops), 8),
+            "cost_estimated": _cost_is_estimated(prompt_tokens, completion_tokens),
             "provider": provider,
             "model": model,
             "model_label": label,
@@ -383,6 +437,7 @@ def run_research_graph(engine: Any, query: str, *, law_no: str | None = None):
         "attempt": 0,
         "force_semantic": False,
         "need_retry": False,
+        "multi_query": False,
     }
     invoke = research_graph().invoke
     tid: str | None = None

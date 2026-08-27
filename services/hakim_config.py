@@ -9,6 +9,26 @@ import os
 
 import yaml
 
+# vLLM/OpenAI uyumlu sunucular max_tokens yoksa çoğu zaman 16 üretir.
+# Uygulama tavanı kapalıyken (null) bunu gönderiyoruz; model kendi
+# bağlam penceresinde keser.
+UNBOUNDED_MAX_TOKENS = 131072
+
+
+def effective_max_tokens(configured: int | None) -> int:
+    if configured is None or configured <= 0:
+        return UNBOUNDED_MAX_TOKENS
+    return configured
+
+
+def _optional_max_tokens(raw: Any) -> int | None:
+    if raw is None or raw is False:
+        return None
+    if isinstance(raw, str) and raw.strip().lower() in {"", "null", "none", "unlimited", "inf"}:
+        return None
+    value = int(raw)
+    return None if value <= 0 else value
+
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -37,7 +57,7 @@ class ModelsConfig:
     writer: str
     llm_url: str
     llm_model: str
-    llm_max_tokens: int
+    llm_max_tokens: int | None
     llm_timeout: float
     llm_temperature: float
     llm_input_per_million: float
@@ -56,6 +76,10 @@ class ModelsConfig:
     rerank_enabled: bool
     rerank_model: str
     rerank_batch_size: int
+    # Benchmark (eval/results): dense cosine 0.70 unanswerable red ~%93,
+    # cevaplı boş ~%3. 0 = kapı kapalı.
+    dense_gate: float
+    multi_query_aggregation: bool
     # document_ai/prototype_classifier.py — kural motorunun ("belirsiz")
     # hiçbir needle'a çarpmadığı azınlık vakalarda devreye giren, embedding
     # tabanlı ikincil sınıflandırma önerisi. rerank'ten farklı olarak
@@ -73,7 +97,7 @@ class ModelsConfig:
     vision_model: str
     vision_max_images: int
     vision_timeout: float
-    vision_max_tokens: int
+    vision_max_tokens: int | None
     # Dikte (STT) — aktif yazım profilinden (llm.*) KASITLI olarak bağımsız:
     # Evren'de bir Whisper uç noktası yok, bu yüzden `defaults.whisper`
     # doğrudan `raw["defaults"]` üzerinden okunur (merged/profil overlay'e
@@ -122,6 +146,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
     embedding = merged.get("embedding") or {}
     decision_embedding = merged.get("decision_embedding") or {}
     rerank = merged.get("rerank") or {}
+    retrieval = merged.get("retrieval") or {}
     classification_fallback = merged.get("classification_fallback") or {}
     research = merged.get("research") or {}
     vision = merged.get("vision") or {}
@@ -131,7 +156,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         writer=str(merged.get("writer") or "api"),
         llm_url=str(llm.get("url") or "https://api.groq.com/openai/v1").rstrip("/"),
         llm_model=str(llm.get("model") or "openai/gpt-oss-20b"),
-        llm_max_tokens=int(llm.get("max_tokens") or 900),
+        llm_max_tokens=_optional_max_tokens(llm.get("max_tokens")),
         llm_timeout=float(llm.get("timeout") or 25),
         llm_temperature=float(llm.get("temperature") or 0.2),
         # `or` yerine `is None` kontrolü: 0.0 (ücretsiz servis) geçerli bir
@@ -155,6 +180,8 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         rerank_enabled=bool(rerank.get("enabled", True)),
         rerank_model=str(rerank.get("model") or "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"),
         rerank_batch_size=int(rerank.get("batch_size") or 16),
+        dense_gate=float(retrieval["dense_gate"] if retrieval.get("dense_gate") is not None else 0.0),
+        multi_query_aggregation=bool(retrieval.get("multi_query_aggregation", False)),
         classification_fallback_enabled=bool(
             os.environ.get("HAKIM_CLASSIFICATION_FALLBACK", "").strip() == "1"
             or classification_fallback.get("enabled", False)
@@ -167,7 +194,7 @@ def _parse(raw: dict[str, Any]) -> ModelsConfig:
         vision_model=str(vision.get("model") or llm.get("model") or "llm-fast"),
         vision_max_images=int(vision.get("max_images") or 2),
         vision_timeout=float(vision.get("timeout") or 120),
-        vision_max_tokens=int(vision.get("max_tokens") or 4096),
+        vision_max_tokens=_optional_max_tokens(vision.get("max_tokens")),
         whisper_url=str(whisper.get("url") or "https://api.groq.com/openai/v1").rstrip("/"),
         whisper_model=str(whisper.get("model") or "whisper-large-v3-turbo"),
         whisper_timeout=float(whisper.get("timeout") or 30),

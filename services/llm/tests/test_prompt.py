@@ -128,6 +128,8 @@ def test_refuse_and_missing_citation_copy() -> None:
     refuse = refuse_answer()
     assert "hukuk" in refuse.lower()
     assert "TCK" not in refuse
+    assert "spor" not in refuse.lower()
+    assert "cevap üretilmez" in refuse.lower() or "cevap verilmez" in refuse.lower()
     missing = missing_citation_answer("5237", "158")
     assert "m.158" in missing
     assert "TCK" in missing
