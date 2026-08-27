@@ -103,6 +103,7 @@ class EvrenEmbedder:
     def _embed_batch(self, batch: list[str]) -> list[list[float]]:
         from llm.api_client import _headers
         from llm.client import OllamaError
+        from llm.retry import call_with_retry
 
         key = os.environ.get("HAKIM_LLM_API_KEY", "").strip()
         if not key:
@@ -118,21 +119,12 @@ class EvrenEmbedder:
                 return json.loads(response.read().decode("utf-8"))
 
         try:
-            body = _call()
+            body = call_with_retry(_call, label="Evren embeddings API")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            if exc.code >= 500:
-                try:
-                    body = _call()  # 5xx: bir kez retry
-                except Exception:
-                    raise OllamaError(f"Evren embeddings API {exc.code}: {detail[:180]}") from exc
-            else:
-                raise OllamaError(f"Evren embeddings API {exc.code}: {detail[:180]}") from exc
+            raise OllamaError(f"Evren embeddings API {exc.code}: {detail[:180]}") from exc
         except urllib.error.URLError as exc:
-            try:
-                body = _call()  # timeout/bağlantı hatası: bir kez retry
-            except Exception:
-                raise OllamaError(str(exc)) from exc
+            raise OllamaError(str(exc)) from exc
 
         items = body.get("data") or []
         if len(items) != len(batch):

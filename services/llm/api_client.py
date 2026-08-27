@@ -8,6 +8,7 @@ from typing import Any
 
 from hakim_config import get_models
 from llm.client import OllamaError
+from llm.retry import call_with_retry
 
 
 def api_configured() -> bool:
@@ -89,9 +90,13 @@ def _api_chat_body(
         headers=_headers(key),
         method="POST",
     )
-    try:
+
+    def _call() -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=timeout or cfg.llm_timeout) as response:
-            body = json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8"))
+
+    try:
+        body = call_with_retry(_call, label="LLM API")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         try:

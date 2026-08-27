@@ -82,10 +82,13 @@ def test_evren_embedder_missing_api_key_raises(monkeypatch) -> None:
         assert "HAKIM_LLM_API_KEY" in str(exc)
 
 
-def test_evren_embedder_retries_once_on_5xx_then_raises(monkeypatch) -> None:
+def test_evren_embedder_retries_with_backoff_on_5xx_then_raises(monkeypatch) -> None:
+    # services/llm/retry.py::call_with_retry ile tekilleştirildi (bkz. o
+    # dosya) — artık 1 sabit retry değil, üstel geri çekilmeyle 3 deneme.
     from llm.client import OllamaError
 
     monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    monkeypatch.setattr("llm.retry.time.sleep", lambda _seconds: None)
     attempts = {"n": 0}
 
     def fake_urlopen(request, timeout=None):
@@ -105,7 +108,31 @@ def test_evren_embedder_retries_once_on_5xx_then_raises(monkeypatch) -> None:
         raise AssertionError("expected OllamaError")
     except OllamaError as exc:
         assert "503" in str(exc)
-    assert attempts["n"] == 2  # ilk deneme + 1 retry
+    assert attempts["n"] == 3  # varsayılan call_with_retry(attempts=3)
+
+
+def test_evren_embedder_recovers_after_one_transient_5xx(monkeypatch) -> None:
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    monkeypatch.setattr("llm.retry.time.sleep", lambda _seconds: None)
+    attempts = {"n": 0}
+
+    def fake_urlopen(request, timeout=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise urllib.error.HTTPError(
+                "https://evren-llmapi.ssyz.org.tr/v1/embeddings",
+                503,
+                "Service Unavailable",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error": "server busy"}'),
+            )
+        return _Resp(_embedding_body(1))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    embedder = EvrenEmbedder()
+    vectors = embedder.embed(["x"])
+    assert len(vectors) == 1
+    assert attempts["n"] == 2
 
 
 def test_evren_embedder_does_not_retry_on_4xx(monkeypatch) -> None:

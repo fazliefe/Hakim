@@ -127,6 +127,59 @@ def test_json_validate_retry_drops_json_mode(monkeypatch) -> None:
     assert usage.completion_tokens == 4
 
 
+def test_transient_503_recovers_via_retry(monkeypatch) -> None:
+    """services/llm/retry.py::call_with_retry ile _api_chat_body artık tek bir
+    5xx'te pes etmiyor — bkz. o modül."""
+    import io
+    import json
+    import urllib.error
+    from types import SimpleNamespace
+
+    from llm.api_client import _api_chat_body
+
+    monkeypatch.setenv("HAKIM_LLM_API_KEY", "sk-test")
+    monkeypatch.setattr("llm.retry.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "llm.api_client.get_models",
+        lambda: SimpleNamespace(
+            llm_url="https://evren-llmapi.ssyz.org.tr/v1",
+            llm_model="llm-fast",
+            llm_temperature=0.2,
+            llm_max_tokens=3072,
+            llm_timeout=120,
+            llm_disable_reasoning=False,
+        ),
+    )
+    attempts = {"n": 0}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "merhaba"}}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise urllib.error.HTTPError(
+                "https://evren-llmapi.ssyz.org.tr/v1/chat/completions",
+                503,
+                "Service Unavailable",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error": "server busy"}'),
+            )
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    text = _api_chat_body([{"role": "user", "content": "hi"}], json_mode=False)
+    assert text == "merhaba"
+    assert attempts["n"] == 2
+
+
 def test_disable_reasoning_sends_chat_template_kwargs(monkeypatch) -> None:
     """evren (vLLM/Qwen3) thinking modu açık geldiği için karmaşık promptlarda
     reasoning izi max_tokens'ı tüketip boş içerik döndürüyordu — canlıda
