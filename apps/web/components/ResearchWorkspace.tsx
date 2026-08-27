@@ -202,6 +202,51 @@ function pickRecorderMimeType(): string | undefined {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type));
 }
 
+/* Dikte/sesli-oku ikonları — SF Symbols'e yakın ince çizgi stili (renk
+   düğmeden currentColor ile miras alınır, tema/durum CSS'te yönetilir). */
+
+function MicIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="2.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+      <line x1="12" y1="17.5" x2="12" y2="21" />
+      <line x1="8.5" y1="21" x2="15.5" y2="21" />
+    </svg>
+  );
+}
+
+function StopIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2.5" />
+    </svg>
+  );
+}
+
+function LoadingIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="icon-spin" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeDasharray="24 30" opacity={0.85} />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9.3v5.4h3.3L12.3 19V5L7.3 9.3H4z" fill="currentColor" />
+      <path
+        d="M15.6 9a4.1 4.1 0 0 1 0 6M18.3 6.8a7.6 7.6 0 0 1 0 10.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function ResearchWorkspace() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -555,7 +600,15 @@ export function ResearchWorkspace() {
                               onClick={() => speakTurn(turn)}
                               aria-pressed={speakingId === turn.id}
                             >
-                              {speakingId === turn.id ? "⏹ Durdur" : "🔊 Sesli Oku"}
+                              {speakingId === turn.id ? (
+                                <>
+                                  <StopIcon size={13} /> Durdur
+                                </>
+                              ) : (
+                                <>
+                                  <SpeakerIcon /> Sesli Oku
+                                </>
+                              )}
                             </button>
                           ) : null}
                         </div>
@@ -667,7 +720,7 @@ export function ResearchWorkspace() {
                 aria-label={recording ? "Dikteyi durdur" : "Dikte ile yaz"}
                 title={recording ? "Dikteyi durdur" : "Dikte ile yaz"}
               >
-                {transcribing ? "…" : recording ? "⏺" : "🎤"}
+                {transcribing ? <LoadingIcon /> : recording ? <StopIcon /> : <MicIcon />}
               </button>
             ) : null}
             <button type="submit" disabled={loading || query.trim().length < 2}>
