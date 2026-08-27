@@ -65,6 +65,28 @@ def test_compact_engine_keeps_span_not_full_article() -> None:
     assert out["classification"]["label"] == "Mahkeme kararı"
 
 
+def test_compact_engine_redacts_pii_from_free_text_but_not_fields() -> None:
+    from llm.writer import compact_engine
+
+    out = compact_engine(
+        {
+            "user_text": "Başvuran Ahmet Yılmaz, TCKN 10000000146, iletişim ahmet@example.com, "
+            "tel 0532 123 45 67, IBAN TR33 0006 1005 1978 6457 8413 26.",
+            "query": "TCKN 10000000146 için dilekçe hazırla",
+            "fields": {"tc_no": "10000000146", "ad_soyad": "Ahmet Yılmaz"},
+        }
+    )
+    assert "10000000146" not in out["user_text"]
+    assert "ahmet@example.com" not in out["user_text"]
+    assert "0532 123 45 67" not in out["user_text"]
+    assert "TR33" not in out["user_text"]
+    assert "[TCKN gizli]" in out["user_text"]
+    assert "10000000146" not in out["query"]
+    # fields dilekçenin işlevsel içeriğidir, maskelenmez
+    assert out["fields"]["tc_no"] == "10000000146"
+    assert out["fields"]["ad_soyad"] == "Ahmet Yılmaz"
+
+
 def test_write_module_uses_chat_and_skips_ping(monkeypatch) -> None:
     from llm import writer as writer_mod
 

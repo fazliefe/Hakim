@@ -48,7 +48,14 @@ def _span(text: Any, limit: int = SPAN_CHARS) -> str:
 
 
 def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
-    """Groq/Ollama'ya tam madde dump'ı gitmesin: künye + kısa span."""
+    """Groq/Ollama'ya tam madde dump'ı gitmesin: künye + kısa span.
+
+    Serbest metin alanları (user_text, query) dış LLM'e gitmeden önce PII
+    (TCKN/IBAN/e-posta/telefon) maskelenir. `fields` buna dahil değildir:
+    oradaki ad/TCKN/adres, dilekçenin işlevsel içeriğidir, tesadüfi değil.
+    """
+    from document_ai.privacy.pii_detector import redact_text
+
     classification = engine.get("classification") or {}
     related = []
     for hit in (engine.get("related") or [])[:RELATED_HITS]:
@@ -87,8 +94,8 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
         )
     return {
         "action": engine.get("action"),
-        "user_text": _span(engine.get("user_text"), USER_TEXT_CHARS),
-        "query": _span(engine.get("query"), 240) or None,
+        "user_text": _span(redact_text(str(engine.get("user_text") or "")), USER_TEXT_CHARS),
+        "query": _span(redact_text(str(engine.get("query") or "")), 240) or None,
         "verdict": engine.get("verdict"),
         "classification": {
             "label": classification.get("label"),
