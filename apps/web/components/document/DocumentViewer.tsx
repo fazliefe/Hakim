@@ -49,21 +49,23 @@ export function DocumentViewer({
           ))}
         </div>
       ) : null}
-      <div className="document-stage">
-        {/* preview is a live analyze payload, not a static asset */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={document.filename || "Evrak görüntüsü"} />
-        <div className="document-overlays">
-          {showOverlay
-            ? pageFields.map((field, index) => (
-                <EvidenceOverlay
-                  key={fieldKey(field, index)}
-                  field={field}
-                  active={focused === field.name}
-                  onSelect={onFocus}
-                />
-              ))
-            : null}
+      <div className="document-scroll">
+        <div className="document-stage">
+          {/* preview is a live analyze payload, not a static asset */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={document.filename || "Evrak görüntüsü"} />
+          <div className="document-overlays">
+            {showOverlay
+              ? pageFields.map((field, index) => (
+                  <EvidenceOverlay
+                    key={fieldKey(field, index)}
+                    field={field}
+                    active={focused === field.name}
+                    onSelect={onFocus}
+                  />
+                ))
+              : null}
+          </div>
         </div>
       </div>
     </div>

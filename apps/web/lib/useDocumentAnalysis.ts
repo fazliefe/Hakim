@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { DocumentAnalysis, StructuredDocument, analyzeEvrakFile, analyzeEvrakVision, analyzeWorkspace, visionFile } from "@/lib/api";
+import { DocumentAnalysis, StructuredDocument, VisualEk, analyzeEvrakFile, analyzeEvrakVision, analyzeWorkspace, visionFile } from "@/lib/api";
 
 export const SAMPLE_EVRAK = `T.C.
 ANKARA 4. AĞIR CEZA MAHKEMESİ
@@ -32,7 +32,7 @@ export function useDocumentAnalysis(
   const [fileName, setFileName] = useState<string | null>(null);
   const [structured, setStructured] = useState<StructuredDocument | null>(null);
 
-  async function submit(event?: FormEvent, nextAction?: string, nextText?: string) {
+  async function submit(event?: FormEvent, nextAction?: string, nextText?: string, visualEks?: VisualEk[]) {
     event?.preventDefault();
     const usedAction = nextAction ?? action;
     const payload = (nextText ?? text).trim();
@@ -46,6 +46,7 @@ export function useDocumentAnalysis(
         path,
         payload,
         path === "/v1/islem" || path === "/v1/senaryo" ? usedAction || undefined : undefined,
+        path === "/v1/islem" ? visualEks : undefined,
       );
       setResult(data);
       if (path === "/v1/islem" && usedAction && data.action) setAction(data.action);
@@ -169,6 +170,7 @@ export const FIELD_LABEL: Record<string, string> = {
 
 export const NATURE_LABEL: Record<string, string> = {
   ceza: "Ceza",
+  hukuk: "Hukuk",
   idare: "İdare",
   anayasa: "Anayasa",
   kamu: "Kamu İdaresi",
@@ -178,6 +180,7 @@ export const NATURE_LABEL: Record<string, string> = {
 export const STAGE_LABEL: Record<string, string> = {
   sorusturma: "Soruşturma",
   kovusturma: "Kovuşturma",
+  ilk_derece: "İlk Derece",
   istinaf: "İstinaf",
   temyiz: "Temyiz",
   bireysel_basvuru: "Bireysel Başvuru",

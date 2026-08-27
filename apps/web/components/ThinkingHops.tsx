@@ -18,6 +18,7 @@ export const EVRAK_THINK_STEPS: ThinkStep[] = [
   { title: "Mevzuat", text: "Dayanak Maddeler Aranıyor…" },
   { title: "Süre", text: "Süre Kuralları İşleniyor…" },
   { title: "Taslak", text: "Resmi Yazı Kalıbı Seçiliyor…" },
+  { title: "Özet", text: "Kısa Özet Yazılıyor…" },
   { title: "Havale", text: "Birim Önerisi Yazılıyor…" },
 ];
 

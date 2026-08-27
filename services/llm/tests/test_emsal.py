@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from llm.emsal import emsal_atif_or_drop, emsal_search_query, pick_emsal
+from llm.emsal import emsal_atif_or_drop, emsal_search_query, merge_emsal_hits, pick_emsal
 from llm.formats import load_belge
 from llm.writer import compact_engine, compose_belge, extractive_parsed
 
@@ -418,3 +418,28 @@ def test_temyiz_prints_teblig_date_from_inline_label() -> None:
     }
     parsed = extractive_parsed(spec, engine)
     assert "14.08.2026" in str(parsed.get("sure_cumlesi") or "")
+
+
+def test_merge_emsal_hits_renumbers_sequentially() -> None:
+    """`extra`, kendi retrieve() sonucundan n=1,2 diye gelir; `related`'e
+    olduğu gibi eklenirse aynı n rozeti iki kez görünüyordu (Kaynak
+    grafiğinde bir madde "iki kez yazılmış" gibi duruyordu) ve atıf
+    tıklaması yanlış maddeyi açıyordu."""
+    related = [
+        {"n": 1, "document_id": "decision:a", "document_type": "court_decision"},
+        {"n": 2, "document_id": "decision:b", "document_type": "court_decision"},
+    ]
+    extra = [
+        {"n": 1, "document_id": "decision:c", "document_type": "court_decision"},
+        {"n": 2, "document_id": "decision:d", "document_type": "court_decision"},
+    ]
+    merged = merge_emsal_hits(related, extra)
+    assert [item["n"] for item in merged] == [1, 2, 3, 4]
+    assert [item["document_id"] for item in merged] == [
+        "decision:a",
+        "decision:b",
+        "decision:c",
+        "decision:d",
+    ]
+    # Orijinal listeler mutasyona uğramamalı.
+    assert related[0]["n"] == 1 and related[1]["n"] == 2

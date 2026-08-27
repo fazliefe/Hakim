@@ -41,10 +41,28 @@ EVIDENCE_SPAN_CHARS = 720
 USER_TEXT_CHARS = 800
 RELATED_HITS = 5
 EVIDENCE_HITS = 6
+MAX_VISUAL_EKS = 4
+VISUAL_EK_CUMLE_ONE = "Olaydaki görsel ekte sunulmuştur."
+VISUAL_EK_CUMLE_MANY = "Olaydaki görseller ekte sunulmuştur."
 
 
 def _span(text: Any, limit: int = SPAN_CHARS) -> str:
     return " ".join(str(text or "").split())[:limit]
+
+
+def normalize_visual_eks(raw: Any) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        caption = _span(item.get("caption"), 160)
+        scene = _span(item.get("scene"), 400)
+        if not caption:
+            continue
+        rows.append({"caption": caption, "scene": scene})
+        if len(rows) >= MAX_VISUAL_EKS:
+            break
+    return rows
 
 
 def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
@@ -85,7 +103,7 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
                 "missing": item.get("missing"),
             }
         )
-    return {
+    compact = {
         "action": engine.get("action"),
         "user_text": _span(engine.get("user_text"), USER_TEXT_CHARS),
         "query": _span(engine.get("query"), 240) or None,
@@ -106,6 +124,10 @@ def compact_engine(engine: dict[str, Any]) -> dict[str, Any]:
         "emsal": pick_emsal(engine, action=str(engine.get("action") or "")),
         "gaps": engine.get("gaps") or [],
     }
+    visual_eks = normalize_visual_eks(engine.get("visual_eks"))
+    if visual_eks:
+        compact["visual_eks"] = visual_eks
+    return compact
 
 
 def _messages(module_or_belge: str, engine: dict[str, Any], *, belge: bool = False) -> list[dict[str, str]]:
@@ -214,16 +236,25 @@ def extractive_surec(engine: dict[str, Any]) -> dict[str, Any]:
     stage = str(cls.get("stage") or "belirsiz")
     stage_tr = STAGE_TR.get(stage, stage)
     asama = f"Evrak {stage_tr} aşamasındadır."
-    if stage == "kovusturma":
+    if stage in {"kovusturma", "ilk_derece"}:
         asama += " İstinaf yolu açıktır; dosya henüz istinaf mahkemesinde değildir."
+    # remedies (classify.py::classify_document) artık nitelik-bazlı ayrı
+    # etiketler taşıyor (istinaf_ceza/istinaf_hukuk, temyiz_ceza/temyiz_hukuk)
+    # — bu harita eskisi gibi düz "istinaf"/"temyiz" bekleseydi, eşleşmeyen
+    # anahtar ham kod olarak ("istinaf_ceza bu hüküm için işletilebilir.")
+    # üretilen anlatıya sızardı.
     labels = {
         "itiraz": "İtiraz",
         "istinaf": "İstinaf",
+        "istinaf_ceza": "İstinaf",
+        "istinaf_hukuk": "İstinaf",
+        "istinaf_idari": "İdari istinaf",
         "temyiz": "Temyiz",
+        "temyiz_ceza": "Temyiz",
+        "temyiz_hukuk": "Temyiz",
         "bireysel_basvuru": "Bireysel başvuru",
         "sikayet": "Şikayet",
-        "idari_dava": "İdari dava",
-        "istinaf_idari": "İdari istinaf",
+        "idari_dava": "İdari dava açma",
         "temyiz_idari": "İdari temyiz",
     }
     kanun = [
@@ -738,6 +769,42 @@ def _apply_emsal(parsed: dict[str, Any], engine: dict[str, Any], belge_id: str =
     return parsed
 
 
+def _mentions_annex(text: str) -> bool:
+    folded = _fold_tr(text)
+    return any(token in folded for token in ("ekte", "eklerde", "ek olarak", "ekler aras"))
+
+
+def _apply_visual_eks(parsed: dict[str, Any], engine: dict[str, Any], belge_id: str) -> dict[str, Any]:
+    visuals = normalize_visual_eks(engine.get("visual_eks"))
+    if not visuals:
+        return parsed
+    items = [item for item in _as_lines(parsed.get("ekler")) if item not in {"—", "-"}]
+    for row in visuals:
+        caption = row["caption"]
+        if not any(caption.lower() in item.lower() or item.lower() in caption.lower() for item in items):
+            items.append(caption)
+    parsed["ekler"] = items
+    mention = VISUAL_EK_CUMLE_MANY if len(visuals) > 1 else VISUAL_EK_CUMLE_ONE
+    scene = next((row["scene"] for row in visuals if row.get("scene")), "")
+    if scene and not _mentions_annex(scene):
+        if not scene.endswith("."):
+            scene += "."
+        mention = f"{scene} {mention}"
+    story_key = STORY_FIELD.get(belge_id)
+    if not story_key:
+        return parsed
+    value = parsed.get(story_key)
+    if isinstance(value, list):
+        blob = " ".join(str(item) for item in value)
+        if not _mentions_annex(blob):
+            parsed[story_key] = list(value) + [mention]
+    else:
+        blob = str(value or "")
+        if not _mentions_annex(blob):
+            parsed[story_key] = f"{blob.rstrip()} {mention}".strip()
+    return parsed
+
+
 def _finalize_belge_facts(
     parsed: dict[str, Any],
     engine: dict[str, Any],
@@ -768,7 +835,8 @@ def _finalize_belge_facts(
         parsed["talep"] = _strip_mahkumiyet(str(parsed.get("talep") or ""))
     parsed = _apply_teblig_date(parsed, engine)
     parsed = _apply_last_day(parsed, engine)
-    return _apply_emsal(parsed, engine, kind)
+    parsed = _apply_emsal(parsed, engine, kind)
+    return _apply_visual_eks(parsed, engine, kind)
 
 
 def extractive_parsed(spec: dict[str, Any], engine: dict[str, Any]) -> dict[str, Any]:

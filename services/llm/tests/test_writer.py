@@ -762,3 +762,27 @@ def test_temyiz_cevap_karsi_temyiz_only_when_asked() -> None:
     text, _ = compose_belge("temyiz_cevap", engine, chat_fn=None, allow_ollama=False)
     assert "karşı temyiz" in text.casefold()
     assert "CMK" not in text
+
+
+def test_extractive_surec_does_not_leak_raw_remedy_codes() -> None:
+    """classify.py artık nitelik-bazlı remedy etiketleri (istinaf_ceza,
+    istinaf_hukuk, ...) üretiyor — bu haritanın eski düz "istinaf"/"temyiz"
+    anahtarları hâlâ bekleyip eşleşmeyen kodu ham haliyle ("istinaf_ceza bu
+    hüküm için işletilebilir.") üretilen anlatıya sızdırmadığını doğrular."""
+    from llm.writer import extractive_surec
+
+    parsed = extractive_surec(
+        {
+            "classification": {
+                "stage": "ilk_derece",
+                "remedies": ["istinaf_hukuk", "temyiz_hukuk"],
+            },
+            "deadlines": [],
+        }
+    )
+    kanun_text = " ".join(item["cumle"] for item in parsed["kanun_yollari"])
+    assert "istinaf_hukuk" not in kanun_text
+    assert "temyiz_hukuk" not in kanun_text
+    assert "İstinaf" in kanun_text
+    assert "Temyiz" in kanun_text
+    assert "kovuşturma" not in parsed["asama_cumlesi"].lower()

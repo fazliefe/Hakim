@@ -181,6 +181,17 @@ def test_rrf_prefers_agreement_across_retrievers() -> None:
     assert set(fused[0].sources) == {"bm25", "semantic"}
 
 
+def test_weighted_rrf_prefers_heavier_list() -> None:
+    a = SearchHit("a", 1, "5237", "1", None, "x", None, None, None, 1)
+    b = SearchHit("b", 1, "5237", "158", None, "y", None, None, None, 1)
+    fused = reciprocal_rank_fusion(
+        {"bm25": [a], "semantic": [b]},
+        limit=2,
+        weights={"bm25": 0.9, "semantic": 0.1},
+    )
+    assert fused[0].chunk_id == "a"
+
+
 def test_unique_by_article_keeps_first_version() -> None:
     from retrieval.hybrid import unique_by_article
     from retrieval.rrf import FusedHit
@@ -374,6 +385,35 @@ def test_hybrid_searcher_without_decision_index_is_unaffected() -> None:
     searcher = HybridSearcher(es, embedder, limit=5)
     assert searcher.decision_bm25 is None
     assert searcher.decision_semantic is None
+    fused = searcher.search("nitelikli dolandırıcılık banka hesabı", law_no=None)
+    assert fused
+    assert fused[0].hit.article_no == "158"
+
+
+def test_hybrid_missing_decision_index_does_not_fail_law_search() -> None:
+    from retrieval.mapping import DECISION_INDEX_NAME
+
+    es = FakeES()
+    embedder = HashingEmbedder()
+    indexer = LegalChunkIndexer(es, embedder=embedder)
+    indexer.ensure_index(recreate=True)
+    indexer.index_rows(_sample_rows())
+    searcher = HybridSearcher(
+        es,
+        embedder,
+        limit=5,
+        decision_index=DECISION_INDEX_NAME,
+        decision_embedder=HashingEmbedder(dims=16),
+    )
+
+    def _missing(*_args, **_kwargs):
+        raise Exception(
+            "NotFoundError(404, 'index_not_found_exception', "
+            "'no such index [hakim-court-decisions]', hakim-court-decisions, index_or_alias)"
+        )
+
+    searcher.decision_bm25.search = _missing  # type: ignore[method-assign]
+    searcher.decision_semantic.search = _missing  # type: ignore[method-assign]
     fused = searcher.search("nitelikli dolandırıcılık banka hesabı", law_no=None)
     assert fused
     assert fused[0].hit.article_no == "158"

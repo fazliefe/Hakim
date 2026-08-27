@@ -16,14 +16,28 @@ defaults:
   # (offline, ilk çalıştırmada internet yok) retrieval/rerank.py sessizce
   # sözcük-örtüşme sezgiseline düşer — enabled: false ile de devre dışı
   # bırakılabilir.
+  # eval/results/production.json: CE 50→12 R@5 +0.01, R@1 düşer, ~22× yavaş.
+  # Typo'da işe yarıyor; varsayılan kapalı, RRF sırası korunur.
   rerank:
-    enabled: true
+    enabled: false
     model: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
     batch_size: 16
+  retrieval:
+    # Dense cosine kapısı (RRF skoru ~0.03 — 0.70 ile kıyaslanmaz).
+    dense_gate: 0.70
+    # "hangileri / suçları listesi" sorularında lexical multi-query.
+    multi_query_aggregation: true
+  # Kural motorunun (document_ai/classify.py) hiçbir needle'a çarpmadığı
+  # ("belirsiz") azınlık vakalar için embedding-tabanlı ikincil sınıflandırma
+  # önerisi (bkz. document_ai/prototype_classifier.py). Deneysel — varsayılan
+  # kapalı; açmak için true yapın veya HAKIM_CLASSIFICATION_FALLBACK=1.
+  classification_fallback:
+    enabled: false
   research:
     allow_ollama: false
   llm:
-    max_tokens: 900
+    # null = uygulama tavanı yok. İstekte 131072 gider (vLLM varsayılanı 16).
+    max_tokens: null
     timeout: 25
     temperature: 0.2
     # Groq openai/gpt-oss-20b (USD / 1M tokens)
@@ -83,7 +97,6 @@ profiles:
       url: https://evren-llmapi.ssyz.org.tr/v1
       model: llm-fast
       timeout: 120
-      max_tokens: 3072
       # Kotasız/ücretsiz TEKNOFEST H200 servisi; defaults.llm'deki groq USD
       # tarifesi burada geçerli değil — usage.py yanlış maliyet raporlamasın.
       input_per_million: 0.0
@@ -112,7 +125,7 @@ profiles:
       model: llm-fast
       max_images: 2
       timeout: 120
-      max_tokens: 4096
+      max_tokens: null
     ollama:
       enabled: false
       url: http://127.0.0.1:11434

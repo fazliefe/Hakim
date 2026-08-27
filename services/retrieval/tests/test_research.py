@@ -52,6 +52,31 @@ def test_extractive_answer_includes_citation_markers() -> None:
     assert "«ası" not in answer
 
 
+def test_extractive_answer_uses_distinct_citation_numbers() -> None:
+    evidence = [
+        _item(
+            n=1,
+            content=(
+                "Madde 158- (1) Dolandırıcılık suçunun; f) Bilişim sistemlerinin, "
+                "banka veya kredi kurumlarının araç olarak kullanılması suretiyle,"
+            ),
+        ),
+        _item(
+            n=2,
+            chunk_id="law:5237:article:157:v1",
+            article_no="157",
+            title="Dolandırıcılık",
+            content="Madde 157- (1) Hileli davranışlarla bir kimseyi aldatıp,",
+        ),
+    ]
+    answer = _build_extractive_answer("nitelikli dolandırıcılıkta banka hesabı", evidence)
+    assert "[1]" in answer
+    assert "[2]" in answer
+    assert "TCK m.157" in answer
+    assert "[1] TCK m.158" in answer
+    assert "[2] TCK m.157" in answer
+
+
 def _sonuc_block(answer: str) -> str:
     parts = answer.split("\n\n")
     assert parts[0] == "Sonuç"
@@ -451,6 +476,7 @@ def test_off_topic_query_is_not_supported() -> None:
     )
     assert _query_supported("fenerbahçe maçı ne olur", [noise]) is False
     assert _query_supported("hava durumu nasıl", [noise]) is False
+    assert _query_supported("yaprak sarma", [noise]) is False
     assert _query_supported("nitelikli dolandırıcılıkta banka hesabı", [_item()]) is True
     assert _query_supported("hakaret suçu", [noise]) is True
 
@@ -463,6 +489,8 @@ def test_refuse_answer_does_not_cite_law() -> None:
     assert "m.129" not in text
     assert "hukuk" in text.lower()
     assert "Fenerbahçe" not in text
+    assert "spor" not in text.lower()
+    assert "yaprak" not in text.lower()
 
 
 def test_off_topic_reasoning_does_not_pick_article() -> None:
@@ -618,3 +646,564 @@ def test_draft_research_rejects_short_answer(monkeypatch) -> None:
     assert text is None
     assert writer == "extractive"
     assert err
+
+
+def _aym_basvuru_item(**kwargs) -> EvidenceItem:
+    return _item(
+        n=kwargs.get("n", 1),
+        chunk_id="decision:aym:2025:2023/73303:2023/73303:v1",
+        document_id="decision:aym:2025:2023/73303:2023/73303",
+        law_no=None,
+        article_no="2023/73303",
+        title="MURAT YILMAZ",
+        content=(
+            "Başvuru Numarası : 2023/73303\nKarar Tarihi : 10/12/2025\n"
+            "TÜRKİYE CUMHURİYETİ\nANAYASA MAHKEMESİ\nİKİNCİ BÖLÜM\nKARAR\n"
+            "MURAT YILMAZ BAŞVURUSU\nBaşvurucu : Murat YILMAZ\n"
+        ),
+        **{k: v for k, v in kwargs.items() if k != "n"},
+    )
+
+
+def test_petition_like_aym_basvuru_is_not_a_research_source() -> None:
+    from retrieval.research import _is_petition_like
+
+    assert _is_petition_like(_aym_basvuru_item()) is True
+    assert _is_petition_like(_item()) is False
+    yargitay = _item(
+        n=2,
+        chunk_id="decision:yargitay:2023:2023/1:2023/2:v1",
+        document_id="decision:yargitay:2023:2023/1:2023/2",
+        law_no=None,
+        article_no="2023/2",
+        title="7. Ceza Dairesi — 2023/1 E. — 2023/2 K.",
+        content="Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verilmiştir.",
+    )
+    assert _is_petition_like(yargitay) is False
+
+
+def test_answer_items_skips_dilekce_like_aym_and_uses_law() -> None:
+    from retrieval.research import _answer_items
+
+    picked = _answer_items(
+        "nitelikli dolandırıcılıkta banka hesabı",
+        [_aym_basvuru_item(n=1, used_in_answer=True), _item(n=2, used_in_answer=True)],
+    )
+    assert picked
+    assert picked[0].article_no == "158"
+    assert all(item.title != "MURAT YILMAZ" for item in picked)
+
+
+def test_extractive_answer_does_not_quote_aym_basvuru_name() -> None:
+    answer = _build_extractive_answer(
+        "nitelikli dolandırıcılıkta banka hesabı",
+        [_aym_basvuru_item(n=1, used_in_answer=True), _item(n=2, used_in_answer=True)],
+    )
+    assert "Murat" not in answer
+    assert "YILMAZ" not in answer
+    assert "Başvuru Numarası" not in answer
+    assert "TCK m.158" in answer
+
+
+def test_usable_draft_rejects_dilekce_dump() -> None:
+    from retrieval.research import _usable_draft
+
+    dump = (
+        "Nitelikli dolandırıcılık TCK m.158 kapsamındadır [1]. "
+        "Anayasa Mahkemesi'nin 2023/73303 sayılı Murat Yılmaz kararı dayanak alınır [2]. "
+        "Başvuru Numarası : 2023/73303 Karar Tarihi : 10/12/2025 "
+        "MURAT YILMAZ BAŞVURUSU. " * 8
+    )
+    engine = {
+        "query": "nitelikli dolandırıcılık banka hesabı",
+        "evidence": [{"n": 1, "article_no": "158"}],
+    }
+    assert _usable_draft(dump, engine) is False
+
+
+def test_assemble_research_drops_aym_basvuru_from_evidence(monkeypatch) -> None:
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import ResearchEngine, assemble_research_result
+    from retrieval.rrf import FusedHit
+
+    monkeypatch.setattr(
+        "retrieval.research._draft_research_answer",
+        lambda payload: (None, "extractive", None),
+    )
+
+    aym = SearchHit(
+        chunk_id="decision:aym:2025:2023/73303:2023/73303:v1",
+        score=12.0,
+        law_no=None,
+        article_no="2023/73303",
+        title="MURAT YILMAZ",
+        content=(
+            "Başvuru Numarası : 2023/73303\nANAYASA MAHKEMESİ\n"
+            "MURAT YILMAZ BAŞVURUSU\nBaşvurucu : Murat YILMAZ"
+        ),
+        document_id="decision:aym:2025:2023/73303:2023/73303",
+        article_id=None,
+        authority="official",
+        rank=1,
+    )
+    law = SearchHit(
+        chunk_id="law:5237:article:158:v1",
+        score=9.0,
+        law_no="5237",
+        article_no="158",
+        title="Nitelikli dolandırıcılık",
+        content="Madde 158- (1) Dolandırıcılık suçunun; f) banka veya kredi kurumlarının araç olarak kullanılması suretiyle,",
+        document_id="law:5237",
+        article_id="law:5237:article:158",
+        authority="official",
+        rank=2,
+    )
+    fused = [
+        FusedHit("decision:aym:2025:2023/73303:2023/73303:v1", 0.04, 1, ("bm25",), aym, 1, 2),
+        FusedHit("law:5237:article:158:v1", 0.03, 2, ("bm25", "semantic"), law, 2, 1),
+    ]
+    engine = ResearchEngine.__new__(ResearchEngine)
+    engine.evidence_limit = 8
+    result = assemble_research_result(engine, "nitelikli dolandırıcılıkta banka hesabı", fused, "hybrid")
+    assert all("aym" not in (item.document_id or "") for item in result.evidence)
+    assert all(item.title != "MURAT YILMAZ" for item in result.evidence)
+    assert "Murat" not in result.answer
+    assert "TCK m.158" in result.answer
+
+
+def _ticaret_bam_item(**kwargs) -> EvidenceItem:
+    return _item(
+        n=kwargs.get("n", 1),
+        chunk_id="decision:istinafhukuk:2026:2026/1544:2026/1561:v1",
+        document_id="decision:istinafhukuk:2026:2026/1544:2026/1561",
+        law_no=None,
+        article_no="2026/1561",
+        title="Kayseri Bölge Adliye Mahkemesi 6. Hukuk Dairesi — 2026/1544 E. — 2026/1561 K.",
+        content=(
+            "T.C. KAYSERİ BÖLGE ADLİYE MAHKEMESİ 6. HUKUK DAİRESİ "
+            "MAHKEMESİ: KAYSERİ 1. ASLİYE TİCARET MAHKEMESİ "
+            "TALEBİN KONUSU: İhtiyati Tedbir vekili dilekçesiyle"
+        ),
+        **{k: v for k, v in kwargs.items() if k != "n"},
+    )
+
+
+def test_ticaret_istinaf_is_not_a_research_source() -> None:
+    from retrieval.research import _exclude_from_research, _is_petition_like
+
+    bam = _ticaret_bam_item()
+    assert _exclude_from_research(bam) is True
+    yargitay = _item(
+        n=2,
+        chunk_id="decision:yargitay:2023:2023/1:2023/2:v1",
+        document_id="decision:yargitay:2023:2023/1:2023/2",
+        law_no=None,
+        article_no="2023/2",
+        title="7. Ceza Dairesi — 2023/1 E. — 2023/2 K.",
+        content="Sanığın nitelikli dolandırıcılık suçundan mahkûmiyetine karar verilmiştir.",
+    )
+    assert _exclude_from_research(yargitay) is False
+    assert _is_petition_like(_item()) is False
+
+
+def test_answer_items_skips_ticaret_bam_and_uses_law() -> None:
+    from retrieval.research import _answer_items
+
+    picked = _answer_items(
+        "nitelikli dolandırıcılıkta banka hesabı",
+        [_ticaret_bam_item(n=1, used_in_answer=True), _item(n=2, used_in_answer=True)],
+    )
+    assert picked[0].article_no == "158"
+    assert all("istinafhukuk" not in (item.document_id or "") for item in picked)
+
+
+def test_assemble_research_drops_ticaret_bam_from_evidence(monkeypatch) -> None:
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import ResearchEngine, assemble_research_result
+    from retrieval.rrf import FusedHit
+
+    monkeypatch.setattr(
+        "retrieval.research._draft_research_answer",
+        lambda payload: (None, "extractive", None),
+    )
+    bam = SearchHit(
+        chunk_id="decision:istinafhukuk:2026:2026/1544:2026/1561:v1",
+        score=12.0,
+        law_no=None,
+        article_no="2026/1561",
+        title="Kayseri Bölge Adliye Mahkemesi 6. Hukuk Dairesi — 2026/1544 E. — 2026/1561 K.",
+        content="ASLİYE TİCARET MAHKEMESİ TALEBİN KONUSU: İhtiyati Tedbir vekili dilekçesiyle",
+        document_id="decision:istinafhukuk:2026:2026/1544:2026/1561",
+        article_id=None,
+        authority="official",
+        rank=1,
+    )
+    law = SearchHit(
+        chunk_id="law:5237:article:158:v1",
+        score=9.0,
+        law_no="5237",
+        article_no="158",
+        title="Nitelikli dolandırıcılık",
+        content="Madde 158- (1) Dolandırıcılık suçunun; f) banka veya kredi kurumlarının araç olarak kullanılması suretiyle,",
+        document_id="law:5237",
+        article_id="law:5237:article:158",
+        authority="official",
+        rank=2,
+    )
+    fused = [
+        FusedHit(bam.chunk_id, 0.04, 1, ("bm25",), bam, 1, 2),
+        FusedHit(law.chunk_id, 0.03, 2, ("bm25", "semantic"), law, 2, 1),
+    ]
+    engine = ResearchEngine.__new__(ResearchEngine)
+    engine.evidence_limit = 8
+    result = assemble_research_result(engine, "nitelikli dolandırıcılıkta banka hesabı", fused, "hybrid")
+    assert all("istinafhukuk" not in (item.document_id or "") for item in result.evidence)
+    assert "Kayseri" not in result.answer
+    assert "TCK m.158" in result.answer
+
+
+def test_is_count_query_detects_tck_tmk_comparison() -> None:
+    from retrieval.research import _is_count_query, _laws_in_query
+
+    assert _is_count_query("tckda mı daha fazla madde var tmkda mı daha fazla kanun var sayısal olarak ver")
+    assert _is_count_query("TCK ve TMK madde sayısı")
+    assert not _is_count_query("nitelikli dolandırıcılıkta banka hesabı")
+    assert _laws_in_query("tckda mı tmkda mı") == ["5237", "4721"]
+
+
+def test_count_answer_is_numeric_not_emsal() -> None:
+    from retrieval.research import _build_count_answer
+
+    answer = _build_count_answer(
+        "tckda mı daha fazla madde var tmkda mı sayısal olarak ver",
+        {"5237": 340, "4721": 1012},
+    )
+    assert "1012" in answer
+    assert "340" in answer
+    assert "TMK" in answer
+    assert "TCK" in answer
+    assert "emsal karardır" not in answer
+    assert "[1]" in answer
+    assert "[2]" in answer
+
+
+def test_answer_items_keeps_distinct_laws() -> None:
+    from retrieval.research import _answer_items
+
+    picked = _answer_items(
+        "tck tmk madde",
+        [
+            _item(n=1, used_in_answer=True),
+            _item(
+                n=2,
+                chunk_id="law:4721:article:555:v1",
+                document_id="law:4721",
+                law_no="4721",
+                article_no="555",
+                title="Havale",
+                content="Madde 555- Havale, havale edenin...",
+                used_in_answer=True,
+            ),
+        ],
+    )
+    assert {item.law_no for item in picked} == {"5237", "4721"}
+
+
+def test_spread_cites_uses_second_source_in_body() -> None:
+    from retrieval.research import _spread_cites
+
+    text = (
+        "Sonuç\n\nA cümle [1]. B cümle [1]. C cümle [1].\n\n"
+        "Hukuki dayanak\n\n1. Dayanak [1].\n2. Dayanak [1].\n\n"
+        "Kaynak\n[1] TCK m.158\n[2] TMK m.555"
+    )
+    out = _spread_cites(text, [_item(n=1), _item(n=2, article_no="555", law_no="4721", chunk_id="law:4721:article:555:v1", document_id="law:4721")])
+    body, kaynak = out.split("\n\nKaynak\n", 1)
+    assert "[2]" in body
+    assert "[1] TCK m.158" in kaynak
+    assert "[2] TMK m.555" in kaynak
+
+
+def test_align_citation_numbers_is_dense_and_puts_picked_first() -> None:
+    from retrieval.research import _align_citation_numbers
+
+    tbk = _item(
+        n=1,
+        chunk_id="law:6098:article:555:v1",
+        document_id="law:6098",
+        law_no="6098",
+        article_no="555",
+        title="Havale",
+        content="Madde 555- Havale, havale edenin...",
+    )
+    tck = _item(
+        n=3,
+        chunk_id="law:5237:article:245:v1",
+        article_no="245",
+        title="Banka veya kredi kartlarının kötüye kullanılması",
+        content="Madde 245- (1) Başkasına ait bir banka veya kredi kartını,",
+    )
+    ay = _item(
+        n=6,
+        chunk_id="law:2709:article:14:v1",
+        document_id="law:2709",
+        law_no="2709",
+        article_no="14",
+        title="Temel hak ve hürriyetlerin kötüye kullanılamaması",
+        content="Madde 14- (1) Anayasada yer alan hak ve hürriyetlerden hiçbiri,",
+    )
+    aligned = _align_citation_numbers([tbk, tck, ay], [tck, tbk])
+    assert [item.n for item in aligned] == [1, 2, 3]
+    assert [item.article_no for item in aligned] == ["245", "555", "14"]
+    assert aligned[0].used_in_answer is True
+    assert aligned[1].used_in_answer is True
+    assert aligned[2].used_in_answer is False
+
+
+def test_keep_cited_evidence_drops_uncited_ranks() -> None:
+    from retrieval.research import _keep_cited_evidence
+
+    kept = _keep_cited_evidence(
+        [
+            _item(n=1),
+            _item(
+                n=2,
+                chunk_id="law:2709:article:14:v1",
+                document_id="law:2709",
+                law_no="2709",
+                article_no="14",
+                title="AY",
+            ),
+            _item(
+                n=6,
+                chunk_id="law:6098:article:40:v1",
+                document_id="law:6098",
+                law_no="6098",
+                article_no="40",
+                title="Sorumluluk",
+                used_in_answer=False,
+            ),
+        ],
+        "Sonuç\n\nA [1]. B [2].\n\nKaynak\n[1] TCK m.245\n[2] AY m.14\n[6] TBK m.40",
+    )
+    assert [item.n for item in kept] == [1, 2]
+    assert all(item.used_in_answer for item in kept)
+
+
+def test_keep_cited_evidence_keeps_uncited_decisions() -> None:
+    from retrieval.research import _keep_cited_evidence
+
+    karar = _item(
+        n=5,
+        chunk_id="decision:yargitay:2023:2023/1:2023/2:v1",
+        document_id="decision:yargitay:2023:2023/1:2023/2",
+        law_no=None,
+        article_no="2023/2",
+        title="7. Ceza Dairesi — 2023/1 E. — 2023/2 K.",
+        content="Sanığın mahkûmiyetine karar verilmiştir.",
+        used_in_answer=False,
+    )
+    kept = _keep_cited_evidence(
+        [_item(n=1), karar],
+        "Sonuç\n\nA [1].\n\nKaynak\n[1] TCK m.158",
+    )
+    assert [item.n for item in kept] == [1, 2]
+    assert kept[0].used_in_answer is True
+    assert kept[1].used_in_answer is False
+    assert (kept[1].document_id or "").startswith("decision:")
+
+
+def test_extractive_answer_uses_dense_cites_when_ranks_are_sparse() -> None:
+    evidence = [
+        _item(
+            n=1,
+            chunk_id="law:6098:article:555:v1",
+            document_id="law:6098",
+            law_no="6098",
+            article_no="555",
+            title="Havale",
+            content="Madde 555- Havale, havale edenin...",
+        ),
+        _item(
+            n=3,
+            chunk_id="law:5237:article:245:v1",
+            article_no="245",
+            title="Banka veya kredi kartlarının kötüye kullanılması",
+            content="Madde 245- (1) Başkasına ait bir banka veya kredi kartını izinsiz kullanarak,",
+        ),
+        _item(
+            n=6,
+            chunk_id="law:2709:article:14:v1",
+            document_id="law:2709",
+            law_no="2709",
+            article_no="14",
+            title="Temel hak ve hürriyetlerin kötüye kullanılamaması",
+            content="Madde 14- (1) Anayasada yer alan hak ve hürriyetlerden hiçbiri,",
+        ),
+    ]
+    answer = _build_extractive_answer("banka hesabından izinsiz para çekme", evidence)
+    body, kaynak = answer.split("\n\nKaynak\n", 1)
+    cites = [int(n) for n in re.findall(r"\[(\d+)\]", body)]
+    assert cites
+    assert 6 not in cites
+    assert max(cites) <= 3
+    assert "[6]" not in kaynak
+    assert "[1]" in body
+    assert "[3]" in body
+
+
+def test_assemble_research_renumbers_sparse_ranks(monkeypatch) -> None:
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import ResearchEngine, assemble_research_result
+    from retrieval.rrf import FusedHit
+
+    monkeypatch.setattr(
+        "retrieval.research._draft_research_answer",
+        lambda payload: (None, "extractive", None),
+    )
+
+    tbk = SearchHit(
+        chunk_id="law:6098:article:555:v1",
+        score=12.0,
+        law_no="6098",
+        article_no="555",
+        title="Havale",
+        content="Madde 555- Havale, havale edenin bir bedeli...",
+        document_id="law:6098",
+        article_id="law:6098:article:555",
+        authority="official",
+        rank=1,
+    )
+    tck = SearchHit(
+        chunk_id="law:5237:article:245:v1",
+        score=11.0,
+        law_no="5237",
+        article_no="245",
+        title="Banka veya kredi kartlarının kötüye kullanılması",
+        content="Madde 245- (1) Başkasına ait bir banka veya kredi kartını izinsiz kullanarak,",
+        document_id="law:5237",
+        article_id="law:5237:article:245",
+        authority="official",
+        rank=3,
+    )
+    ay = SearchHit(
+        chunk_id="law:2709:article:14:v1",
+        score=8.0,
+        law_no="2709",
+        article_no="14",
+        title="Temel hak ve hürriyetlerin kötüye kullanılamaması",
+        content="Madde 14- (1) Anayasada yer alan hak ve hürriyetlerden hiçbiri,",
+        document_id="law:2709",
+        article_id="law:2709:article:14",
+        authority="official",
+        rank=6,
+    )
+    fused = [
+        FusedHit("law:6098:article:555:v1", 0.05, 1, ("bm25",), tbk, 1, 2),
+        FusedHit("law:5237:article:245:v1", 0.04, 3, ("bm25", "semantic"), tck, 3, 1),
+        FusedHit("law:2709:article:14:v1", 0.02, 6, ("bm25",), ay, 6, 5),
+    ]
+    engine = ResearchEngine.__new__(ResearchEngine)
+    engine.evidence_limit = 8
+    result = assemble_research_result(
+        engine,
+        "TCK m.245 banka kartı kötüye kullanma",
+        fused,
+        "hybrid",
+    )
+    assert [item.article_no for item in result.evidence] == ["245"]
+    assert [item.n for item in result.evidence] == [1]
+    assert all(item.used_in_answer for item in result.evidence)
+    body = result.answer.split("\n\nKaynak\n")[0]
+    cites = [int(n) for n in re.findall(r"\[(\d+)\]", body)]
+    assert 6 not in cites
+    assert max(cites) <= 1
+    payload_ns = []
+
+    def capture(payload):
+        payload_ns.extend(item["n"] for item in payload.get("evidence") or [])
+        return None, "extractive", None
+
+    monkeypatch.setattr("retrieval.research._draft_research_answer", capture)
+    assemble_research_result(engine, "TCK m.245 banka kartı kötüye kullanma", fused, "hybrid")
+    assert payload_ns == list(range(1, len(payload_ns) + 1))
+    assert 6 not in payload_ns
+
+
+def test_assemble_rewrites_sparse_llm_cites(monkeypatch) -> None:
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import ResearchEngine, assemble_research_result
+    from retrieval.rrf import FusedHit
+
+    draft = (
+        "Sonuç\n\n"
+        "Kartın rızasız kullanılması TCK m.245 kapsamındadır [3]. "
+        "Hesaptan para çekme aynı maddenin unsurlarını doldurur [3]. "
+        "Yarar sağlama unsuru da aranır [3].\n\n"
+        "Hukuki dayanak\n\n"
+        "1. Kartın kötüye kullanılması [3].\n"
+        "2. Rıza dışı zilyetlik [3].\n"
+        "3. Yarar sağlama [3].\n\n"
+        "Kaynak\n"
+        "[1] TBK m.555\n[3] TCK m.245\n[6] AY m.14"
+    )
+
+    def fake_draft(payload):
+        assert [item["n"] for item in payload["evidence"]] == [1, 2, 3]
+        return draft, "api", None
+
+    monkeypatch.setattr("retrieval.research._draft_research_answer", fake_draft)
+
+    def law(law_no, article, title, content, rank):
+        return SearchHit(
+            chunk_id=f"law:{law_no}:article:{article}:v1",
+            score=12.0 - rank,
+            law_no=law_no,
+            article_no=str(article),
+            title=title,
+            content=content,
+            document_id=f"law:{law_no}",
+            article_id=f"law:{law_no}:article:{article}",
+            authority="official",
+            rank=rank,
+        )
+
+    tbk = law("6098", "555", "Havale", "Madde 555- Havale, havale edenin bir bedeli...", 1)
+    tck = law(
+        "5237",
+        "245",
+        "Banka veya kredi kartlarının kötüye kullanılması",
+        "Madde 245- (1) Başkasına ait bir banka veya kredi kartını izinsiz kullanarak,",
+        3,
+    )
+    ay = law(
+        "2709",
+        "14",
+        "Temel hak ve hürriyetlerin kötüye kullanılamaması",
+        "Madde 14- (1) Anayasada yer alan hak ve hürriyetlerden hiçbiri,",
+        6,
+    )
+    fused = [
+        FusedHit(tbk.chunk_id, 0.05, 1, ("bm25",), tbk, 1, 2),
+        FusedHit(tck.chunk_id, 0.04, 3, ("bm25", "semantic"), tck, 3, 1),
+        FusedHit(ay.chunk_id, 0.02, 6, ("bm25",), ay, 6, 5),
+    ]
+    engine = ResearchEngine.__new__(ResearchEngine)
+    engine.evidence_limit = 8
+    result = assemble_research_result(
+        engine,
+        "banka hesabından izinsiz para çekme",
+        fused,
+        "hybrid",
+    )
+    body, kaynak = result.answer.split("\n\nKaynak\n", 1)
+    cites = [int(n) for n in re.findall(r"\[(\d+)\]", body)]
+    assert cites == [1, 2, 3, 1, 2, 3]
+    assert "[6]" not in result.answer
+    assert "[1]" in kaynak
+    assert "[2]" in kaynak
+    assert "[3]" in kaynak
+    assert result.evidence[0].n == 1
+    assert all(item.used_in_answer for item in result.evidence)
+    assert all(item.n <= 3 for item in result.evidence)
+    assert {item.article_no for item in result.evidence} <= {"555", "245", "14"}

@@ -229,6 +229,7 @@ export function LegalGraphView({ evidence, selected, onSelect, query }: Props) {
       </div>
       <div className="graph-canvas vis">
         <VisGraph
+          spread
           nodes={nodes}
           edges={edges}
           selectedId={selectedId}

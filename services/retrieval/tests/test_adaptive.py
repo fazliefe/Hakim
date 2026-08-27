@@ -51,7 +51,22 @@ def test_off_topic_sports_and_weather() -> None:
     assert query_is_off_topic("hava durumu nasıl") is True
 
 
+def test_off_topic_food_and_generic_chat() -> None:
+    assert query_is_off_topic("yaprak sarma") is True
+    assert query_is_off_topic("pizza tarifi") is True
+    assert query_is_off_topic("bugün ne yesem") is True
+
+
 def test_legal_queries_are_not_off_topic() -> None:
     assert query_is_off_topic("hakaret suçu") is False
     assert query_is_off_topic("nitelikli dolandırıcılıkta banka hesabı") is False
     assert query_is_off_topic("madde 158") is False
+    assert query_is_off_topic("banka hesabından izinsiz para çekme") is False
+    assert query_is_off_topic("trafik güvenliğini tehlikeye sokma") is False
+
+
+def test_aggregation_queries_need_multi() -> None:
+    from retrieval.query_expand import query_needs_multi
+
+    assert query_needs_multi("öldürme suçları hangileridir?") is True
+    assert query_needs_multi("nitelikli dolandırıcılıkta banka hesabı") is False

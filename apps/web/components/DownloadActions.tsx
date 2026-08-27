@@ -36,10 +36,10 @@ export function DownloadActions({
         <button
           type="button"
           disabled={!ready}
-          title="UYAP Editör denemesi. Açılmazsa exportDocument.ts içinde UDF_EXPORT_TRIAL=false yapın."
+          title="UYAP Editör için UDF indir. Açılmazsa exportDocument.ts içinde UDF_EXPORT_TRIAL=false yapın."
           onClick={() => downloadDocument(basename, payload, "udf")}
         >
-          UDF (deneme)
+          UDF
         </button>
       ) : null}
       {hint ? <span className="download-hint">{hint}</span> : null}

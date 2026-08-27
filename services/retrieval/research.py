@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from retrieval.bm25 import extract_article_no, parse_law_hint
@@ -84,6 +84,74 @@ def _snippet(text: str, limit: int = 420) -> str:
     return compact[: limit - 1].rstrip() + "…"
 
 
+def _hit_fields(item: Any) -> tuple[str, str, str]:
+    if hasattr(item, "hit"):
+        return _hit_fields(item.hit)
+    if isinstance(item, dict):
+        return (
+            str(item.get("document_id") or item.get("chunk_id") or ""),
+            str(item.get("title") or ""),
+            str(item.get("content") or ""),
+        )
+    return (
+        str(getattr(item, "document_id", None) or getattr(item, "chunk_id", "") or ""),
+        str(getattr(item, "title", None) or ""),
+        str(getattr(item, "content", None) or ""),
+    )
+
+
+def _is_petition_like(item: Any) -> bool:
+    """Dilekçe / bireysel başvuru metni araştırma cevabına girmez.
+
+    AYM bireysel başvurusu dilekçe formatındadır ve başvurucu adı taşır;
+    evrak/işlem örneklerinde kalır, kanun araştırmasının dayanağı olmaz.
+    """
+    from llm.emsal import _name_only_title
+
+    document_id, title, content = _hit_fields(item)
+    hit = {"document_id": document_id, "title": title, "content": content}
+    if _name_only_title(hit):
+        return True
+    head = _ascii_q(f"{title}\n{content[:900]}")
+    if "basvurusu" in head or "basvuru numarasi" in head:
+        return True
+    if re.search(r"\barz olunur\b|\barz ederim\b|geregini rica", head):
+        return True
+    if str(document_id).startswith("decision:aym:") and (
+        "basvurucu" in head or "basvuru" in head
+    ):
+        return True
+    return False
+
+
+def _exclude_from_research(item: Any) -> bool:
+    """Dilekçe örnekleri, ticaret/hukuk istinafı araştırma kaynak listesine girmez."""
+    if _is_petition_like(item):
+        return True
+    document_id, title, content = _hit_fields(item)
+    if not str(document_id).startswith("decision:"):
+        return False
+    from llm.emsal import court_ok
+
+    blob = f"{document_id} {title} {content[:800]}"
+    if not court_ok(blob):
+        return True
+    folded = _ascii_q(document_id)
+    return "istinafhukuk" in folded or "yerelhukuk" in folded
+
+
+def _looks_like_petition_dump(text: str) -> bool:
+    folded = _ascii_q(text)
+    if "basvuru numarasi" in folded:
+        return True
+    if re.search(r"[a-z]+\s+[a-z]+\s+basvurusu", folded):
+        return True
+    return False
+
+
+_CITE_MARK = re.compile(r"\s*\[\d+\]")
+
+
 def _is_decision(item: EvidenceItem) -> bool:
     return (item.document_id or "").startswith("decision:")
 
@@ -93,6 +161,157 @@ def _cite(item: EvidenceItem) -> str:
         return item.title or item.document_id or "Mahkeme kararı"
     prefix = _LAW_SHORT.get(item.law_no or "", f"Kanun {item.law_no}" if item.law_no else "Kanun")
     return f"{prefix} m.{item.article_no}"
+
+
+def _attach_cite(text: str, n: int) -> str:
+    blob = _CITE_MARK.sub("", str(text or "")).strip()
+    if not blob:
+        return ""
+    blob = blob.rstrip(" .")
+    return f"{blob} [{n}]."
+
+
+def _cite_sentences(text: str, ns: list[int]) -> str:
+    """Her cümleye bir atıf; birden fazla kaynak varsa [1]/[2]/[3] dağıtılır."""
+    blob = str(text or "").strip()
+    if not blob or not ns:
+        return blob
+    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+", blob) if part.strip()]
+    if not parts:
+        return _attach_cite(blob, ns[0])
+    if len(ns) == 1:
+        return _attach_cite(" ".join(_CITE_MARK.sub("", part).strip() for part in parts), ns[0])
+    assigned = [ns[0]] * len(parts)
+    for index, extra in enumerate(ns[1:], start=1):
+        assigned[min(index, len(parts) - 1)] = extra
+    return " ".join(_attach_cite(part, assigned[index]) for index, part in enumerate(parts))
+
+
+def _source_index_lines(items: list[EvidenceItem]) -> str:
+    from llm.render import KAYNAK_UYARI
+
+    lines = [f"[{item.n}] {_source_label(item)}" for item in items]
+    lines.append(KAYNAK_UYARI)
+    return "\n".join(lines)
+
+
+def _fill_missing_cites(answer: str, items: list[EvidenceItem]) -> str:
+    found = {int(match) for match in re.findall(r"\[(\d+)\]", answer or "")}
+    missing = [item for item in items if item.n not in found][:4]
+    if not missing:
+        return answer
+    extra = "\n".join(
+        f"• {_cite(item)}"
+        + (f" ({item.title})" if item.title and not _is_decision(item) else "")
+        + f" [{item.n}]."
+        for item in missing
+    )
+    if "\n\nİlgili hükümler\n" in answer:
+        head, rest = answer.split("\n\nİlgili hükümler\n", 1)
+        block, *tail = rest.split("\n\n", 1)
+        suffix = f"\n\n{tail[0]}" if tail else ""
+        return f"{head}\n\nİlgili hükümler\n{block}\n{extra}{suffix}"
+    marker = "\n\nKaynak\n"
+    inject = f"\n\nİlgili hükümler\n{extra}"
+    if marker in answer:
+        return answer.replace(marker, f"{inject}{marker}", 1)
+    return f"{answer}{inject}"
+
+
+def _spread_cites(answer: str, items: list[EvidenceItem]) -> str:
+    """Gövde yalnızca [1] basmışsa ve birden fazla kaynak varsa [1]/[2] dağıt."""
+    ns = [item.n for item in items]
+    if len(ns) < 2 or not answer:
+        return answer
+    marker = "\n\nKaynak\n"
+    if marker in answer:
+        body, kaynak = answer.split(marker, 1)
+    else:
+        body, kaynak = answer, None
+    found = {int(match) for match in re.findall(r"\[(\d+)\]", body)}
+    if len(found) > 1:
+        return answer
+    index = 0
+
+    def repl(_match: re.Match[str]) -> str:
+        nonlocal index
+        n = ns[index % len(ns)]
+        index += 1
+        return f"[{n}]"
+
+    body = re.sub(r"\[\d+\]", repl, body)
+    if kaynak is None:
+        return body
+    return f"{body}{marker}{kaynak}"
+
+
+def _clamp_unknown_cites(answer: str, items: list[EvidenceItem]) -> str:
+    """Gövdede [6] gibi listede olmayan rank'leri atıf kümesine çek."""
+    ns = [item.n for item in items]
+    if not ns or not answer:
+        return answer
+    valid = set(ns)
+    marker = "\n\nKaynak\n"
+    if marker in answer:
+        body, kaynak = answer.split(marker, 1)
+    else:
+        body, kaynak = answer, None
+    found = {int(match) for match in re.findall(r"\[(\d+)\]", body)}
+    if not found - valid:
+        return answer
+    index = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal index
+        n = int(match.group(1))
+        if n in valid:
+            return match.group(0)
+        out = f"[{ns[index % len(ns)]}]"
+        index += 1
+        return out
+
+    body = re.sub(r"\[(\d+)\]", repl, body)
+    if kaynak is None:
+        return body
+    return f"{body}{marker}{kaynak}"
+
+
+def _rewrite_kaynak(answer: str, items: list[EvidenceItem]) -> str:
+    """Kaynak bloğunu atıf numaralarıyla hizala; seyrek RRF rank'i ([6]) sızmasın."""
+    if not items or not answer:
+        return answer
+    marker = "\n\nKaynak\n"
+    lines = _source_index_lines(items)
+    if marker in answer:
+        body, _ = answer.split(marker, 1)
+        return f"{body}{marker}{lines}"
+    return f"{answer}{marker}{lines}"
+
+
+def _keep_cited_evidence(evidence: list[EvidenceItem], answer: str) -> list[EvidenceItem]:
+    """Atıfı olmayan kanun maddelerini düşür; emsal kararları Emsal sekmesi için tut."""
+    if not evidence:
+        return []
+    marker = "\n\nKaynak\n"
+    body = answer.split(marker, 1)[0] if marker in (answer or "") else (answer or "")
+    found = {int(n) for n in re.findall(r"\[(\d+)\]", body)}
+    if found:
+        cited = [item for item in evidence if item.n in found]
+    else:
+        cited = [item for item in evidence if item.used_in_answer]
+    if not cited:
+        return evidence
+    cited_ids = {item.chunk_id for item in cited}
+    extras = [
+        item for item in evidence if _is_decision(item) and item.chunk_id not in cited_ids
+    ]
+    for item in cited:
+        item.used_in_answer = True
+    numbered = [
+        replace(item, n=len(cited) + index, used_in_answer=False)
+        for index, item in enumerate(extras, start=1)
+    ]
+    return [*cited, *numbered]
 
 
 def _source_label(item: EvidenceItem) -> str:
@@ -179,6 +398,93 @@ def _focus_query(query: str) -> str:
         if marker in text:
             text = text.split(marker, 1)[0]
     return text.strip()
+
+
+def _laws_in_query(query: str) -> list[str]:
+    from retrieval.bm25 import LAW_HINTS
+
+    blob = _ascii_q(query)
+    found: list[str] = []
+    for key, law_no in sorted(LAW_HINTS.items(), key=lambda row: -len(row[0])):
+        if key in blob and law_no not in found:
+            found.append(law_no)
+    return found
+
+
+def _is_count_query(query: str) -> bool:
+    blob = _ascii_q(_focus_query(query))
+    marks = ("daha fazla", "kac madde", "madde sayisi", "sayisal", "kac tane", "hangi kanunda daha")
+    if not any(mark in blob for mark in marks):
+        return False
+    return "madde" in blob or "kanun" in blob or len(_laws_in_query(query)) >= 2
+
+
+def _article_counts(engine: Any, law_nos: list[str]) -> dict[str, int]:
+    es = getattr(getattr(getattr(engine, "hybrid", None), "bm25", None), "es", None)
+    if es is None or not law_nos:
+        return {}
+    from retrieval.mapping import INDEX_NAME
+
+    out: dict[str, int] = {}
+    for law_no in law_nos:
+        try:
+            response = es.search(
+                index=INDEX_NAME,
+                body={
+                    "size": 0,
+                    "query": {
+                        "bool": {
+                            "filter": [
+                                {"term": {"law_no": law_no}},
+                                {"term": {"document_type": "law"}},
+                            ]
+                        }
+                    },
+                    "aggs": {"n": {"cardinality": {"field": "article_no", "precision_threshold": 4000}}},
+                },
+            )
+            out[law_no] = int(response["aggregations"]["n"]["value"])
+        except Exception:
+            continue
+    return {key: value for key, value in out.items() if value}
+
+
+def _build_count_answer(query: str, counts: dict[str, int]) -> str:
+    from llm.render import KAYNAK_UYARI, render_research_memo
+
+    rows = [
+        (index, _LAW_SHORT.get(law_no, f"Kanun {law_no}"), law_no, n)
+        for index, (law_no, n) in enumerate(counts.items(), start=1)
+    ]
+    if not rows:
+        return "Bu arşivde sayılacak kanun maddesi bulunamadı."
+    ranked = sorted(rows, key=lambda row: -row[3])
+    top = ranked[0]
+    second = ranked[1] if len(ranked) > 1 else None
+    if second and top[3] == second[3]:
+        lead = f"Bu arşivde {top[1]} ve {second[1]} madde sayısı eşittir ({top[3]} madde)."
+    else:
+        lead = f"Bu arşivdeki madde sayısına göre {top[1]} daha fazladır: {top[3]} madde."
+        if second:
+            lead += f" {second[1]} ise {second[3]} maddedir."
+    n_top, n_other = top[0], (second[0] if second else top[0])
+    sonuc = (
+        f"{lead} "
+        f"Sayı, indekslenen güncel madde kayıtlarıdır; Resmî Gazete’deki ek/mülga fıkralar ayrı duruyorsa fark edebilir [{n_top}]. "
+        f"Bu bir külliyat sayımıdır, somut uyuşmazlıkta hangi hükmün uygulanacağını göstermez [{n_other}]. "
+        f"Karşılaştırma arşivdeki kanun kodlarına göredir; emsal karar metninden türetilmez [{n_top}]. "
+        f"Bu metin hüküm kurmaz [{n_other}]."
+    )
+    gerekce = [
+        f"{name} ({law_no} sayılı Kanun) bu arşivde {n} madde olarak indekslenmiştir [{index}]."
+        for index, name, law_no, n in rows
+    ]
+    gerekce.append(
+        f"Madde sayısı kanunun düzenleme alanının genişliğini gösterir; uygulanacak hüküm somut olaya göre ayrıca okunur [{n_top}]."
+    )
+    kaynak = "\n".join(f"[{index}] {name} madde sayısı (arşiv)" for index, name, law_no, n in rows)
+    kaynak = f"{kaynak}\n{KAYNAK_UYARI}"
+    return render_research_memo(sonuc=sonuc, gerekce=gerekce, ilgili=[], uyari=kaynak)
 
 
 def _article_nos_from_query(query: str) -> list[str]:
@@ -330,7 +636,14 @@ def _missing_citation_answer(law_no: str, article: str) -> str:
 
 
 def _query_supported(query: str, evidence: list[EvidenceItem]) -> bool:
+    from retrieval.adaptive import query_is_off_topic
     from retrieval.hybrid import _is_exact_citation_query
+
+    if query_is_off_topic(query):
+        return False
+
+    if _is_count_query(query):
+        return True
 
     hinted = parse_law_hint(query)
     article = extract_article_no(query)
@@ -354,7 +667,8 @@ def _query_supported(query: str, evidence: list[EvidenceItem]) -> bool:
 
 
 def _answer_items(query: str, evidence: list[EvidenceItem]) -> list[EvidenceItem]:
-    used = [item for item in evidence if item.used_in_answer][:8] or evidence[:8]
+    pool = [item for item in evidence if not _exclude_from_research(item)]
+    used = [item for item in pool if item.used_in_answer][:8] or pool[:8]
     if not used:
         return []
     wanted = _article_nos_from_query(query)
@@ -370,9 +684,50 @@ def _answer_items(query: str, evidence: list[EvidenceItem]) -> list[EvidenceItem
                 and (str(item.article_no) in wanted or _is_close_provision(primary, item, query))
             ][:2]
             return [primary, *extra]
-    primary = used[0]
-    close = [item for item in used[1:] if _is_close_provision(primary, item, query)][:2]
-    return [primary, *close]
+    laws = [item for item in used if not _is_decision(item)]
+    primary = laws[0] if laws else used[0]
+    close = [
+        item
+        for item in used
+        if item is not primary and _is_close_provision(primary, item, query)
+    ][:2]
+    extras = list(close)
+    seen = {primary.law_no, *(item.law_no for item in extras)}
+    for item in used:
+        if item is primary or item in extras:
+            continue
+        if not item.law_no or item.law_no in seen:
+            continue
+        extras.append(item)
+        seen.add(item.law_no)
+        if len(extras) >= 3:
+            break
+    return [primary, *extras]
+
+
+def _renumber(items: list[EvidenceItem]) -> list[EvidenceItem]:
+    return [replace(item, n=index) for index, item in enumerate(items, start=1)]
+
+
+def _align_citation_numbers(
+    evidence: list[EvidenceItem],
+    picked: list[EvidenceItem],
+) -> list[EvidenceItem]:
+    """Cited sources become [1]…[k]; leftover hits follow without rank gaps."""
+    if not evidence:
+        return []
+    by_id = {item.chunk_id: item for item in evidence}
+    ids = []
+    for item in picked:
+        if item.chunk_id in by_id and item.chunk_id not in ids:
+            ids.append(item.chunk_id)
+    rest = [item.chunk_id for item in evidence if item.chunk_id not in set(ids)]
+    ordered = [by_id[cid] for cid in [*ids, *rest]]
+    aligned = _renumber(ordered)
+    cited = set(ids)
+    for item in aligned:
+        item.used_in_answer = item.chunk_id in cited
+    return aligned
 
 
 def _allowed_articles(engine: dict[str, Any]) -> set[str]:
@@ -410,6 +765,8 @@ def _usable_draft(text: str | None, engine: dict[str, Any]) -> bool:
     if not text:
         return False
     if _looks_like_article_dump(text):
+        return False
+    if _looks_like_petition_dump(text):
         return False
     if _looks_like_garbage(text):
         return False
@@ -517,7 +874,7 @@ def build_research_reasoning(
 def _build_extractive_answer(query: str, evidence: list[EvidenceItem]) -> str:
     from llm.render import render_research_memo
 
-    used = _answer_items(query, evidence)
+    used = _renumber(list(_answer_items(query, evidence)))
     if not used:
         return (
             "Bu sorgu için arşivde yeterli resmi kaynak bulunamadı. "
@@ -709,11 +1066,19 @@ def _build_extractive_answer(query: str, evidence: list[EvidenceItem]) -> str:
                 f"kesinleştirilemez; dosya olguları ayrıca değerlendirilir [{n}]. "
                 f"Bu metin nitelendirme çerçevesini verir; hüküm kurmaz [{n}]."
             )
-    return render_research_memo(
-        sonuc=sonuc,
-        gerekce=gerekce,
-        ilgili=ilgili,
-        degerlendirme=degerlendirme,
+    ns = [item.n for item in used]
+    sonuc = _cite_sentences(sonuc, ns)
+    gerekce = [_attach_cite(line, ns[index % len(ns)]) for index, line in enumerate(gerekce)]
+    degerlendirme = _cite_sentences(degerlendirme, ns) if degerlendirme else degerlendirme
+    return _fill_missing_cites(
+        render_research_memo(
+            sonuc=sonuc,
+            gerekce=gerekce,
+            ilgili=ilgili,
+            degerlendirme=degerlendirme,
+            uyari=_source_index_lines(used),
+        ),
+        used,
     )
 
 
@@ -956,7 +1321,7 @@ class ResearchEngine:
         # örtüşme sezgiseline düşer.
         self.reranker = reranker if reranker is not None else create_reranker(prefer_neural=True)
 
-    def research(self, query: str, *, law_no: str | None = "5237") -> ResearchResult:
+    def research(self, query: str, *, law_no: str | None = None) -> ResearchResult:
         from retrieval.research_graph import run_research_graph
 
         return run_research_graph(self, query, law_no=law_no)
@@ -987,13 +1352,14 @@ def assemble_research_result(
     route: str,
     neighbors: dict[str, list[dict[str, Any]]] | None = None,
 ) -> ResearchResult:
-    top = fused[: engine.evidence_limit]
+    kept = [hit for hit in fused if not _exclude_from_research(hit)]
+    top = kept[: engine.evidence_limit]
     neighbor_map = neighbors or {}
     evidence: list[EvidenceItem] = []
     for hit in top:
         evidence.append(
             EvidenceItem(
-                n=hit.rank,
+                n=len(evidence) + 1,
                 chunk_id=hit.chunk_id,
                 document_id=hit.hit.document_id,
                 law_no=hit.hit.law_no,
@@ -1014,8 +1380,27 @@ def assemble_research_result(
             )
         )
 
-    for item in evidence:
-        item.used_in_answer = item.n <= min(5, len(evidence))
+    for index, item in enumerate(evidence, start=1):
+        item.n = index
+        item.used_in_answer = index <= min(5, len(evidence))
+
+    if _is_count_query(query):
+        laws = _laws_in_query(query) or ["5237", "4721"]
+        counts = _article_counts(engine, laws)
+        if counts:
+            answer = _build_count_answer(query, counts)
+            nodes, edges = _build_trace(query, top, route)
+            return ResearchResult(
+                query=query,
+                answer=answer,
+                evidence=evidence,
+                trace_nodes=nodes,
+                trace_edges=edges,
+                route=route,
+                writer="archive_count",
+                writer_error=None,
+                reasoning=build_research_reasoning(query, evidence, route=route, answer=answer),
+            )
 
     supported = _query_supported(query, evidence)
     if not supported:
@@ -1044,6 +1429,8 @@ def assemble_research_result(
         )
 
     answer_items = _answer_items(query, evidence)
+    evidence = _align_citation_numbers(evidence, answer_items)
+    answer_items = [item for item in evidence if item.used_in_answer]
     payload = {
         "query": query,
         "route": route,
@@ -1067,7 +1454,12 @@ def assemble_research_result(
         answer = drafted
         writer = drafted_writer
         writer_error = None
-    nodes, edges = _build_trace(query, top, route)
+    answer = _spread_cites(answer, answer_items)
+    answer = _clamp_unknown_cites(answer, answer_items)
+    answer = _fill_missing_cites(answer, answer_items)
+    answer = _rewrite_kaynak(answer, answer_items)
+    evidence = _keep_cited_evidence(evidence, answer)
+    nodes, edges = _build_trace(query, [], route, evidence=evidence)
     return ResearchResult(
         query=query,
         answer=answer,

@@ -7,7 +7,12 @@ import pytest
 from hakim_config import ModelsConfigError, get_models, reload_models
 
 
-def test_default_profile_is_evren() -> None:
+def test_effective_max_tokens_unbounded_when_missing() -> None:
+    from hakim_config import UNBOUNDED_MAX_TOKENS, effective_max_tokens
+
+    assert effective_max_tokens(None) == UNBOUNDED_MAX_TOKENS
+    assert effective_max_tokens(0) == UNBOUNDED_MAX_TOKENS
+    assert effective_max_tokens(900) == 900
     """HAKİM'in varsayılan profili TEKNOFEST'in kotasız/ücretsiz H200
     servisidir (bkz. config/models.yaml: active)."""
     reload_models()
@@ -28,15 +33,22 @@ def test_default_profile_is_evren() -> None:
     assert cfg.decision_embedding_model == "bge-m3-embed"
     assert cfg.decision_embedding_dims == 1024
     assert cfg.decision_embedding_api_url == "https://evren-llmapi.ssyz.org.tr/v1"
-    assert cfg.rerank_enabled is True
+    assert cfg.rerank_enabled is False
     assert cfg.rerank_model == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     assert cfg.rerank_batch_size == 16
+    assert cfg.dense_gate == 0.70
+    assert cfg.multi_query_aggregation is True
+    # Deneysel özellik — mevcut kurulumların sınıflandırma davranışını
+    # sessizce değiştirmemesi için varsayılan kapalı (bkz. prototype_classifier.py).
+    assert cfg.classification_fallback_enabled is False
     assert cfg.research_allow_ollama is False
     # Kotasız/ücretsiz servis; groq'un USD tarifesi burada geçerli değil.
     assert cfg.llm_input_per_million == 0.0
     assert cfg.llm_output_per_million == 0.0
     assert cfg.vision_model == "llm-fast"
     assert cfg.vision_max_images == 2
+    assert cfg.llm_max_tokens is None
+    assert cfg.vision_max_tokens is None
 
 
 def test_profile_env_switches_to_ollama(monkeypatch) -> None:

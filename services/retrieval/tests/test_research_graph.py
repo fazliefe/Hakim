@@ -68,6 +68,10 @@ class _FakeHybrid:
     def search_decision_semantic(self, query: str, **_kwargs):
         return []
 
+    def search_multi(self, queries, **_kwargs):
+        self.semantic_calls += len(queries)
+        return []
+
     def fuse(self, query: str, bm25_hits, semantic_hits, **_kwargs):
         return []
 
@@ -113,6 +117,10 @@ def test_off_topic_goes_to_reddet_without_search() -> None:
     assert hops == ["sorgu", "kontrol", "reddet"]
     assert result.writer == "refuse"
     assert engine.hybrid.semantic_calls == 0
+    food = run_research_graph(_FakeEngine(), "yaprak sarma")
+    assert food.writer == "refuse"
+    assert "spor" not in food.answer.lower()
+    assert "yaprak" not in food.answer.lower()
 
 
 def test_trace_follows_executed_hops_not_static_map() -> None:

@@ -34,7 +34,7 @@ Alan kuralları:
 - person_name: gerçek ad soyad. "Av. [Ad Soyad]" değildir.
 - subject: KONU satırının kısa metni; AÇIKLAMALAR gövdesi field olmasın (gövde full_text'te kalsın).
 - attachment_section: "Ekte:" / "Ekler:" geçen somut belgeler (tapu, kira sözleşmesi, tutanak).
-- signature: imza görünüyorsa "imza var". Tarih imza değildir.
+- signature field YOK. El yazısı imza/paraf full_text'e yazılmasın; "imza var" yazma.
 
 bbox yalnız o değerin ince kutusu. Emin değilsen [0,0,0,0].
 JSON içinde gerçek satır sonu kullanma; full_text satır dizisi olsun.
@@ -56,7 +56,7 @@ Yalnızca JSON döndür:
   "sections": []
 }
 
-name yalnızca: date, document_no, case_no, decision_no, notification_date, sender, recipient, person_name, institution, subject, signature, stamp, page_number, attachment_section, distribution_section, reference_section.
+name yalnızca: date, document_no, case_no, decision_no, notification_date, sender, recipient, person_name, institution, subject, stamp, page_number, attachment_section, distribution_section, reference_section.
 """
 
 
@@ -186,7 +186,7 @@ def fields_from_payload(payload: dict[str, Any], *, page_offset: int = 0) -> lis
         if not isinstance(row, dict):
             continue
         name = str(row.get("name") or "").strip()
-        if name not in KNOWN_FIELDS:
+        if name not in KNOWN_FIELDS or name == "signature":
             continue
         value = str(row.get("value") or "").strip()
         if not value:

@@ -1,16 +1,23 @@
 import { ReactNode } from "react";
 import { PetitionView } from "@/lib/api";
 
+const AI_UYARI =
+  "Bu metin bir yapay zekâ asistanı tarafından üretilmiştir. Kesin dayanak olarak kullanmadan önce bir hukuk uzmanına danışın.";
+
 export function PetitionPreview({
   petition,
   draft,
   badge,
   actions,
+  caveat,
+  ekImages,
 }: {
   petition?: PetitionView | null;
   draft?: string;
   badge?: string;
   actions?: ReactNode;
+  caveat?: string | null;
+  ekImages?: Array<{ caption: string; src: string }>;
 }) {
   const layout = petition?.layout || (draft ? "dilekce" : "");
   const family = petition?.family || "ceza";
@@ -82,13 +89,25 @@ export function PetitionPreview({
           </div>
           <div className="petition-ekler">
             <p>EKLER:</p>
-            {ekler.map((item, idx) => (
-              <p key={`${idx}-${item}`}>
-                EK-{idx + 1}  {item}
-              </p>
-            ))}
+            {ekler.map((item, idx) => {
+              const thumb = matchEkImage(item, ekImages);
+              return (
+                <div key={`${idx}-${item}`} className="petition-ek-row">
+                  <p>
+                    EK-{idx + 1}  {item}
+                  </p>
+                  {thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="petition-ek-thumb" src={thumb} alt={item} />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-          {petition.onay_notu ? <p className="petition-onay">{petition.onay_notu}</p> : null}
+          <p className="petition-onay">
+            <span className="legal-caveat-kicker">Uyarı</span>
+            {caveat?.trim() || AI_UYARI}
+          </p>
           {petition.evolver && !petition.evolver.ok ? (
             <p className="petition-evolver">
               Taslak kalite: {(petition.evolver.suggestions || []).join(" ")}
@@ -104,6 +123,16 @@ function splitAdres(adres?: string): string[] {
   const raw = (adres || "«[adres]»").trim();
   const parts = raw.split(/[\n;]+/).map((part) => part.trim()).filter(Boolean);
   return parts.length ? parts : ["«[adres]»"];
+}
+
+function matchEkImage(item: string, images?: Array<{ caption: string; src: string }>): string | null {
+  if (!images?.length) return null;
+  const needle = item.trim().toLocaleLowerCase("tr");
+  const hit = images.find((image) => {
+    const caption = image.caption.trim().toLocaleLowerCase("tr");
+    return needle.includes(caption) || caption.includes(needle);
+  });
+  return hit?.src || null;
 }
 
 function fallbackParagraphs(petition?: PetitionView | null): string[] {

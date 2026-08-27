@@ -143,6 +143,8 @@ def overlay_bbox(name: str, bbox: list[float], *, confidence: float = 1.0, value
 def sanitize_fields(fields: list[ExtractedField]) -> list[ExtractedField]:
     best: dict[str, ExtractedField] = {}
     for field in fields:
+        if field.name == "signature":
+            continue
         if is_placeholder(field.value):
             continue
         if not value_fits_field(field.name, field.value):

@@ -151,35 +151,59 @@ def compute_last_day(
     calendar: CalendarType,
 ) -> date:
     """Deterministic last day. The model does not calculate time; this function does."""
+    last, _note = compute_last_day_detail(trigger=trigger, duration=duration, unit=unit, calendar=calendar)
+    return last
+
+
+def compute_last_day_detail(
+    *,
+    trigger: date,
+    duration: int,
+    unit: DurationUnit,
+    calendar: CalendarType,
+) -> tuple[date, str | None]:
+    """Aynı hesap, ama adli tatil/resmi tatil ertelemesi uygulandıysa bunu
+    açıklayan bir not da döner — arayüz "14 gün" yazıp son günü 20 gün sonra
+    gösterdiğinde, kullanıcı bunun bir hesaplama hatası değil CMK m.331/4 (veya
+    HMK m.104/İYUK m.8) uzaması olduğunu görebilsin."""
     if duration < 1:
         raise ValueError("duration must be >= 1")
     if unit is DurationUnit.DAY:
-        last = trigger + timedelta(days=duration)
+        raw = trigger + timedelta(days=duration)
     elif unit is DurationUnit.WEEK:
-        last = trigger + timedelta(weeks=duration)
+        raw = trigger + timedelta(weeks=duration)
     elif unit is DurationUnit.MONTH:
         month = trigger.month - 1 + duration
         year = trigger.year + month // 12
         month = month % 12 + 1
         day = min(trigger.day, _month_days(year, month))
-        last = date(year, month, day)
+        raw = date(year, month, day)
     elif unit is DurationUnit.YEAR:
         try:
-            last = date(trigger.year + duration, trigger.month, trigger.day)
+            raw = date(trigger.year + duration, trigger.month, trigger.day)
         except ValueError:
-            last = date(trigger.year + duration, trigger.month, 28)
+            raw = date(trigger.year + duration, trigger.month, 28)
     else:
         raise ValueError(f"unsupported unit: {unit}")
 
-    last = _next_business_day(last)
+    last = _next_business_day(raw)
+    note: str | None = None
+    if last != raw:
+        note = f"Ham son gün {raw.isoformat()} resmi tatile denk geldiği için ertesi iş gününe kaydı."
 
     if _is_adli_tatil(last):
         extension = _ADLI_TATIL_UZATMA_GUNU.get(calendar)
         if extension is not None:
             recess_end = date(last.year, *_ADLI_TATIL_BITIS)
+            before_recess_note = last
             last = _next_business_day(recess_end + timedelta(days=extension))
+            note = (
+                f"Ham hesap {before_recess_note.isoformat()}'e denk gelir; bu tarih adli tatil "
+                f"({_ADLI_TATIL_BASLANGIC[1]}.{_ADLI_TATIL_BASLANGIC[0]}–{_ADLI_TATIL_BITIS[1]}.{_ADLI_TATIL_BITIS[0]}) "
+                f"içinde kaldığından, tatilin bitişinden itibaren {extension} gün uzayarak {last.isoformat()} olur."
+            )
 
-    return last
+    return last, note
 
 
 def _month_days(year: int, month: int) -> int:
@@ -213,3 +237,4 @@ class DeadlineComputation:
     last_day: date | None
     legal_basis: tuple[str, ...]
     missing: str | None = None
+    adjustment_note: str | None = None

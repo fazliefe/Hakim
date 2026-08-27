@@ -68,11 +68,18 @@ Kalite ölçütü:
   «şikayet») suç unsuru kalıbı kullanma. Maddi hukuk sorusunda usul maddesini
   ana dayanak yapma.
 - Evidence'daki her maddeyi sırayla özetleme; en ilgili 1–2 kaynağı öne çıkar,
-  gerekçeyi bunlarla derinleştir.
+  gerekçeyi bunlarla derinleştir. Her kaynağın kendi [n] numarası vardır:
+  ikinci kaynağa [1] yazma, [2] kullan; üçüncü varsa [3] kullan.
+  Kaynak listesinde birden fazla n varsa her cümleye [1] basma; [2] ve [3]
+  en az birkaç cümlede görünsün.
 - Her hukuki iddianın sonunda [n] durur. Kaynaksız sonuç cümlesi yazma.
 - Kısa cevap yasak. ozet + gerekce birlikte en az on tam cümle, mümkünse daha
   fazla. Yarım kalıp, madde başlığı veya «Cevap.» yazma.
 - law_no hangi kanunu gösteriyorsa onu yaz.
+- Dilekçe, bireysel başvuru dilekçesi veya kişi adı taşıyan AYM başvurusunu
+  kaynak olarak kullanma; başvurucu adı, T.C. kimlik veya dilekçe başlığı yazma.
+  Bunlar evrak/işlem modülünde kalır. Araştırma yalnızca kanun maddesi ve
+  daire/kurul emsal kararına dayanır.
 
 Çıktı: yalnızca JSON. Düz metin, markdown veya kod çiti yok.
 """
@@ -132,6 +139,9 @@ gibi sistem notlarını dilekçe gövdesine koyma. Eksikler arayüzde kalır.
 soruşturma, delil toplama ve kamu davası ile biter. İddianame gibi yazma.
 Kaynak listesi boşsa TCK suç maddesi yazma; usul dayanağını katalogdaki
 CMK / İYUK maddeleriyle yaz.
+
+visual_eks varsa olay metninde görsellere «ekte sunulmuştur» diye atıf yap;
+ekler listesine VLM başlığını yaz. Görüntüden TCKN, yüz veya kimlik okuma.
 """
 
 USER_SOURCE_RULE = (
@@ -154,6 +164,13 @@ USER_EMSAL_RULE = (
 )
 USER_NO_EMSAL_RULE = (
     "Emsal künyesi yok. Yeni esas veya karar numarası uydurma. emsal_atif boş bırak."
+)
+USER_VISUAL_RULE = (
+    "visual_eks, KVKK süzgecinden geçmiş ek görsellerin VLM özetidir. "
+    "Olay veya açıklama bölümünde duruma göre «olaydaki görseller ekte sunulmuştur» "
+    "benzeri resmi bir cümle yaz. Görseli suçun kanıtı sayma; yalnızca görünür olguyu aktar. "
+    "ekler listesine her görsel için kısa bir EK başlığı ekle. "
+    "Yüz, TCKN, kimlik no veya hesap no yazma."
 )
 PETITION_IDS = {
     "istinaf",
@@ -300,6 +317,8 @@ def user_prompt(module_id: str, compact: dict[str, Any]) -> str:
         extra.append(USER_EMSAL_RULE)
     elif module_id in PETITION_IDS:
         extra.append(USER_NO_EMSAL_RULE)
+    if compact.get("visual_eks"):
+        extra.append(USER_VISUAL_RULE)
     return "\n".join(extra) + "\n\n" + json.dumps(compact, ensure_ascii=False, default=str)
 
 
@@ -324,10 +343,11 @@ def belge_messages(belge_id: str, compact: dict[str, Any]) -> list[dict[str, str
 
 def refuse_answer() -> str:
     return (
-        "Bu sorgu hukuk araştırmasına uygun değil.\n\n"
-        "HÂKİM yalnızca kanun maddesi, içtihat ve resmi belgelere dayanır. "
-        "Spor sonucu, tahmin veya arşivde dayanağı olmayan sorulara cevap verilmez.\n\n"
-        "Madde numarası veya hukuki kavramla yeniden deneyin."
+        "HÂKİM bir hukuk araştırma asistanıdır. Bu sorgu hukuk araştırmasının "
+        "kapsamına girmiyor.\n\n"
+        "Kanun maddesi, içtihat veya resmi evrak dışındaki sorulara cevap üretilmez. "
+        "Arşivdeki en yakın metin de bu tür sorular için dayanak sayılmaz.\n\n"
+        "Kanun adı, madde numarası veya hukuki bir kavram yazarak yeniden deneyin."
     )
 
 

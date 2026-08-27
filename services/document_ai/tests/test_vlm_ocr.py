@@ -53,6 +53,23 @@ def test_transcribe_images_batches_two_and_uses_vision_model(monkeypatch) -> Non
     assert len(images) == 2
     assert images[0]["image_url"]["url"].startswith("data:image/png;base64,")
     assert first.get("response_format") is None
+    from hakim_config import UNBOUNDED_MAX_TOKENS
+
+    assert first["max_tokens"] == UNBOUNDED_MAX_TOKENS
+    prompt = content[0]["text"]
+    assert "imza satırı" not in prompt
+    assert "ATLA" in prompt
+
+
+def test_drop_signature_lines_keeps_body() -> None:
+    from document_ai.vlm_ocr import drop_signature_lines
+
+    text = drop_signature_lines(
+        "T.C.\nANKARA SULH HUKUK MAHKEMESİNE\nimza var\nKONU: tahliye\nİmza:\n"
+    )
+    assert "tahliye" in text
+    assert "imza var" not in text.lower()
+    assert "İmza:" not in text
 
 
 def test_transcribe_images_requires_api_key(monkeypatch) -> None:

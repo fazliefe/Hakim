@@ -57,6 +57,27 @@ def _extract_docx(data: bytes) -> str:
     return "\n".join(paragraphs)
 
 
+def _extract_udf(data: bytes) -> str:
+    # UDF (UYAP Doküman Formatı) = ZIP içinde tek bir content.xml; kök
+    # <template>'in DOĞRUDAN çocuğu olan <content> elemanı CDATA düz metni
+    # taşır (bkz. apps/web/lib/exportDocument.ts::udfBlob — bu şemayı biz
+    # üretiyoruz). <elements>/<paragraph> altındaki iç içe <content .../>
+    # elemanları yalnızca biçimlendirme özniteliği taşır, metin değil —
+    # root.find("content") (yalnızca doğrudan çocuklara bakar) bu ikisini
+    # otomatik ayırır.
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            xml = archive.read("content.xml")
+    except Exception as exc:
+        raise UploadError("UDF dosyası okunamadı.") from exc
+    try:
+        root = ElementTree.fromstring(xml)
+    except Exception as exc:
+        raise UploadError("UDF içeriği (content.xml) çözümlenemedi.") from exc
+    node = root.find("content")
+    return (node.text or "").strip() if node is not None else ""
+
+
 def _vlm_note(model: str) -> str:
     return f"Evren {model} (görüntü / el yazısı)."
 
@@ -136,7 +157,13 @@ def extract_upload(filename: str, data: bytes) -> ExtractedEvrak:
             raise UploadError("Word dosyasından yeterli metin çıkmadı.")
         return ExtractedEvrak(text=text, filename=name, kind="docx", note="Word belgesi okundu.")
 
+    if lower.endswith(".udf"):
+        text = _extract_udf(data)
+        if len(text) < MIN_TEXT_CHARS:
+            raise UploadError("UDF dosyasından yeterli metin çıkmadı.")
+        return ExtractedEvrak(text=text, filename=name, kind="udf", note="UDF (UYAP) belgesi okundu.")
+
     if lower.endswith(".doc"):
         raise UploadError("Eski .doc yerine .docx, PDF veya TXT yükleyin.")
 
-    raise UploadError("Yalnızca PDF, Word (.docx), TXT veya görüntü (JPG/PNG/WebP) kabul edilir.")
+    raise UploadError("Yalnızca PDF, Word (.docx), UDF, TXT veya görüntü (JPG/PNG/WebP) kabul edilir.")

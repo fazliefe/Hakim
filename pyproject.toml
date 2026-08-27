@@ -47,6 +47,7 @@ testpaths = [
     "services/document_ai/tests",
     "services/llm/tests",
     "tools/evolver/tests",
+    "eval/tests",
 ]
 pythonpath = [
     "packages/legal-schema/src",
@@ -54,4 +55,5 @@ pythonpath = [
     "connectors",
     "services",
     "tools/evolver",
+    "eval",
 ]

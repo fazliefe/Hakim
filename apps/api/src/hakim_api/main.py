@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import lru_cache
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -136,9 +138,15 @@ class ResearchResponse(BaseModel):
     observability: dict[str, Any] | None = None
 
 
+class VisualEkIn(BaseModel):
+    caption: str = ""
+    scene: str = ""
+
+
 class DocumentRequest(BaseModel):
     text: str = Field(min_length=8)
     action: str | None = None
+    visual_eks: list[VisualEkIn] = Field(default_factory=list)
 
 
 class BundleRequest(BaseModel):
@@ -177,23 +185,44 @@ def _engine():
 
 
 def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, Any]]:
-    """Evrak analizi için mevzuat kaynağı: hybrid arama → rerank → Neo4j
-    komşuluğu. Araştırma yüzeyinin (research.py) aynı bileşenlerini kullanır,
-    böylece evrak/işlem taslağı da rank/skor/atıf metadatasıyla izlenebilir.
+    """Evrak analizi için mevzuat kaynağı: hybrid arama → (opsiyonel rerank)
+    → Neo4j komşuluğu. Araştırma yüzeyinin (research.py) aynı bileşenlerini
+    kullanır, böylece evrak/işlem taslağı da rank/skor/atıf metadatasıyla
+    izlenebilir.
 
     `at` verildiğinde (evrakın tebliğ/karar tarihi), arama o tarihte yürürlükte
     olan madde versiyonlarıyla sınırlanır — bkz. `retrieval.mapping.corpus_filters`.
     """
-    from retrieval.hybrid import fused_to_dict
+    from hakim_config import get_models
+    from retrieval.bm25 import parse_law_hint
+    from retrieval.hybrid import _is_exact_citation_query, fused_to_dict
     from retrieval.mapping import detect_mulga_warning
+    from retrieval.query_expand import expand_queries, query_needs_multi
     from retrieval.rerank import rerank_fused
     from retrieval.research import collect_neighbors
 
+    cfg = get_models()
+    law_no = parse_law_hint(query)
     try:
-        fused = _engine().hybrid.search(query, law_no=None, at=at, limit=8)
+        if cfg.multi_query_aggregation and query_needs_multi(query):
+            fused = _engine().hybrid.search_multi(
+                expand_queries(query, "multi_query"), law_no=law_no, at=at, limit=8
+            )
+        else:
+            fused = _engine().hybrid.search(query, law_no=law_no, at=at, limit=8)
     except Exception:
         return []
-    ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
+    if cfg.dense_gate > 0 and fused and not _is_exact_citation_query(query):
+        try:
+            probe = _engine().hybrid.search_semantic(query, law_no=law_no, at=at)[:1]
+        except Exception:
+            probe = []
+        if probe and float(probe[0].score) < cfg.dense_gate:
+            fused = []
+    if cfg.rerank_enabled:
+        ranked = rerank_fused(query, fused, limit=4, scorer=_engine().reranker)
+    else:
+        ranked = fused[:4]
     neighbors = collect_neighbors(_engine(), ranked)
     rows: list[dict[str, Any]] = []
     for hit in ranked:
@@ -211,7 +240,13 @@ def _retrieve_related(query: str, at: datetime | None = None) -> list[dict[str, 
     return rows
 
 
-def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) -> dict[str, Any]:
+def _analyze(
+    text: str,
+    *,
+    surface: str = "evrak",
+    action: str | None = None,
+    visual_eks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     from document_ai.agents import elapsed_ms, mark_writer, now
     from document_ai.pipeline import analysis_to_dict, analyze_document
     from llm.usage import reset_usage, take_usage, usage_totals
@@ -235,14 +270,57 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
             payload.get("dates") or {},
         )
     started = now()
-    try:
-        draft = None
-        if surface == "surec":
-            draft = write_module(surface, {**payload, "user_text": text[:900]})
-        else:
+
+    def _make_draft() -> tuple[str | None, Any, Exception | None]:
+        try:
+            if surface == "surec":
+                return write_module(surface, {**payload, "user_text": text[:900]}), None, None
             draft, petition = compose_islem(
-                action_id, {**payload, "action": action_id, "user_text": text[:900]}
+                action_id,
+                {
+                    **payload,
+                    "action": action_id,
+                    "user_text": text[:900],
+                    "visual_eks": visual_eks or [],
+                },
             )
+            return draft, petition, None
+        except Exception as exc:  # noqa: BLE001 - taşınıp aşağıda işleniyor
+            return None, None, exc
+
+    def _make_ozet() -> str | None:
+        # Görev 1 (evrak özeti): "evrak" yazım modülü (data/formats/evrak.json)
+        # sınıflandırma + tespitlerden bağımsız, evrakın içeriğini anlatan kısa
+        # bir özet üretir — Sınıflandırma sekmesindeki ham alan listesinden
+        # farklı, okunabilir bir metin. API/Ollama yoksa write_module sessizce
+        # None döner; taslak üretimini etkilemez.
+        try:
+            return write_module("evrak", {**payload, "action": action_id, "user_text": text[:900]})
+        except Exception:
+            return None
+
+    # Taslak (compose_islem/write_module) ve özet (write_module("evrak", ...))
+    # birbirinin çıktısına ihtiyaç duymaz — iki ayrı LLM çağrısını art arda değil
+    # PARALEL çalıştırıyoruz (ikisi de I/O-bound HTTP isteği). Toplam süreyi
+    # ~yarıya indirir; llm/usage.py'daki kullanım sayaçları thread-safe
+    # (paylaşılan bucket'a append), writer_name()/mark_writer() saf/durumsuz
+    # fonksiyonlar olduğu için sonuçlar iki iş de bittikten sonra ana thread'de
+    # sırayla işleniyor.
+    if surface == "evrak":
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            draft_future = pool.submit(_make_draft)
+            ozet_future = pool.submit(_make_ozet)
+            draft, petition, exc = draft_future.result()
+            payload["ozet"] = ozet_future.result()
+    else:
+        draft, petition, exc = _make_draft()
+
+    if exc is not None:
+        payload["writer"] = "extractive"
+        payload["writer_error"] = str(exc)[:280]
+        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
+    else:
+        if surface != "surec":
             payload["petition"] = petition
             payload["action"] = action_id
             payload["belge"] = ACTION_TO_BELGE.get(action_id) or action_id
@@ -254,10 +332,6 @@ def _analyze(text: str, *, surface: str = "evrak", action: str | None = None) ->
                 from document_ai.gaps import merge_placeholder_gaps
 
                 payload["gaps"] = merge_placeholder_gaps(payload.get("gaps") or [], draft)
-    except Exception as exc:
-        payload["writer"] = "extractive"
-        payload["writer_error"] = str(exc)[:280]
-        mark_writer(payload.get("agents") or [], writer="extractive", ms=elapsed_ms(started), error=str(exc))
     usage = take_usage()
     if isinstance(payload.get("observability"), dict):
         payload["observability"]["totals"] = usage_totals(usage)
@@ -568,10 +642,16 @@ def belgeler() -> dict[str, Any]:
 
 
 @app.post("/v1/arastirma", response_model=ResearchResponse)
-def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchResponse:
+async def arastirma(body: ResearchRequest, user=Depends(optional_user)) -> ResearchResponse:
     try:
-        result = _engine().research(body.query.strip(), law_no=(body.law_no or None))
+        engine = _engine()
+        result = await run_in_threadpool(
+            engine.research, body.query.strip(), law_no=(body.law_no or None)
+        )
     except Exception as exc:  # pragma: no cover
+        import traceback
+
+        traceback.print_exc()
         raise HTTPException(status_code=503, detail=f"Araştırma motoru hazır değil: {exc}") from exc
 
     _record_activity(
@@ -717,7 +797,12 @@ def islem(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
         routed = route_islem(body.text)
         action = routed.action
         reason = routed.reason
-    payload = _analyze(body.text, surface="islem", action=action)
+    payload = _analyze(
+        body.text,
+        surface="islem",
+        action=action,
+        visual_eks=[item.model_dump() for item in body.visual_eks],
+    )
     payload["action"] = action
     payload["belge"] = ACTION_TO_BELGE.get(action, action)
     payload["route_reason"] = reason
@@ -735,6 +820,30 @@ def islem(body: DocumentRequest, user=Depends(optional_user)) -> dict[str, Any]:
         {"action": payload.get("action"), "belge": payload.get("belge")},
     )
     return payload
+
+
+@app.post("/v1/islem/fotograf")
+async def islem_fotograf(file: UploadFile = File(...), user=Depends(optional_user)) -> dict[str, Any]:
+    """Dilekçe eki fotoğrafı: önce KVKK, sonra VLM özeti. Kişisel veri varsa işlenmez."""
+    from document_ai.privacy.image_kvkk import KVKK_REJECT_MESSAGE, screen_islem_photo
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Dosya boş.")
+    decision = screen_islem_photo(data, filename=file.filename or "ek.jpg")
+    if not decision.accepted:
+        extra = "; ".join(decision.reasons[:3])
+        detail = KVKK_REJECT_MESSAGE
+        if extra and extra.lower() not in detail.lower():
+            detail = f"{detail} {extra}"
+        raise HTTPException(status_code=422, detail=detail)
+    _record_activity(
+        user,
+        "islem",
+        f"Dilekçe eki: {file.filename or 'fotoğraf'}",
+        {"caption": decision.caption},
+    )
+    return {"accepted": True, "caption": decision.caption, "scene": decision.scene}
 
 
 @app.post("/v1/islem/anla")

@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from hakim_config import get_models
+from hakim_config import effective_max_tokens, get_models
 from llm.client import OllamaError
 
 
@@ -29,14 +29,31 @@ def api_chat(
     *,
     timeout: float = 25,
     json_mode: bool = True,
+    temperature: float | None = None,
+    model: str | None = None,
+    max_tokens: int | None = None,
     **_kwargs: Any,
 ) -> str:
     def _run() -> str:
         try:
-            return _api_chat_body(messages, timeout=timeout, json_mode=json_mode)
+            return _api_chat_body(
+                messages,
+                timeout=timeout,
+                json_mode=json_mode,
+                temperature=temperature,
+                model=model,
+                max_tokens=max_tokens,
+            )
         except OllamaError as exc:
             if json_mode and "json_validate_failed" in str(exc).lower():
-                return _api_chat_body(messages, timeout=timeout, json_mode=False)
+                return _api_chat_body(
+                    messages,
+                    timeout=timeout,
+                    json_mode=False,
+                    temperature=temperature,
+                    model=model,
+                    max_tokens=max_tokens,
+                )
             raise
 
     try:
@@ -63,18 +80,23 @@ def _api_chat_body(
     *,
     timeout: float = 25,
     json_mode: bool = True,
+    temperature: float | None = None,
+    model: str | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     key = os.environ.get("HAKIM_LLM_API_KEY", "").strip()
     if not key:
         raise OllamaError("HAKIM_LLM_API_KEY yok")
     cfg = get_models()
     base = cfg.llm_url
-    model = cfg.llm_model
+    model = model or cfg.llm_model
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "temperature": cfg.llm_temperature,
-        "max_tokens": cfg.llm_max_tokens,
+        "temperature": cfg.llm_temperature if temperature is None else temperature,
+        "max_tokens": effective_max_tokens(
+            max_tokens if max_tokens is not None else cfg.llm_max_tokens
+        ),
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}

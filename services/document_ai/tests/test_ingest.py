@@ -27,6 +27,32 @@ def test_extract_docx_keeps_turkish() -> None:
     assert "Gerekçeli" in out.text
 
 
+def test_extract_udf_keeps_turkish() -> None:
+    import io
+    import zipfile
+
+    content_xml = (
+        '<?xml version="1.0" encoding="UTF-8" ?>'
+        '<template format_id="1.8">'
+        "<content><![CDATA[Gerekçeli karar. Tebliğ tarihi: 14.08.2026]]></content>"
+        '<elements resolver="hvl-default">'
+        '<paragraph Alignment="N" resolver="hvl-default">'
+        '<content Alignment="N" resolver="hvl-default" bold="false" size="12" '
+        'family="Times New Roman" foreground="-16777216" background="-1" '
+        'startOffset="0" length="42" />'
+        "</paragraph>"
+        "</elements>"
+        "</template>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("content.xml", content_xml)
+    out = extract_upload("karar.udf", buffer.getvalue())
+    assert out.kind == "udf"
+    assert "Gerekçeli" in out.text
+    assert "startOffset" not in out.text
+
+
 def test_extract_png_uses_vlm(monkeypatch) -> None:
     png = bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"

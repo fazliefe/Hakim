@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any, Callable
 
 from deadline.catalog import DEFAULT_RULES
-from deadline.engine import DeadlineComputation, compute_last_day
+from deadline.engine import DeadlineComputation, compute_last_day_detail
 from document_ai.agents import build_reasoning, chain_status as score_chain, diagnose_chain, elapsed_ms, now, pick_yazisma_action, step
 from document_ai.answers import (
     format_havale,
@@ -28,9 +28,18 @@ from document_ai.gaps import diagnose_islem_gaps
 from document_ai.schemas import FIELD_LABELS
 
 
-STAGES = (
+STAGES_CEZA = (
     ("sorusturma", "Soruşturma"),
     ("kovusturma", "Kovuşturma (ilk derece)"),
+    ("istinaf", "İstinaf"),
+    ("temyiz", "Temyiz"),
+    ("bireysel_basvuru", "Bireysel başvuru"),
+)
+# "Kovuşturma"/"soruşturma" ceza muhakemesine özgü — hukuk/idare/anayasa
+# davalarında bu aşamalar yok, o yüzden ayrı ve daha kısa bir raylı gösterim:
+# ilk derece → istinaf → temyiz (+ anayasa'da bireysel başvuru).
+STAGES_DIGER = (
+    ("ilk_derece", "İlk derece"),
     ("istinaf", "İstinaf"),
     ("temyiz", "Temyiz"),
     ("bireysel_basvuru", "Bireysel başvuru"),
@@ -71,8 +80,19 @@ class Analysis:
     legal_caveat: str | None = None
 
 
+_ILK_DERECE_STAGES = frozenset({"kovusturma", "ilk_derece"})
+
+
 def _deadlines_for(classification: Classification, dates: dict[str, date]) -> list[DeadlineComputation]:
+    """Temyiz, ilk derece hükmünün DEĞİL — istinaf/BAM kararının tebliğinden
+    işler (CMK m.291/1, HMK m.361/1); doğrudan ilk derece kararına karşı
+    temyiz yolu yok (2016 reformu sonrası istinaf zorunlu ara basamak).
+    Önceden temyiz_ceza/temyiz_hukuk, aşamaya bakılmaksızın istinaf ile aynı
+    anda ve aynı (ilk derece) tebliğ tarihinden hesaplanıyordu — kullanıcıya
+    henüz başlamamış bir süre için sahte bir son gün gösteriyordu (canlı
+    doğrulandı: itiraz/istinaf/temyiz üçü de aynı tarihe düşüyordu)."""
     out: list[DeadlineComputation] = []
+    is_karar = classification.document_type in {"mahkeme_karari", "tebligat"}
     for rule in DEFAULT_RULES:
         remedy = str(rule["remedy"])
         rule_nature = str(rule.get("nature") or "")
@@ -80,12 +100,16 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
         if rule_nature and classification.legal_nature != rule_nature:
             continue
         include = remedy in classification.remedies
-        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "ceza":
-            if remedy in {"itiraz", "istinaf_ceza", "temyiz_ceza"}:
-                include = True
-        if classification.document_type in {"mahkeme_karari", "tebligat"} and classification.legal_nature == "hukuk":
-            if remedy in {"istinaf_hukuk", "temyiz_hukuk"}:
-                include = True
+        if is_karar and classification.legal_nature == "ceza":
+            if remedy in {"itiraz", "istinaf_ceza"}:
+                include = classification.stage in _ILK_DERECE_STAGES
+            elif remedy == "temyiz_ceza":
+                include = classification.stage == "istinaf"
+        elif is_karar and classification.legal_nature == "hukuk":
+            if remedy == "istinaf_hukuk":
+                include = classification.stage in _ILK_DERECE_STAGES
+            elif remedy == "temyiz_hukuk":
+                include = classification.stage == "istinaf"
         if classification.legal_nature == "anayasa" and remedy == "bireysel_basvuru":
             include = True
         if not include:
@@ -93,16 +117,22 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
         trigger = dates.get(str(rule["trigger"])) or dates.get("teblig") or dates.get("karar")
         missing = None
         last = None
+        note = None
         if trigger is None:
             missing = "Tebliğ veya karar tarihi metinde yok"
         else:
-            last = compute_last_day(
+            last, note = compute_last_day_detail(
                 trigger=trigger,
                 duration=int(rule["duration"]),
                 unit=rule["unit"],  # type: ignore[arg-type]
                 calendar=rule["calendar"],  # type: ignore[arg-type]
             )
-        basis = (str(rule["legal_basis_label"]), *[str(x) for x in rule["legal_basis"]])  # type: ignore[misc]
+        # Yalnızca okunabilir etiket (ör. "CMK m.268") — rule["legal_basis"]
+        # (ör. "law:5271:article:268") mevzuat aramasıyla eşleştirme için
+        # kullanılan İÇSEL canonical id'dir; hiçbir tüketici (answers.py,
+        # writer.py) tuple'ın ilk elemanından fazlasını okumuyordu, geri
+        # kalanı yalnızca arayüze ham kod olarak sızıyordu.
+        basis = (str(rule["legal_basis_label"]),)
         out.append(
             DeadlineComputation(
                 rule_id=str(rule["id"]),
@@ -114,16 +144,18 @@ def _deadlines_for(classification: Classification, dates: dict[str, date]) -> li
                 last_day=last,
                 legal_basis=basis,
                 missing=missing,
+                adjustment_note=note,
             )
         )
     return out
 
 
-def _stage_map(current: str) -> list[dict[str, Any]]:
-    keys = [k for k, _ in STAGES]
-    idx = keys.index(current) if current in keys else 1
+def _stage_map(current: str, legal_nature: str) -> list[dict[str, Any]]:
+    stages = STAGES_CEZA if legal_nature == "ceza" else STAGES_DIGER
+    keys = [k for k, _ in stages]
+    idx = keys.index(current) if current in keys else 0
     rows = []
-    for i, (key, title) in enumerate(STAGES):
+    for i, (key, title) in enumerate(stages):
         if current not in keys:
             state = "idle"
         elif i < idx:
@@ -252,7 +284,11 @@ GRAPH_EDGES = (
     ("sure", "taslak"),
     ("taslak", "havale"),
 )
-MEVZUAT_RETRY_ELIGIBLE = frozenset({"ceza", "idare", "anayasa"})
+# "hukuk" — HMK (6100 sayılı Kanun) artık arşivde/index'te (bkz.
+# scripts/ingest_law.py --mevzuat-no 6100), Yargıtay hukuk daireleri kararları
+# da hakim-court-decisions index'inde zaten var; önceden bilgi tabanı boş
+# olduğu için burada dışlanmıştı (bkz. YARIN.md "HMK ingest" notu).
+MEVZUAT_RETRY_ELIGIBLE = frozenset({"ceza", "idare", "anayasa", "hukuk"})
 
 _TRACE_KIND = {
     "okuyucu": "query",
@@ -516,7 +552,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="done" if related else "warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -538,7 +574,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="done",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -550,7 +586,7 @@ def step_mevzuat(work: dict[str, Any]) -> dict[str, Any]:
         work["agents"].append(
             step(
                 "mevzuat",
-                "Mevzuat",
+                "Mevzuat Taraması",
                 state="warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -583,13 +619,13 @@ def step_sure(work: dict[str, Any]) -> dict[str, Any]:
     summary, answer = format_sure(deadlines)
     if not deadlines:
         work["agents"].append(
-            step("sure", "Süre", state="skip", ms=elapsed_ms(started), summary=summary, answer=answer)
+            step("sure", "Süre Hesabı", state="skip", ms=elapsed_ms(started), summary=summary, answer=answer)
         )
     elif any(item.missing for item in deadlines):
         work["agents"].append(
             step(
                 "sure",
-                "Süre",
+                "Süre Hesabı",
                 state="warn",
                 ms=elapsed_ms(started),
                 summary=summary,
@@ -599,7 +635,7 @@ def step_sure(work: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         work["agents"].append(
-            step("sure", "Süre", state="done", ms=elapsed_ms(started), summary=summary, answer=answer)
+            step("sure", "Süre Hesabı", state="done", ms=elapsed_ms(started), summary=summary, answer=answer)
         )
     return work
 
@@ -629,7 +665,7 @@ def step_taslak(work: dict[str, Any]) -> dict[str, Any]:
         dates=work["dates"],
         findings=work["findings"],
         deadlines=work["deadlines"],
-        stages=_stage_map(classification.stage),
+        stages=_stage_map(classification.stage, classification.legal_nature),
         related=work.get("related") or [],
         fields=work["fields"],
         missing=work["missing"],
@@ -720,6 +756,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
                 "last_day": item.last_day.isoformat() if item.last_day else None,
                 "legal_basis": list(item.legal_basis),
                 "missing": item.missing,
+                "adjustment_note": item.adjustment_note,
             }
             for item in analysis.deadlines
         ],

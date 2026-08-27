@@ -21,16 +21,18 @@ def reciprocal_rank_fusion(
     *,
     k: int = 60,
     limit: int = 30,
+    weights: dict[str, float] | None = None,
 ) -> list[FusedHit]:
-    """Classic RRF: score(d) = sum 1 / (k + rank_i(d))."""
+    """Classic RRF: score(d) = sum w_i / (k + rank_i(d)). weights=None → w_i=1."""
     scores: dict[str, float] = {}
     best_hit: dict[str, SearchHit] = {}
     sources: dict[str, set[str]] = {}
     ranks: dict[str, dict[str, int]] = {}
 
     for source_name, hits in ranked_lists.items():
+        weight = 1.0 if not weights else float(weights.get(source_name, 1.0))
         for hit in hits:
-            scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + 1.0 / (k + hit.rank)
+            scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + weight / (k + hit.rank)
             sources.setdefault(hit.chunk_id, set()).add(source_name)
             ranks.setdefault(hit.chunk_id, {})[source_name] = hit.rank
             prev = best_hit.get(hit.chunk_id)

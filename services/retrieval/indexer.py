@@ -148,9 +148,9 @@ class LegalChunkIndexer:
             "docket_no",
         ]
         dict_rows = [dict(zip(cols, row, strict=True)) for row in rows]
+        self.ensure_index()
         if not dict_rows:
             return 0
-        self.ensure_index()
         if skip_existing:
             existing = self._existing_chunk_ids()
             if existing:
