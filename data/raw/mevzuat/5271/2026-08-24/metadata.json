@@ -1,0 +1,11 @@
+{
+  "mevzuat_no": "5271",
+  "mevzuat_tur": 1,
+  "mevzuat_tertip": "5",
+  "provider": "mevzuat.gov.tr",
+  "official": true,
+  "content_url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatNo=5271&MevzuatTur=1&MevzuatTertip=5",
+  "retrieved_at": "2026-08-24T19:32:17.358352+00:00",
+  "content_hash": "6b3b237e387872d212c58154e3083e38c67778436e49ca821aa862d9f2777c5f",
+  "content_path": "C:\\Users\\ElifRana\\H-K-M-kamu-evrak-ve-yaz-ma-ajan-\\data\\raw\\mevzuat\\5271\\2026-08-24\\content.html"
+}
