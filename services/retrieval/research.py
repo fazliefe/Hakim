@@ -125,16 +125,25 @@ def _is_petition_like(item: Any) -> bool:
 
 
 def _exclude_from_research(item: Any) -> bool:
-    """Dilekçe örnekleri, ticaret/hukuk istinafı araştırma kaynak listesine girmez."""
+    """Dilekçe örnekleri, mahkeme kararı olmayan kaynaklar (ticaret sicili,
+    Rekabet Kurumu, KVKK Kurulu, Resmi Gazete) ve alt derece (istinaf/yerel
+    hukuk) kararları araştırma kaynak listesine girmez.
+
+    DİKKAT: `llm.emsal.court_ok()` KULLANILMAZ — o fonksiyon yalnızca
+    İşlem'in ceza-odaklı dilekçe emsal künyesi içindir ("hukuk" geçip
+    "ceza" geçmeyen HER kararı reddeder, bkz. emsal.py docstring'i:
+    "Temyiz/istinaf için yalnızca Yargıtay / ceza dairesi / CGK / İBK").
+    Araştırma genel amaçlıdır — medeni hukuk (tazminat, boşanma, miras,
+    kira, iş hukuku...) emsal kararları da gösterilmeli; court_ok burada
+    kullanılınca TÜM Yargıtay Hukuk Daireleri kararları sessizce
+    kayboluyordu (canlı doğrulandı — bkz. commit mesajı)."""
     if _is_petition_like(item):
         return True
     document_id, title, content = _hit_fields(item)
     if not str(document_id).startswith("decision:"):
         return False
-    from llm.emsal import court_ok
-
-    blob = f"{document_id} {title} {content[:800]}"
-    if not court_ok(blob):
+    blob = _ascii_q(f"{document_id} {title} {content[:800]}")
+    if any(bad in blob for bad in ("ticaret", "rekabet", "kvkk", "resmi_gazete")):
         return True
     folded = _ascii_q(document_id)
     return "istinafhukuk" in folded or "yerelhukuk" in folded
@@ -1345,6 +1354,25 @@ def collect_neighbors(engine: ResearchEngine, fused: list[FusedHit]) -> dict[str
     return out
 
 
+def _reserve_decisions(hits: list[FusedHit], limit: int, *, reserve: int = 3) -> list[FusedHit]:
+    """`HybridSearcher.fuse()`'daki aynı sorun burada TEKRARLANIYOR: fuse()
+    kendi (daha geniş) havuzunda emsal kararlara yer ayırmış olsa da, kararlar
+    düşük ham RRF skoru yüzünden havuzun sonuna düşüyor — bu DAHA DAR
+    `evidence_limit` kesmesi (bkz. fuse()'un limit=12'si vs. burasının
+    evidence_limit=8'i) onları yeniden dışarı atabiliyordu (canlı
+    doğrulandı). Aynı rezervasyon mantığı burada da uygulanıyor."""
+    if len(hits) <= limit:
+        return hits
+    decisions = [h for h in hits if _hit_fields(h)[0].startswith("decision:")]
+    if not decisions:
+        return hits[:limit]
+    laws = [h for h in hits if h not in decisions]
+    keep_dec = min(reserve, len(decisions), limit)
+    combined = laws[: limit - keep_dec] + decisions[:keep_dec]
+    combined.sort(key=lambda h: h.rrf_score, reverse=True)
+    return combined[:limit]
+
+
 def assemble_research_result(
     engine: ResearchEngine,
     query: str,
@@ -1353,7 +1381,7 @@ def assemble_research_result(
     neighbors: dict[str, list[dict[str, Any]]] | None = None,
 ) -> ResearchResult:
     kept = [hit for hit in fused if not _exclude_from_research(hit)]
-    top = kept[: engine.evidence_limit]
+    top = _reserve_decisions(kept, engine.evidence_limit)
     neighbor_map = neighbors or {}
     evidence: list[EvidenceItem] = []
     for hit in top:

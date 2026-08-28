@@ -806,6 +806,31 @@ def test_ticaret_istinaf_is_not_a_research_source() -> None:
     assert _is_petition_like(_item()) is False
 
 
+def test_civil_yargitay_chamber_is_not_a_research_source_regression() -> None:
+    """Canlı doğrulanan regresyon: `_exclude_from_research` eskiden
+    `llm.emsal.court_ok()` kullanıyordu — o fonksiyon YALNIZCA İşlem'in
+    ceza-odaklı dilekçe emsal künyesi içindir ve "hukuk" geçip "ceza"
+    geçmeyen HER kararı reddeder. Araştırma'da kullanılınca TÜM Yargıtay
+    Hukuk Daireleri (medeni hukuk: tazminat, boşanma, miras, kira, iş
+    hukuku...) sessizce kayboluyordu. Bu test civil (Hukuk Dairesi) bir
+    Yargıtay kararının dışlanmadığını doğrular — eski kodda FAIL ederdi."""
+    from retrieval.research import _exclude_from_research
+
+    civil = _item(
+        n=1,
+        chunk_id="decision:yargitay:2005:2005/71:2005/102:v1",
+        document_id="decision:yargitay:2005:2005/71:2005/102",
+        law_no=None,
+        article_no="2005/102",
+        title="Hukuk Genel Kurulu — 2005/71 E. — 2005/102 K.",
+        content=(
+            "4. Hukuk Dairesi trafik kazası sonucu oluşan maddi ve manevi "
+            "tazminat isteminin koşullarını değerlendirmiştir."
+        ),
+    )
+    assert _exclude_from_research(civil) is False
+
+
 def test_answer_items_skips_ticaret_bam_and_uses_law() -> None:
     from retrieval.research import _answer_items
 
@@ -988,6 +1013,69 @@ def test_keep_cited_evidence_drops_uncited_ranks() -> None:
     )
     assert [item.n for item in kept] == [1, 2]
     assert all(item.used_in_answer for item in kept)
+
+
+def test_reserve_decisions_survives_evidence_limit_truncation() -> None:
+    """Canlı doğrulanan regresyon: `HybridSearcher.fuse()` kendi (daha
+    geniş) havuzunda kararlara yer ayırsa da, kararlar düşük ham RRF
+    skoru yüzünden havuzun sonuna düşüyor — DAHA DAR `evidence_limit`
+    kesmesi (fuse()'un limit'inden küçük) onları yeniden dışarı
+    atıyordu. Bu test, 10 kanun maddesi + 3 karardan oluşan 13'lük bir
+    havuzun evidence_limit=8'e kesilirken en az 3 kararı koruduğunu
+    doğrular — eski kodda (salt `hits[:limit]`) FAIL ederdi."""
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import _reserve_decisions
+    from retrieval.rrf import FusedHit
+
+    laws = [
+        FusedHit(
+            f"law-{i}",
+            1.0 - i * 0.01,
+            i,
+            ("bm25", "semantic"),
+            SearchHit(f"law-{i}", 1.0, "6098", str(i), None, "madde", "law:6098", None, "official", i),
+            i,
+            i,
+        )
+        for i in range(1, 11)
+    ]
+    decisions = [
+        FusedHit(
+            f"dec-{i}",
+            0.3 - i * 0.01,
+            10 + i,
+            ("bm25_decisions",),
+            SearchHit(f"dec-{i}", 1.0, None, None, f"Karar {i}", "karar", f"decision:yargitay:{i}", None, "decision", i),
+            None,
+            None,
+        )
+        for i in range(1, 4)
+    ]
+    result = _reserve_decisions(laws + decisions, limit=8)
+    assert len(result) == 8
+    kept_decisions = [h for h in result if h.hit.document_id.startswith("decision:")]
+    assert len(kept_decisions) == 3
+
+
+def test_reserve_decisions_no_op_when_pool_fits() -> None:
+    from retrieval.bm25 import SearchHit
+    from retrieval.research import _reserve_decisions
+    from retrieval.rrf import FusedHit
+
+    laws = [
+        FusedHit(
+            f"law-{i}",
+            1.0,
+            i,
+            ("bm25",),
+            SearchHit(f"law-{i}", 1.0, "6098", str(i), None, "madde", "law:6098", None, "official", i),
+            i,
+            None,
+        )
+        for i in range(1, 4)
+    ]
+    result = _reserve_decisions(laws, limit=8)
+    assert result == laws
 
 
 def test_keep_cited_evidence_keeps_uncited_decisions() -> None:

@@ -417,3 +417,61 @@ def test_hybrid_missing_decision_index_does_not_fail_law_search() -> None:
     fused = searcher.search("nitelikli dolandırıcılık banka hesabı", law_no=None)
     assert fused
     assert fused[0].hit.article_no == "158"
+
+
+def _law_hit(n: int, rank: int) -> SearchHit:
+    return SearchHit(f"law-{n}", 1.0, "6098", str(n), None, "madde metni", "law:6098", None, "official", rank)
+
+
+def _decision_hit(n: int, rank: int) -> SearchHit:
+    return SearchHit(
+        f"dec-{n}", 1.0, None, None, f"Karar {n}", "karar metni", f"decision:yargitay:{n}", None, "decision", rank
+    )
+
+
+def test_fuse_reserves_decision_slots_even_when_law_wins_every_rrf_slot() -> None:
+    """Canlı doğrulanan regresyon: dar/yoğun bir kanun konusunda maddeler
+    hem BM25 hem semantic'te üst sıraya çıkıp çifte liste bonusu alıyor,
+    geniş/dağınık emsal karar index'inde en iyi eşleşme bile genelde tek
+    listede kalıyor — kararlar top_n'e hiç giremiyordu (bkz. hybrid.py
+    fuse() yorumu). Reservation olmadan bu test FAIL eder."""
+    es = FakeES()
+    searcher = HybridSearcher(es, HashingEmbedder(), limit=10)
+    # 10 kanun maddesi — HER İKİ listede de yer alıyor (double-list bonus).
+    bm25_hits = [_law_hit(i, i) for i in range(1, 11)]
+    semantic_hits = [_law_hit(i, i) for i in range(1, 11)]
+    # 5 emsal karar — yalnızca TEK listede (bm25) ve daha düşük skorda.
+    decision_hits = [_decision_hit(i, i) for i in range(1, 6)]
+
+    fused = searcher.fuse(
+        "kişilik hakkının zedelenmesi manevi tazminat",
+        bm25_hits,
+        semantic_hits,
+        limit=6,
+        decision_bm25_hits=decision_hits,
+        decision_semantic_hits=[],
+    )
+    assert len(fused) == 6
+    decisions_in_result = [h for h in fused if str(h.hit.document_id).startswith("decision:")]
+    assert len(decisions_in_result) == 3, "3 emsal karar için ayrılan yer korunmalı"
+    # rank alanı çıktı sırasına göre 1..6 olarak yeniden numaralanmış olmalı.
+    assert [h.rank for h in fused] == list(range(1, 7))
+
+
+def test_fuse_without_decision_hits_is_unaffected() -> None:
+    """decision_bm25_hits/decision_semantic_hits boşsa eski davranış (salt
+    RRF sıralaması, rezervasyon yok) birebir korunur."""
+    es = FakeES()
+    searcher = HybridSearcher(es, HashingEmbedder(), limit=10)
+    bm25_hits = [_law_hit(i, i) for i in range(1, 11)]
+    semantic_hits = [_law_hit(i, i) for i in range(1, 11)]
+    fused = searcher.fuse(
+        "kişilik hakkının zedelenmesi manevi tazminat",
+        bm25_hits,
+        semantic_hits,
+        limit=6,
+        decision_bm25_hits=[],
+        decision_semantic_hits=[],
+    )
+    assert len(fused) == 6
+    assert all(not str(h.hit.document_id).startswith("decision:") for h in fused)

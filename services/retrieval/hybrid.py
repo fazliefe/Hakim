@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 from typing import Any
 
@@ -15,6 +15,10 @@ from retrieval.semantic import SemanticSearcher
 def _missing_es_index(exc: BaseException) -> bool:
     text = str(exc).lower()
     return "index_not_found" in text or "no such index" in text
+
+
+def _is_decision_hit(hit: FusedHit) -> bool:
+    return bool((hit.hit.document_id or "").startswith("decision:"))
 
 
 def unique_by_article(hits: list[FusedHit], *, limit: int | None = None) -> list[FusedHit]:
@@ -146,6 +150,7 @@ class HybridSearcher:
         limit: int | None = None,
         decision_bm25_hits: list[SearchHit] | None = None,
         decision_semantic_hits: list[SearchHit] | None = None,
+        decision_reserve: int = 3,
     ) -> list[FusedHit]:
         top_n = limit or self.limit
         pool = max(top_n * 3, top_n)
@@ -186,7 +191,29 @@ class HybridSearcher:
             ]
             rest = [h for h in fused if h not in exact]
             fused = exact + rest
-        return unique_by_article(fused, limit=top_n)
+        deduped = unique_by_article(fused, limit=None)
+
+        # Emsal karar (Yargıtay/Danıştay, ~125K karar) ile kanun maddesi
+        # (birkaç bin madde, tek bir konuda tipik olarak çok yoğun) AYNI RRF
+        # havuzunda yarışınca kanun maddeleri neredeyse her zaman kazanıyor:
+        # dar/yoğun kanun index'inde bir konuyla ilgili maddeler hem BM25 hem
+        # semantic'te üst sıralara birden çıkıyor (çifte liste bonusu), geniş/
+        # dağınık karar index'inde ise en iyi eşleşme bile genelde tek listede
+        # kalıyor — canlı doğrulandı (bkz. "trafik kazası tazminatı" sorgusu:
+        # 50+50 emsal karar adayı vardı, hiçbiri top-12'ye giremedi). Bu yüzden
+        # ilgili karar varsa top_n içinde ona en az `decision_reserve` yer
+        # ayrılıyor — Emsal Karar sekmesi böylece kanun maddesi yoğunluğundan
+        # bağımsız olarak kararlarla dolabiliyor.
+        if not (decision_bm25_hits or decision_semantic_hits):
+            return deduped[:top_n]
+        laws = [h for h in deduped if not _is_decision_hit(h)]
+        decisions = [h for h in deduped if _is_decision_hit(h)]
+        if not decisions:
+            return deduped[:top_n]
+        reserve = min(decision_reserve, len(decisions), top_n)
+        combined = laws[: top_n - reserve] + decisions[:reserve]
+        combined.sort(key=lambda h: h.rrf_score, reverse=True)
+        return [replace(hit, rank=i) for i, hit in enumerate(combined[:top_n], start=1)]
 
     def search(
         self,
