@@ -91,84 +91,6 @@ function gapLine(id: string, value: string): string {
   }
 }
 
-const AUTO_EXAMPLES: Array<{ label: string; expect: string; text: string }> = [
-  {
-    label: "Şikayet",
-    expect: "sikayet",
-    text: "Banka hesabımdan paramı aldılar, dolandırıldım. Savcılığa şikayet etmek istiyorum.",
-  },
-  {
-    label: "Suç duyurusu",
-    expect: "suc_duyurusu",
-    text: "Komşunun evinde silah gördüm. Suç duyurusunda bulunmak istiyorum.",
-  },
-  {
-    label: "Cevap",
-    expect: "cevap",
-    text: "İddianame tebliğ edildi. Cevap dilekçesi vermek istiyorum.",
-  },
-  {
-    label: "İtiraz",
-    expect: "itiraz",
-    text: "Sulh ceza hakimliği tutuklama kararına itiraz dilekçesi yazmak istiyorum.",
-  },
-  {
-    label: "İstinaf",
-    expect: "istinaf",
-    text: "Ağır ceza mahkemesinin mahkumiyet hükmünü istinaf etmek istiyorum, bölge adliye mahkemesine.",
-  },
-  {
-    label: "Temyiz",
-    expect: "temyiz",
-    text: "BAM kararı tebliğ edildi. Yargıtay’a temyiz etmek istiyorum.",
-  },
-  {
-    label: "Temyize cevap",
-    expect: "temyiz_cevap",
-    text: "Karşı tarafın temyizine cevap dilekçesi yazmak istiyorum.",
-  },
-  {
-    label: "Katılma",
-    expect: "katilma",
-    text: "Açılan ceza davasında katılan sıfatıyla davaya katılma talebinde bulunmak istiyorum.",
-  },
-  {
-    label: "AYM",
-    expect: "bireysel_basvuru",
-    text: "İç hukuk yolları tükendi. Anayasa Mahkemesine bireysel başvuru yapmak istiyorum.",
-  },
-  {
-    label: "İdari dava",
-    expect: "idari_dava",
-    text: "Valiliğin idari işlemine karşı iptal davası açmak istiyorum, idare mahkemesine.",
-  },
-  {
-    label: "Tahliye",
-    expect: "tahliye",
-    text: "Tutukluyum. Tahliye talebinde bulunmak istiyorum.",
-  },
-  {
-    label: "İhtiyaç tahliyesi",
-    expect: "ihtiyac_tahliye",
-    text: "Kiracıyı ihtiyaç sebebiyle tahliye etmek istiyorum, sulh hukuk mahkemesine.",
-  },
-  {
-    label: "Süre uzatımı",
-    expect: "sure_uzatim",
-    text: "Hukuk mahkemesinde cevap süresi uzatım talebi dilekçesi yazmak istiyorum.",
-  },
-  {
-    label: "Borca itiraz",
-    expect: "icra_borca_itiraz",
-    text: "İlamsız icra takibine borca itiraz dilekçesi vermek istiyorum, icra müdürlüğüne.",
-  },
-  {
-    label: "Adli kontrol",
-    expect: "adli_kontrol_itiraz",
-    text: "Adli kontrol kapsamında imza yükümlülüğü ve yurt dışı yasağı var, buna itiraz etmek istiyorum.",
-  },
-];
-
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/tiff,.jpg,.jpeg,.png,.webp,.tif,.tiff";
 const MAX_CHAT_PHOTOS = 4;
 
@@ -423,20 +345,6 @@ export function IslemWorkbench() {
               Manuel Kalıp
             </button>
           </div>
-          {mode === "auto" ? (
-            <div className="islem-examples" aria-label="Örnek Anlatılar">
-              {AUTO_EXAMPLES.map((item) => (
-                <button
-                  key={item.expect}
-                  type="button"
-                  className={text === item.text ? "on" : ""}
-                  onClick={() => setText(item.text)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
           {mode === "manual" ? (
             <select
               className="kalip-select"

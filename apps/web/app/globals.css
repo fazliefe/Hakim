@@ -4107,29 +4107,6 @@ a.source-row {
   color: var(--gold-200);
 }
 
-.islem-examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.islem-examples button {
-  border: 1px solid rgba(212, 175, 55, 0.22);
-  background: rgba(5, 12, 24, 0.65);
-  color: var(--silver-300);
-  font: inherit;
-  font-size: 0.72rem;
-  padding: 0.22rem 0.55rem;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.islem-examples button.on,
-.islem-examples button:hover {
-  border-color: rgba(212, 175, 55, 0.55);
-  color: var(--gold-200);
-}
-
 .islem-compose-actions {
   display: flex;
   flex-wrap: wrap;
@@ -4863,10 +4840,10 @@ html[data-theme="light"] {
   --navy-900: #ebe3d0;
   --navy-800: #e2d8c2;
   --navy-700: #d4c7ab;
-  --gold-200: #6e5414;
-  --gold-400: #8a6a18;
-  --gold-500: #b8962c;
-  --gold-600: #9a7820;
+  --gold-200: #8a6a1e;
+  --gold-400: #a37c1f;
+  --gold-500: #c2992e;
+  --gold-600: #a67f22;
   --gold-800: #5c4510;
   --silver-200: #1c160c;
   --silver-300: #3a3226;
@@ -5245,12 +5222,6 @@ html[data-theme="light"] .islem-compose .file-btn {
   background: #fffdf8;
   border-color: rgba(154, 120, 32, 0.35);
   color: #6f5210;
-}
-
-html[data-theme="light"] .islem-examples button {
-  background: #fffdf8;
-  border-color: rgba(154, 120, 32, 0.22);
-  color: var(--silver-300);
 }
 
 html[data-theme="light"] .islem-photo-chip,
